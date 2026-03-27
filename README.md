@@ -1,4 +1,4 @@
-# Budget API (Simple PHP Scaffold)
+# Budget API
 
 Minimal PHP API scaffold for auth + identity flows from `project_info.md`.
 
