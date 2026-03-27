@@ -29,26 +29,26 @@ jobs:
     steps:
       - name: Load SSH key
         env:
-          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
       - name: Add host key
         env:
-          ORACLE_KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
         run: |
-          printf '%s\n' "$ORACLE_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$PROD_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Deploy over SSH
         env:
-          ORACLE_SSH_HOST: ${{ secrets.ORACLE_SSH_HOST }}
-          ORACLE_SSH_USER: ${{ secrets.ORACLE_SSH_USER }}
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
           APP_DIR: ${{ vars.APP_DIR }}
         run: |
           TARGET_DIR="${APP_DIR:-/var/www/budget-backend}"
-          ssh -i ~/.ssh/id_ed25519 "${ORACLE_SSH_USER}@${ORACLE_SSH_HOST}" \
+          ssh -i ~/.ssh/id_ed25519 "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
             "APP_DIR='${TARGET_DIR}' BRANCH='main' bash '${TARGET_DIR}/scripts/deploy_production.sh'"
