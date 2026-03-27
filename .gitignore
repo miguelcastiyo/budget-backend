@@ -1,0 +1,5 @@
+.env
+.DS_Store
+storage/mail.log
+storage/rate-limit/
+project_info.md

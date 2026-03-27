@@ -1,0 +1,54 @@
+name: Deploy Backend Production
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: PHP syntax check
+        run: |
+          find src public scripts -name '*.php' -print0 | xargs -0 -n1 php -l
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Load SSH key
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Add host key
+        env:
+          ORACLE_KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          printf '%s\n' "$ORACLE_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          ORACLE_SSH_HOST: ${{ secrets.ORACLE_SSH_HOST }}
+          ORACLE_SSH_USER: ${{ secrets.ORACLE_SSH_USER }}
+          APP_DIR: ${{ vars.APP_DIR }}
+        run: |
+          TARGET_DIR="${APP_DIR:-/var/www/budget-backend}"
+          ssh -i ~/.ssh/id_ed25519 "${ORACLE_SSH_USER}@${ORACLE_SSH_HOST}" \
+            "APP_DIR='${TARGET_DIR}' BRANCH='main' bash '${TARGET_DIR}/scripts/deploy_production.sh'"

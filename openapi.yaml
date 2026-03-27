@@ -1,0 +1,2065 @@
+openapi: 3.1.0
+info:
+  title: Budget API
+  version: 1.0.0
+  description: Session-based API contract for the budget app backend.
+servers:
+  - url: /api/v1
+    description: v1 base path
+security:
+  - cookieAuth: []
+  - sessionTokenAuth: []
+  - masterApiKeyAuth: []
+tags:
+  - name: Auth
+  - name: Profile
+  - name: ApiKeys
+  - name: Tags
+  - name: Cards
+  - name: Recurring
+  - name: BudgetSettings
+  - name: Transactions
+  - name: Metrics
+  - name: ImportExport
+paths:
+  /auth/invitations:
+    post:
+      tags: [Auth]
+      summary: Create an invite
+      description: Requires owner/admin privileges.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInviteRequest'
+      responses:
+        '201':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/invitations/accept-password:
+    post:
+      tags: [Auth]
+      summary: Accept invite with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitePasswordRequest'
+      responses:
+        '201':
+          description: User created and session issued
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Set when client_type is web
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/invitations/accept-google:
+    post:
+      tags: [Auth]
+      summary: Accept invite with Google
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInviteGoogleRequest'
+      responses:
+        '201':
+          description: User created and session issued
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Set when client_type is web
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/sessions/password:
+    post:
+      tags: [Auth]
+      summary: Sign in with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordSignInRequest'
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Set when client_type is web
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/sessions/google:
+    post:
+      tags: [Auth]
+      summary: Sign in with Google
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleSignInRequest'
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Set when client_type is web
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/sessions/current:
+    delete:
+      tags: [Auth]
+      summary: Sign out current session
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Session invalidated
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /me:
+    get:
+      tags: [Profile]
+      summary: Get profile
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      tags: [Profile]
+      summary: Update display name
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/email-change/request:
+    post:
+      tags: [Profile]
+      summary: Request email change (password users only)
+      description: Rate limited.
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestEmailChangeRequest'
+      responses:
+        '202':
+          description: Verification pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailChangeRequestedResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/email-change/verify:
+    post:
+      tags: [Profile]
+      summary: Verify email change code
+      description: Rate limited.
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailChangeRequest'
+      responses:
+        '200':
+          description: Email updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailChangeVerifiedResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/master-api-keys:
+    get:
+      tags: [ApiKeys]
+      summary: List master API keys (metadata only)
+      description: Session auth only. Raw key values are never returned.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      responses:
+        '200':
+          description: Master API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterApiKeyListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+    post:
+      tags: [ApiKeys]
+      summary: Create a master API key
+      description: Session auth only. Returns full key once at creation.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMasterApiKeyRequest'
+      responses:
+        '201':
+          description: Master API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMasterApiKeyResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/master-api-keys/{api_key_id}:
+    delete:
+      tags: [ApiKeys]
+      summary: Revoke a master API key
+      description: Session auth only.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Key revoked
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/tags:
+    get:
+      tags: [Tags]
+      summary: List tags
+      responses:
+        '200':
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tag'
+                required: [items]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Tags]
+      summary: Create tag
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/tags/{tag_id}:
+    patch:
+      tags: [Tags]
+      summary: Update tag
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Tags]
+      summary: Delete tag
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Tag deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/cards:
+    get:
+      tags: [Cards]
+      summary: List cards
+      responses:
+        '200':
+          description: Cards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Card'
+                required: [items]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Cards]
+      summary: Create card
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNamedEntityRequest'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/cards/{card_id}:
+    patch:
+      tags: [Cards]
+      summary: Update card
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNamedEntityRequest'
+      responses:
+        '200':
+          description: Card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Cards]
+      summary: Delete card
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Card deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/recurring-expenses:
+    get:
+      tags: [Recurring]
+      summary: List recurring expenses
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\\d{4}-\\d{2}$'
+      responses:
+        '200':
+          description: Recurring expenses + committed total for month
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringExpensesResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Recurring]
+      summary: Create recurring expense rule
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecurringExpenseRequest'
+      responses:
+        '201':
+          description: Recurring expense created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringExpense'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/recurring-expenses/{recurring_expense_id}:
+    patch:
+      tags: [Recurring]
+      summary: Update recurring expense rule
+      parameters:
+        - $ref: '#/components/parameters/RecurringExpenseId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecurringExpenseRequest'
+      responses:
+        '200':
+          description: Recurring expense updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringExpense'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Recurring]
+      summary: Delete recurring expense rule
+      parameters:
+        - $ref: '#/components/parameters/RecurringExpenseId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Recurring expense deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/budget-settings:
+    get:
+      tags: [BudgetSettings]
+      summary: Get budget settings
+      responses:
+        '200':
+          description: Budget settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSettings'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    put:
+      tags: [BudgetSettings]
+      summary: Upsert budget settings
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/BudgetSettingsPercentInput'
+                - $ref: '#/components/schemas/BudgetSettingsAmountInput'
+      responses:
+        '200':
+          description: Budget settings saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSettings'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/transactions:
+    get:
+      tags: [Transactions]
+      summary: List transactions
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - $ref: '#/components/parameters/Preset'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/Categories'
+        - $ref: '#/components/parameters/TagIds'
+        - $ref: '#/components/parameters/CardIds'
+        - $ref: '#/components/parameters/IsSplit'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsPage'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Transactions]
+      summary: Create transaction
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/transactions/{transaction_id}:
+    patch:
+      tags: [Transactions]
+      summary: Update transaction
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTransactionRequest'
+      responses:
+        '200':
+          description: Transaction updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Transactions]
+      summary: Delete transaction
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Transaction deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/metrics/tags:
+    get:
+      tags: [Metrics]
+      summary: Monthly tag spend metrics
+      parameters:
+        - $ref: '#/components/parameters/Month'
+      responses:
+        '200':
+          description: Tag metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagMetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/metrics/categories:
+    get:
+      tags: [Metrics]
+      summary: Monthly category budget vs actual
+      parameters:
+        - $ref: '#/components/parameters/Month'
+      responses:
+        '200':
+          description: Category metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryMetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/metrics/insights:
+    get:
+      tags: [Metrics]
+      summary: Aggregated insights metrics for a date range
+      parameters:
+        - $ref: '#/components/parameters/InsightsDateFrom'
+        - $ref: '#/components/parameters/InsightsDateTo'
+      responses:
+        '200':
+          description: Insights metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightsMetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/transactions/export.csv:
+    get:
+      tags: [ImportExport]
+      summary: Export filtered transactions as CSV
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+        - $ref: '#/components/parameters/Preset'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/Categories'
+        - $ref: '#/components/parameters/TagIds'
+        - $ref: '#/components/parameters/CardIds'
+        - $ref: '#/components/parameters/IsSplit'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/transactions/import.csv:
+    post:
+      tags: [ImportExport]
+      summary: Import transactions from CSV
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                mode:
+                  type: string
+                  enum: [dry_run, commit]
+              required: [file, mode]
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsvImportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sid
+    sessionTokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Use format `Session <session_token>`.
+    masterApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Non-session master key for testing, format `bgtm_...`.
+
+  parameters:
+    XCsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Required for non-GET requests when using cookie sessions.
+    TagId:
+      name: tag_id
+      in: path
+      required: true
+      schema:
+        type: string
+    CardId:
+      name: card_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RecurringExpenseId:
+      name: recurring_expense_id
+      in: path
+      required: true
+      schema:
+        type: string
+    TransactionId:
+      name: transaction_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ApiKeyId:
+      name: api_key_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Month:
+      name: month
+      in: query
+      required: true
+      schema:
+        type: string
+        pattern: '^\\d{4}-\\d{2}$'
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    InsightsDateFrom:
+      name: date_from
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+    InsightsDateTo:
+      name: date_to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+    Preset:
+      name: preset
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [last_7_days, last_30_days, month_to_date, last_month, quarter_to_date]
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 120
+      description: Case-insensitive substring match against expense, tag name, and card name.
+    Categories:
+      name: categories
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Comma-separated category values.
+    TagIds:
+      name: tag_ids
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Comma-separated tag IDs.
+    CardIds:
+      name: card_ids
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Comma-separated card IDs.
+    IsSplit:
+      name: is_split
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [split, not_split]
+      description: Filter by split flag. Omit for all transactions.
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Sort:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [date_desc, date_asc]
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required or invalid session.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ForbiddenError:
+      description: Action not allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFoundError:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ConflictError:
+      description: Conflict with current state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    CreateInviteRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        auth_method:
+          type: string
+          enum: [google_or_password]
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 30
+      required: [email, auth_method, expires_in_days]
+
+    InviteResponse:
+      type: object
+      properties:
+        invite_id:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [pending]
+        expires_at:
+          type: string
+          format: date-time
+      required: [invite_id, email, status, expires_at]
+
+    AcceptInvitePasswordRequest:
+      type: object
+      properties:
+        invite_token:
+          type: string
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required: [invite_token, display_name, password]
+
+    AcceptInviteGoogleRequest:
+      type: object
+      properties:
+        invite_token:
+          type: string
+        google_id_token:
+          type: string
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [invite_token, google_id_token, display_name]
+
+    PasswordSignInRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        client_type:
+          type: string
+          enum: [web, native]
+      required: [email, password, client_type]
+
+    GoogleSignInRequest:
+      type: object
+      properties:
+        google_id_token:
+          type: string
+        client_type:
+          type: string
+          enum: [web, native]
+      required: [google_id_token, client_type]
+
+    SessionInfo:
+      type: object
+      properties:
+        session_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        csrf_token:
+          type: string
+          description: Send as `X-CSRF-Token` for non-GET requests when authenticated via cookie session.
+        session_token:
+          type: string
+          description: Returned only for native clients.
+      required: [session_id, expires_at, csrf_token]
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        avatar_url:
+          type: [string, 'null']
+          format: uri
+        auth_provider:
+          type: string
+          enum: [password, google]
+        onboarding_complete:
+          type: boolean
+      required: [id, email, display_name, auth_provider, onboarding_complete]
+
+    AuthSessionResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        session:
+          $ref: '#/components/schemas/SessionInfo'
+      required: [user, session]
+
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        avatar_url:
+          type: [string, 'null']
+          format: uri
+        auth_provider:
+          type: string
+          enum: [password, google]
+        email_verified:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        onboarding_complete:
+          type: boolean
+      required: [id, email, display_name, auth_provider, email_verified, created_at, onboarding_complete]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [display_name]
+
+    RequestEmailChangeRequest:
+      type: object
+      properties:
+        new_email:
+          type: string
+          format: email
+      required: [new_email]
+
+    EmailChangeRequestedResponse:
+      type: object
+      properties:
+        email_change_id:
+          type: string
+        status:
+          type: string
+          enum: [verification_pending]
+      required: [email_change_id, status]
+
+    VerifyEmailChangeRequest:
+      type: object
+      properties:
+        email_change_id:
+          type: string
+        verification_code:
+          type: string
+          pattern: '^\\d{6}$'
+      required: [email_change_id, verification_code]
+
+    EmailChangeVerifiedResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        email_verified:
+          type: boolean
+      required: [email, email_verified]
+
+    CreateMasterApiKeyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        expires_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+      required: [name]
+
+    MasterApiKeyMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_prefix:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        expires_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+      required: [id, name, key_prefix, created_at, last_used_at, expires_at]
+
+    MasterApiKeyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MasterApiKeyMetadata'
+      required: [items]
+
+    CreateMasterApiKeyResponse:
+      allOf:
+        - $ref: '#/components/schemas/MasterApiKeyMetadata'
+        - type: object
+          properties:
+            api_key:
+              type: string
+          required: [api_key]
+
+    CreateNamedEntityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [name]
+
+    TagIconKey:
+      type: string
+      enum:
+        - home
+        - shopping_cart
+        - car
+        - plane
+        - receipt
+        - coffee
+        - smartphone
+        - credit_card
+        - piggy_bank
+        - trending_up
+        - briefcase
+        - heart
+        - dumbbell
+        - book_open
+        - film
+        - gamepad
+        - gift
+        - shield
+        - lightbulb
+        - wrench
+        - wallet
+        - tag
+
+    CreateTagRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+      required: [name]
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+      required: [id, name, icon_key]
+
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required: [id, name]
+
+    RecurringBillingType:
+      type: string
+      enum: [day_of_month, last_day]
+
+    RecurringExpense:
+      type: object
+      properties:
+        id:
+          type: string
+        expense:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        tag:
+          $ref: '#/components/schemas/Tag'
+        card:
+          anyOf:
+            - $ref: '#/components/schemas/Card'
+            - type: 'null'
+        billing_type:
+          $ref: '#/components/schemas/RecurringBillingType'
+        billing_day:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 31
+            - type: 'null'
+        projected_date_for_month:
+          type: string
+          format: date
+        starts_month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        ends_month:
+          anyOf:
+            - type: string
+              pattern: '^\\d{4}-\\d{2}$'
+            - type: 'null'
+        is_active:
+          type: boolean
+        generated_for_month:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - expense
+        - amount
+        - category
+        - tag
+        - card
+        - billing_type
+        - billing_day
+        - projected_date_for_month
+        - starts_month
+        - ends_month
+        - is_active
+        - generated_for_month
+        - created_at
+        - updated_at
+
+    CreateRecurringExpenseRequest:
+      type: object
+      properties:
+        expense:
+          type: string
+          minLength: 1
+          maxLength: 160
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        tag_id:
+          type: string
+        card_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        seed_transaction_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        billing_type:
+          $ref: '#/components/schemas/RecurringBillingType'
+        billing_day:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 31
+            - type: 'null'
+        starts_month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        ends_month:
+          anyOf:
+            - type: string
+              pattern: '^\\d{4}-\\d{2}$'
+            - type: 'null'
+        is_active:
+          type: boolean
+      required: [expense, amount, category, tag_id, billing_type]
+
+    UpdateRecurringExpenseRequest:
+      type: object
+      properties:
+        expense:
+          type: string
+          minLength: 1
+          maxLength: 160
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        tag_id:
+          type: string
+        card_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        billing_type:
+          $ref: '#/components/schemas/RecurringBillingType'
+        billing_day:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 31
+            - type: 'null'
+        starts_month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        ends_month:
+          anyOf:
+            - type: string
+              pattern: '^\\d{4}-\\d{2}$'
+            - type: 'null'
+        is_active:
+          type: boolean
+
+    RecurringExpensesResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        committed_total:
+          $ref: '#/components/schemas/Money'
+        items_count:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecurringExpense'
+      required: [month, committed_total, items_count, items]
+
+    BudgetSettings:
+      type: object
+      properties:
+        monthly_income:
+          $ref: '#/components/schemas/Money'
+        allocation_mode:
+          type: string
+          enum: [percent, amount]
+        needs_percent:
+          $ref: '#/components/schemas/Percent'
+        wants_percent:
+          $ref: '#/components/schemas/Percent'
+        savings_debts_percent:
+          $ref: '#/components/schemas/Percent'
+        needs_amount:
+          $ref: '#/components/schemas/Money'
+        wants_amount:
+          $ref: '#/components/schemas/Money'
+        savings_debts_amount:
+          $ref: '#/components/schemas/Money'
+      required: [monthly_income, allocation_mode]
+
+    BudgetSettingsPercentInput:
+      type: object
+      properties:
+        monthly_income:
+          $ref: '#/components/schemas/Money'
+        allocation_mode:
+          type: string
+          const: percent
+        needs_percent:
+          $ref: '#/components/schemas/Percent'
+        wants_percent:
+          $ref: '#/components/schemas/Percent'
+        savings_debts_percent:
+          $ref: '#/components/schemas/Percent'
+      required: [monthly_income, allocation_mode, needs_percent, wants_percent, savings_debts_percent]
+
+    BudgetSettingsAmountInput:
+      type: object
+      properties:
+        monthly_income:
+          $ref: '#/components/schemas/Money'
+        allocation_mode:
+          type: string
+          const: amount
+        needs_amount:
+          $ref: '#/components/schemas/Money'
+        wants_amount:
+          $ref: '#/components/schemas/Money'
+        savings_debts_amount:
+          $ref: '#/components/schemas/Money'
+      required: [monthly_income, allocation_mode, needs_amount, wants_amount, savings_debts_amount]
+
+    TransactionRefTag:
+      oneOf:
+        - type: object
+          properties:
+            tag_id:
+              type: string
+          required: [tag_id]
+        - type: object
+          properties:
+            tag:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+              required: [name]
+          required: [tag]
+
+    TransactionRefCard:
+      oneOf:
+        - type: object
+          properties:
+            card_id:
+              type: string
+          required: [card_id]
+        - type: object
+          properties:
+            card:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+              required: [name]
+          required: [card]
+
+    CreateTransactionRequest:
+      allOf:
+        - type: object
+          properties:
+            date:
+              type: string
+              format: date
+            expense:
+              type: string
+              minLength: 1
+              maxLength: 160
+            amount:
+              $ref: '#/components/schemas/Money'
+            category:
+              $ref: '#/components/schemas/CategoryEnum'
+            is_split:
+              type: boolean
+          required: [date, expense, amount, category]
+        - $ref: '#/components/schemas/TransactionRefTag'
+        - type: object
+          properties:
+            card_id:
+              type: string
+            card:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+              required: [name]
+
+    UpdateTransactionRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        expense:
+          type: string
+          minLength: 1
+          maxLength: 160
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        is_split:
+          type: boolean
+        tag_id:
+          type: string
+        tag:
+          type: object
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+          required: [name]
+        card_id:
+          type: string
+        card:
+          type: object
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+          required: [name]
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        expense:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        is_split:
+          type: boolean
+        tag:
+          $ref: '#/components/schemas/Tag'
+        card:
+          anyOf:
+            - $ref: '#/components/schemas/Card'
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, date, expense, amount, category, is_split, tag, created_at, updated_at]
+
+    TransactionsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total_items:
+          type: integer
+          minimum: 0
+      required: [items, page, page_size, total_items]
+
+    TagMetricsItem:
+      type: object
+      properties:
+        tag_id:
+          type: string
+        tag_name:
+          type: string
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+        spend:
+          $ref: '#/components/schemas/Money'
+        percent_of_monthly_spend:
+          $ref: '#/components/schemas/Percent'
+      required: [tag_id, tag_name, icon_key, spend, percent_of_monthly_spend]
+
+    TagMetricsResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        total_spend:
+          $ref: '#/components/schemas/Money'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagMetricsItem'
+      required: [month, total_spend, tags]
+
+    CategoryMetricsItem:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        budget_amount:
+          $ref: '#/components/schemas/Money'
+        actual_spend:
+          $ref: '#/components/schemas/Money'
+        percent_used:
+          $ref: '#/components/schemas/Percent'
+      required: [category, budget_amount, actual_spend, percent_used]
+
+    CategoryMetricsResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        monthly_income:
+          $ref: '#/components/schemas/Money'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryMetricsItem'
+      required: [month, monthly_income, categories]
+
+    InsightsMonthlySpendPoint:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        total_spend:
+          $ref: '#/components/schemas/Money'
+      required: [month, total_spend]
+
+    InsightsCategoryBreakdownItem:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        spend:
+          $ref: '#/components/schemas/Money'
+        percent_of_total_spend:
+          $ref: '#/components/schemas/Percent'
+      required: [category, spend, percent_of_total_spend]
+
+    InsightsCategoryBudgetVsActualItem:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        budget_amount:
+          $ref: '#/components/schemas/Money'
+        actual_spend:
+          $ref: '#/components/schemas/Money'
+        percent_used:
+          $ref: '#/components/schemas/Percent'
+      required: [category, budget_amount, actual_spend, percent_used]
+
+    InsightsTagBreakdownItem:
+      type: object
+      properties:
+        tag_id:
+          type: string
+        tag_name:
+          type: string
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+        spend:
+          $ref: '#/components/schemas/Money'
+        percent_of_total_spend:
+          $ref: '#/components/schemas/Percent'
+      required: [tag_id, tag_name, icon_key, spend, percent_of_total_spend]
+
+    InsightsDayOfWeekSpendItem:
+      type: object
+      properties:
+        day:
+          type: string
+          enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+        avg_spend:
+          $ref: '#/components/schemas/Money'
+        total_spend:
+          $ref: '#/components/schemas/Money'
+        transactions_count:
+          type: integer
+          minimum: 0
+      required: [day, avg_spend, total_spend, transactions_count]
+
+    InsightsLargestTransactionItem:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        date:
+          type: string
+          format: date
+        expense:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        is_split:
+          type: boolean
+        tag:
+          $ref: '#/components/schemas/Tag'
+        card_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [transaction_id, date, expense, amount, category, is_split, tag, card_name]
+
+    InsightsRecurringVsVariable:
+      type: object
+      properties:
+        recurring:
+          $ref: '#/components/schemas/Money'
+        variable:
+          $ref: '#/components/schemas/Money'
+        recurring_percent:
+          $ref: '#/components/schemas/Percent'
+        variable_percent:
+          $ref: '#/components/schemas/Percent'
+      required: [recurring, variable, recurring_percent, variable_percent]
+
+    InsightsMetricsResponse:
+      type: object
+      properties:
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        months_in_range:
+          type: integer
+          minimum: 1
+        total_spend:
+          $ref: '#/components/schemas/Money'
+        total_transactions:
+          type: integer
+          minimum: 0
+        monthly_spend_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsMonthlySpendPoint'
+        category_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsCategoryBreakdownItem'
+        category_budget_vs_actual:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsCategoryBudgetVsActualItem'
+        tag_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsTagBreakdownItem'
+        day_of_week_spend:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsDayOfWeekSpendItem'
+        largest_transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightsLargestTransactionItem'
+        recurring_vs_variable:
+          $ref: '#/components/schemas/InsightsRecurringVsVariable'
+      required:
+        - date_from
+        - date_to
+        - months_in_range
+        - total_spend
+        - total_transactions
+        - monthly_spend_trend
+        - category_breakdown
+        - category_budget_vs_actual
+        - tag_breakdown
+        - day_of_week_spend
+        - largest_transactions
+        - recurring_vs_variable
+
+    CsvImportErrorItem:
+      type: object
+      properties:
+        row:
+          type: integer
+          minimum: 1
+        field:
+          type: string
+        message:
+          type: string
+      required: [row, field, message]
+
+    CsvImportResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [dry_run, commit]
+        total_rows:
+          type: integer
+          minimum: 0
+        valid_rows:
+          type: integer
+          minimum: 0
+        imported_rows:
+          type: integer
+          minimum: 0
+        duplicate_rows:
+          type: integer
+          minimum: 0
+        invalid_rows:
+          type: integer
+          minimum: 0
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/CsvImportErrorItem'
+      required: [mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors]
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+      required: [field, message]
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - VALIDATION_ERROR
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+      required: [code, message]
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+      required: [error]
+
+    CategoryEnum:
+      type: string
+      enum: [needs, wants, savings_debts]
+
+    Money:
+      type: string
+      pattern: '^\\d+(\\.\\d{2})$'
+
+    Percent:
+      type: string
+      pattern: '^\\d+(\\.\\d{2})$'

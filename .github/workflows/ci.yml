@@ -1,0 +1,19 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: PHP syntax check
+        run: |
+          find src public scripts -name '*.php' -print0 | xargs -0 -n1 php -l
