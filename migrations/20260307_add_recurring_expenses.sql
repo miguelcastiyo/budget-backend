@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS recurring_expenses (
   CONSTRAINT chk_recurring_expenses_month_window CHECK (
     ends_month IS NULL OR ends_month >= starts_month
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS recurring_expense_occurrences (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -52,4 +52,4 @@ CREATE TABLE IF NOT EXISTS recurring_expense_occurrences (
     FOREIGN KEY (recurring_expense_id) REFERENCES recurring_expenses (id),
   CONSTRAINT fk_recurring_occurrences_transaction
     FOREIGN KEY (transaction_id) REFERENCES transactions (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

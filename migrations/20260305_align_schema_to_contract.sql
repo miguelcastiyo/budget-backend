@@ -55,7 +55,7 @@ CREATE TABLE users (
     OR
     (auth_provider = 'google' AND google_sub IS NOT NULL AND password_hash IS NULL)
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE invitations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -84,7 +84,7 @@ CREATE TABLE invitations (
     OR
     (status <> 'accepted' AND accepted_by_user_id IS NULL AND accepted_at IS NULL)
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE user_sessions (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -107,7 +107,7 @@ CREATE TABLE user_sessions (
   KEY idx_user_sessions_user_revoked (user_id, revoked_at),
   CONSTRAINT fk_user_sessions_user
     FOREIGN KEY (user_id) REFERENCES users (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE email_change_requests (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -131,7 +131,7 @@ CREATE TABLE email_change_requests (
     OR
     (status <> 'verified' AND verified_at IS NULL)
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE master_api_keys (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -156,7 +156,7 @@ CREATE TABLE master_api_keys (
     OR
     (is_active = 0)
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE tags (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -173,7 +173,7 @@ CREATE TABLE tags (
   KEY idx_tags_user_active (user_id, is_active),
   CONSTRAINT fk_tags_user
     FOREIGN KEY (user_id) REFERENCES users (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE cards (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -189,7 +189,7 @@ CREATE TABLE cards (
   KEY idx_cards_user_active (user_id, is_active),
   CONSTRAINT fk_cards_user
     FOREIGN KEY (user_id) REFERENCES users (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE budget_settings (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -233,7 +233,7 @@ CREATE TABLE budget_settings (
       AND (needs_amount + wants_amount + savings_debts_amount = monthly_income)
     )
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE transactions (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -265,7 +265,7 @@ CREATE TABLE transactions (
   CONSTRAINT chk_transactions_source_import_fingerprint CHECK (
     source <> 'import' OR import_fingerprint IS NOT NULL
   )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE csv_import_runs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -284,4 +284,4 @@ CREATE TABLE csv_import_runs (
   KEY idx_csv_import_runs_user_created (user_id, created_at),
   CONSTRAINT fk_csv_import_runs_user
     FOREIGN KEY (user_id) REFERENCES users (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
