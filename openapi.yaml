@@ -270,6 +270,38 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/auth/convert-google:
+    post:
+      tags: [Profile]
+      summary: Convert current password account to Google sign-in
+      description: Session auth only. The Google account email must match the current user email.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvertAccountToGoogleRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/master-api-keys:
     get:
       tags: [ApiKeys]
@@ -1262,6 +1294,14 @@ components:
         email_verified:
           type: boolean
       required: [email, email_verified]
+
+    ConvertAccountToGoogleRequest:
+      type: object
+      properties:
+        google_id_token:
+          type: string
+          minLength: 1
+      required: [google_id_token]
 
     CreateMasterApiKeyRequest:
       type: object

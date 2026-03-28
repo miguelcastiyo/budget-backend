@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Auth\GoogleTokenVerifier;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
@@ -18,6 +19,7 @@ final class ProfileController
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthService $auth,
+        private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
         private readonly Config $config
     ) {
@@ -173,6 +175,74 @@ final class ProfileController
         ]);
     }
 
+    public function convertAccountToGoogle(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        if ((string) $ctx->user['auth_provider'] !== 'password') {
+            throw new HttpException(403, 'FORBIDDEN', 'Only password accounts can be converted to Google sign-in');
+        }
+
+        $payload = $request->json();
+        $googleIdToken = trim((string) ($payload['google_id_token'] ?? ''));
+        if ($googleIdToken === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'google_id_token', 'message' => 'is required'],
+            ]);
+        }
+
+        $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
+        $currentEmail = strtolower((string) $ctx->user['email']);
+        $googleEmail = strtolower((string) $googleIdentity['email']);
+
+        if ($currentEmail !== $googleEmail) {
+            throw new HttpException(409, 'CONFLICT', 'Google email must match the current account email');
+        }
+
+        $existingGoogle = $this->pdo->prepare('SELECT id FROM users WHERE google_sub = :google_sub LIMIT 1');
+        $existingGoogle->execute([':google_sub' => (string) $googleIdentity['google_sub']]);
+        $existingGoogleUser = $existingGoogle->fetch();
+        if ($existingGoogleUser && (int) $existingGoogleUser['id'] !== $ctx->userId()) {
+            throw new HttpException(409, 'CONFLICT', 'This Google account is already linked to another user');
+        }
+
+        $avatarUrl = $this->normalizeAvatarUrl($googleIdentity['picture'] ?? null);
+        $currentAvatarUrl = $ctx->user['avatar_url'] !== null ? (string) $ctx->user['avatar_url'] : null;
+        $resolvedAvatarUrl = $avatarUrl ?? $currentAvatarUrl;
+
+        $this->pdo->beginTransaction();
+        try {
+            $updateUser = $this->pdo->prepare(
+                'UPDATE users SET auth_provider = :auth_provider, password_hash = NULL, google_sub = :google_sub, avatar_url = :avatar_url, email_verified = 1 WHERE id = :id'
+            );
+            $updateUser->execute([
+                ':auth_provider' => 'google',
+                ':google_sub' => (string) $googleIdentity['google_sub'],
+                ':avatar_url' => $resolvedAvatarUrl,
+                ':id' => $ctx->userId(),
+            ]);
+
+            if ($ctx->sessionId !== null) {
+                $revokeOtherSessions = $this->pdo->prepare(
+                    'UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND session_id <> :session_id AND revoked_at IS NULL'
+                );
+                $revokeOtherSessions->execute([
+                    ':user_id' => $ctx->userId(),
+                    ':session_id' => $ctx->sessionId,
+                ]);
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $profile = $this->fetchProfile($ctx->userId());
+        return Response::json($profile);
+    }
+
     /** @param array<string,mixed> $user */
     private function profileFromAuth(array $user): array
     {
@@ -230,5 +300,28 @@ final class ProfileController
         }
 
         return (float) $row['monthly_income'] > 0;
+    }
+
+    private function normalizeAvatarUrl(?string $avatarUrl): ?string
+    {
+        if ($avatarUrl === null) {
+            return null;
+        }
+
+        $candidate = trim($avatarUrl);
+        if ($candidate === '' || strlen($candidate) > 512) {
+            return null;
+        }
+
+        if (!filter_var($candidate, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $scheme = strtolower((string) parse_url($candidate, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        return $candidate;
     }
 }

@@ -237,7 +237,39 @@ Response `200`:
 }
 ```
 
-### 4.5 List Master API Keys
+### 4.5 Convert Password Account To Google Sign-In
+`POST /me/auth/convert-google`
+
+Auth required: session auth only.
+
+Request:
+```json
+{
+  "google_id_token": "..."
+}
+```
+
+Rules:
+- Allowed only when `auth_provider = password`.
+- The Google account email must match the current account email.
+- The account is converted in place on the same user record.
+- Password sign-in stops working after a successful conversion.
+
+Response `200`:
+```json
+{
+  "id": "usr_123",
+  "email": "newuser@example.com",
+  "display_name": "Miguel",
+  "avatar_url": "https://lh3.googleusercontent.com/a/...",
+  "auth_provider": "google",
+  "email_verified": true,
+  "created_at": "2026-03-05T18:33:21Z",
+  "onboarding_complete": true
+}
+```
+
+### 4.6 List Master API Keys
 `GET /me/master-api-keys`
 
 Auth required: session auth only.

@@ -50,7 +50,7 @@ final class App
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
         $importExportController = new ImportExportController($pdo, $auth);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
-        $profileController = new ProfileController($pdo, $auth, $mailer, $config);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
@@ -77,6 +77,7 @@ final class App
         $add('PATCH', '/me', fn(Request $request) => $profileController->updateMe($request));
         $add('POST', '/me/email-change/request', fn(Request $request) => $profileController->requestEmailChange($request));
         $add('POST', '/me/email-change/verify', fn(Request $request) => $profileController->verifyEmailChange($request));
+        $add('POST', '/me/auth/convert-google', fn(Request $request) => $profileController->convertAccountToGoogle($request));
 
         $add('GET', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->listKeys($request));
         $add('POST', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->create($request));
@@ -184,6 +185,13 @@ final class App
             $max = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS', 600);
             $this->rateLimiter->hit('email-change-verify:' . $identifier, $max, $window);
+            return;
+        }
+
+        if ($path === '/me/auth/convert-google') {
+            $max = $this->config->getInt('RATE_LIMIT_AUTH_MAX', 10);
+            $window = $this->config->getInt('RATE_LIMIT_AUTH_WINDOW_SECONDS', 60);
+            $this->rateLimiter->hit('convert-google:' . $identifier, $max, $window);
         }
     }
 

@@ -2,6 +2,8 @@
 
 Minimal PHP API scaffold for auth + identity flows from `project_info.md`.
 
+Current production architecture and deploy context for the full stack live in [ARCHITECTURE.md](/Users/miguelcastillo/Desktop/BUDGET 1.0/ARCHITECTURE.md) and [FREE_HOSTING.md](/Users/miguelcastillo/Desktop/BUDGET 1.0/FREE_HOSTING.md).
+
 ## What is implemented
 - Invite-only auth flows:
   - `POST /api/v1/auth/invitations`
@@ -15,6 +17,7 @@ Minimal PHP API scaffold for auth + identity flows from `project_info.md`.
   - `PATCH /api/v1/me`
   - `POST /api/v1/me/email-change/request`
   - `POST /api/v1/me/email-change/verify`
+  - `POST /api/v1/me/auth/convert-google`
 - Master API key flows:
   - `GET /api/v1/me/master-api-keys`
   - `POST /api/v1/me/master-api-keys`
@@ -98,17 +101,24 @@ RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS=600
 RATE_LIMIT_STORAGE_PATH=storage/rate-limit
 ```
 
-3. Apply schema:
+3. Create local storage paths if missing:
+
+```bash
+mkdir -p storage/rate-limit
+touch storage/mail.log
+```
+
+4. Apply schema:
 ```bash
 php scripts/migrate.php
 ```
 
-4. Seed first owner user:
+5. Seed first owner user:
 ```bash
 php scripts/seed_owner.php you@example.com "Your Name" "StrongPassword123!"
 ```
 
-5. Run server:
+6. Run server:
 ```bash
 php -S localhost:8000 -t public
 ```
@@ -128,6 +138,8 @@ The token is validated against Google and `GOOGLE_CLIENT_IDS` (audience check).
 - Invite creation and email-change requests both send email as part of request handling.
 
 ## Notes
+- The schema and migrations use `utf8mb4_unicode_ci` so they work cleanly on MariaDB as well as MySQL-compatible setups.
+- `scripts/migrate.php` is safe for repeat runs. On an empty database it applies `schema.sql`; on an existing database it baselines migration history and only applies new migration files after that.
 - Tokens/codes are not returned in API responses.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
