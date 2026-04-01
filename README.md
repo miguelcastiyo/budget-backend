@@ -1,9 +1,5 @@
 # Budget API
 
-Minimal PHP API scaffold for auth + identity flows from `project_info.md`.
-
-Current production architecture and deploy context for the full stack live in [ARCHITECTURE.md](/Users/miguelcastillo/Desktop/BUDGET 1.0/ARCHITECTURE.md) and [FREE_HOSTING.md](/Users/miguelcastillo/Desktop/BUDGET 1.0/FREE_HOSTING.md).
-
 ## What is implemented
 - Invite-only auth flows:
   - `POST /api/v1/auth/invitations`
