@@ -68,6 +68,8 @@ cp .env.example .env
 Also configure Google client IDs used by your app:
 ```bash
 GOOGLE_CLIENT_IDS=your-web-client-id.apps.googleusercontent.com,your-ios-client-id.apps.googleusercontent.com
+GOOGLE_CERTS_CACHE_PATH=storage/google-certs-cache.json
+GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS=300
 ```
 Configure runtime/security flags:
 ```bash
@@ -126,7 +128,8 @@ curl http://localhost:8000/api/v1/health
 
 ## Google auth
 Google endpoints now require a real Google ID token (`google_id_token`).
-The token is validated against Google and `GOOGLE_CLIENT_IDS` (audience check).
+The backend verifies the JWT locally against cached Google signing certificates and checks `GOOGLE_CLIENT_IDS` for audience validation.
+The certificate cache defaults to `storage/google-certs-cache.json`.
 
 ## Email delivery
 - `MAIL_TRANSPORT=log`: writes emails to `storage/mail.log` (local dev default)

@@ -122,6 +122,9 @@ final class App
             $this->enforceRateLimits($request);
             $response = $this->router->dispatch($request);
         } catch (HttpException $e) {
+            if ($e->status >= 500) {
+                $this->logServerError($request, $e);
+            }
             $response = Response::json([
                 'error' => [
                     'code' => $e->errorCode,
@@ -145,6 +148,7 @@ final class App
                 ];
             }
 
+            $this->logServerError($request, $e);
             $response = Response::json($body, 500);
         }
 
@@ -263,5 +267,18 @@ final class App
         }
 
         return false;
+    }
+
+    private function logServerError(Request $request, Throwable $e): void
+    {
+        $message = sprintf(
+            '[budget-api] %s %s failed with %s: %s',
+            $request->method,
+            $request->path,
+            $e::class,
+            $e->getMessage()
+        );
+
+        error_log($message);
     }
 }
