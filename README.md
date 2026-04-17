@@ -47,6 +47,7 @@
 - Metrics flows:
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
   - `GET /api/v1/me/metrics/categories?month=YYYY-MM`
+  - `GET /api/v1/me/dashboard?month=YYYY-MM`
   - `GET /api/v1/me/metrics/insights?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
 
 ## Auth modes
@@ -125,6 +126,18 @@ Health check:
 ```bash
 curl http://localhost:8000/api/v1/health
 ```
+
+## Production monitoring
+- A scheduled production monitor lives at `.github/workflows/monitor-production.yml`.
+- It checks:
+  - direct backend health at `https://api-budget.miguelcastillo.info/api/v1/health`
+  - frontend proxy health at `https://budget.miguelcastillo.info/api/v1/health`
+  - Google sign-in reachability by expecting a fast `422` from `POST /api/v1/auth/sessions/google` with an empty JSON body
+- The check script is `scripts/check_production_health.sh`.
+- By default the workflow runs every 10 minutes and opens or closes a GitHub issue titled `Production health check failing`.
+- Override production URLs with GitHub Actions variables:
+  - `PROD_FRONTEND_URL`
+  - `PROD_BACKEND_URL`
 
 ## Google auth
 Google endpoints now require a real Google ID token (`google_id_token`).

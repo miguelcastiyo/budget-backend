@@ -1,0 +1,118 @@
+name: Monitor Production Health
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-health-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL || 'https://budget.miguelcastillo.info' }}
+      BACKEND_URL: ${{ vars.PROD_BACKEND_URL || 'https://api-budget.miguelcastillo.info' }}
+      MAX_TIME: "20"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run production health checks
+        run: bash scripts/check_production_health.sh
+
+  open_incident_issue:
+    needs: monitor
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Open or update production outage issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Production health check failing';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body = [
+              'The scheduled production health check failed.',
+              '',
+              `Workflow run: ${runUrl}`,
+              `Detected at: ${new Date().toISOString()}`
+            ].join('\n');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'production,monitoring',
+              per_page: 100,
+            });
+
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: existing.number,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner,
+              repo,
+              title,
+              body,
+              labels: ['production', 'monitoring'],
+            });
+
+  close_incident_issue:
+    needs: monitor
+    if: ${{ success() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Close open production outage issue if recovered
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Production health check failing';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'production,monitoring',
+              per_page: 100,
+            });
+
+            const existing = issues.find((issue) => issue.title === title);
+            if (!existing) {
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: existing.number,
+              body: `Production health recovered at ${new Date().toISOString()}.`,
+            });
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: existing.number,
+              state: 'closed',
+            });
