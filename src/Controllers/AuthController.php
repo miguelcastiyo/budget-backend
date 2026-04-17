@@ -445,7 +445,7 @@ SQL;
     private function buildAuthResponse(int $userId, array $session, string $clientType, int $statusCode = 200): Response
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, avatar_url FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, auth_provider, avatar_url, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $user = $stmt->fetch();
@@ -462,6 +462,7 @@ SQL;
                 'auth_provider' => (string) $user['auth_provider'],
                 'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
                 'onboarding_complete' => $this->isOnboardingComplete($userId, (string) $user['display_name']),
+                'user_preferences' => $this->normalizePreferences($user['user_preferences'] ?? null),
             ],
             'session' => [
                 'session_id' => $session['session_id'],
@@ -484,6 +485,51 @@ SQL;
             $this->config->getInt('SESSION_TTL_HOURS', 168) * 3600
         );
         return $response->withHeader('Set-Cookie', $cookie);
+    }
+
+    /** @return array<string,mixed> */
+    private function normalizePreferences(mixed $raw): array
+    {
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return $this->validatedPreferences($decoded);
+            }
+        }
+
+        if (is_array($raw)) {
+            return $this->validatedPreferences($raw);
+        }
+
+        return $this->defaultPreferences();
+    }
+
+    /** @param array<string,mixed> $preferences
+     *  @return array<string,mixed>
+     */
+    private function validatedPreferences(array $preferences): array
+    {
+        $appearance = is_array($preferences['appearance'] ?? null) ? $preferences['appearance'] : [];
+        $theme = (string) ($appearance['theme'] ?? 'system');
+        if (!in_array($theme, ['light', 'dark', 'system'], true)) {
+            $theme = 'system';
+        }
+
+        return [
+            'appearance' => [
+                'theme' => $theme,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function defaultPreferences(): array
+    {
+        return [
+            'appearance' => [
+                'theme' => 'system',
+            ],
+        ];
     }
 
     private function sendInviteEmail(string $toEmail, string $inviteToken, string $expiresAt): void

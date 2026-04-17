@@ -9,6 +9,7 @@ CREATE TABLE users (
   email VARCHAR(255) NOT NULL,
   display_name VARCHAR(120) NOT NULL,
   avatar_url VARCHAR(512) NULL,
+  user_preferences JSON NULL,
   auth_provider ENUM('password', 'google') NOT NULL,
   password_hash VARCHAR(255) NULL,
   google_sub VARCHAR(128) NULL,

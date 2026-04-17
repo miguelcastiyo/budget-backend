@@ -53,6 +53,36 @@ final class ProfileController
         return Response::json($profile);
     }
 
+    public function getPreferences(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        return Response::json($this->fetchPreferences($ctx->userId()));
+    }
+
+    public function updatePreferences(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $payload = $request->json();
+        if (!is_array($payload)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed');
+        }
+
+        $current = $this->fetchPreferences($ctx->userId());
+        $next = $this->mergePreferences($current, $payload);
+        $encoded = json_encode($next, JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            throw new HttpException(500, 'INTERNAL_ERROR', 'Unable to encode user preferences');
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE users SET user_preferences = :user_preferences WHERE id = :id');
+        $stmt->execute([
+            ':user_preferences' => $encoded,
+            ':id' => $ctx->userId(),
+        ]);
+
+        return Response::json($next);
+    }
+
     public function requestEmailChange(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
@@ -258,6 +288,7 @@ final class ProfileController
             'email_verified' => (bool) $user['email_verified'],
             'created_at' => (string) $user['created_at'],
             'onboarding_complete' => $this->isOnboardingComplete($userId, $displayName),
+            'user_preferences' => $this->normalizePreferences($user['user_preferences'] ?? null),
         ];
     }
 
@@ -265,7 +296,7 @@ final class ProfileController
     private function fetchProfile(int $userId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, avatar_url, email_verified, created_at FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, auth_provider, avatar_url, email_verified, created_at, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch();
@@ -283,7 +314,22 @@ final class ProfileController
             'email_verified' => (bool) $row['email_verified'],
             'created_at' => (string) $row['created_at'],
             'onboarding_complete' => $this->isOnboardingComplete((int) $row['id'], (string) $row['display_name']),
+            'user_preferences' => $this->normalizePreferences($row['user_preferences'] ?? null),
         ];
+    }
+
+    /** @return array<string,mixed> */
+    private function fetchPreferences(int $userId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT user_preferences FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            throw new HttpException(404, 'NOT_FOUND', 'User not found');
+        }
+
+        return $this->normalizePreferences($row['user_preferences'] ?? null);
     }
 
     private function isOnboardingComplete(int $userId, string $displayName): bool
@@ -323,5 +369,90 @@ final class ProfileController
         }
 
         return $candidate;
+    }
+
+    /** @return array<string,mixed> */
+    private function normalizePreferences(mixed $raw): array
+    {
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return $this->validatedPreferences($decoded);
+            }
+        }
+
+        if (is_array($raw)) {
+            return $this->validatedPreferences($raw);
+        }
+
+        return $this->defaultPreferences();
+    }
+
+    /** @param array<string,mixed> $current
+     *  @param array<string,mixed> $patch
+     *  @return array<string,mixed>
+     */
+    private function mergePreferences(array $current, array $patch): array
+    {
+        $next = $current;
+
+        if (array_key_exists('appearance', $patch)) {
+            if (!is_array($patch['appearance'])) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'appearance', 'message' => 'must be an object'],
+                ]);
+            }
+
+            $nextAppearance = is_array($next['appearance'] ?? null) ? $next['appearance'] : [];
+            if (array_key_exists('theme', $patch['appearance'])) {
+                $theme = (string) $patch['appearance']['theme'];
+                if (!in_array($theme, ['light', 'dark', 'system'], true)) {
+                    throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                        ['field' => 'appearance.theme', 'message' => 'must be light, dark, or system'],
+                    ]);
+                }
+                $nextAppearance['theme'] = $theme;
+            }
+            $next['appearance'] = $nextAppearance;
+        }
+
+        $unsupported = array_diff(array_keys($patch), ['appearance']);
+        if ($unsupported !== []) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => (string) array_values($unsupported)[0], 'message' => 'is not supported'],
+            ]);
+        }
+
+        return $this->validatedPreferences($next);
+    }
+
+    /** @param array<string,mixed> $preferences
+     *  @return array<string,mixed>
+     */
+    private function validatedPreferences(array $preferences): array
+    {
+        $defaults = $this->defaultPreferences();
+        $appearance = is_array($preferences['appearance'] ?? null) ? $preferences['appearance'] : [];
+        $theme = (string) ($appearance['theme'] ?? $defaults['appearance']['theme']);
+
+        if (!in_array($theme, ['light', 'dark', 'system'], true)) {
+            $theme = $defaults['appearance']['theme'];
+        }
+
+        return [
+            'appearance' => [
+                'theme' => $theme,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function defaultPreferences(): array
+    {
+        return [
+            'appearance' => [
+                'theme' => 'system',
+            ],
+        ];
     }
 }

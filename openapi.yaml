@@ -216,6 +216,44 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/preferences:
+    get:
+      tags: [Profile]
+      summary: Get user preferences
+      responses:
+        '200':
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      tags: [Profile]
+      summary: Update user preferences
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserPreferencesRequest'
+      responses:
+        '200':
+          description: User preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/email-change/request:
     post:
       tags: [Profile]
@@ -1212,6 +1250,24 @@ components:
           description: Returned only for native clients.
       required: [session_id, expires_at, csrf_token]
 
+    ThemePreference:
+      type: string
+      enum: [light, dark, system]
+
+    AppearancePreferences:
+      type: object
+      properties:
+        theme:
+          $ref: '#/components/schemas/ThemePreference'
+      required: [theme]
+
+    UserPreferences:
+      type: object
+      properties:
+        appearance:
+          $ref: '#/components/schemas/AppearancePreferences'
+      required: [appearance]
+
     AuthUser:
       type: object
       properties:
@@ -1230,7 +1286,9 @@ components:
           enum: [password, google]
         onboarding_complete:
           type: boolean
-      required: [id, email, display_name, auth_provider, onboarding_complete]
+        user_preferences:
+          $ref: '#/components/schemas/UserPreferences'
+      required: [id, email, display_name, auth_provider, onboarding_complete, user_preferences]
 
     AuthSessionResponse:
       type: object
@@ -1264,7 +1322,9 @@ components:
           format: date-time
         onboarding_complete:
           type: boolean
-      required: [id, email, display_name, auth_provider, email_verified, created_at, onboarding_complete]
+        user_preferences:
+          $ref: '#/components/schemas/UserPreferences'
+      required: [id, email, display_name, auth_provider, email_verified, created_at, onboarding_complete, user_preferences]
 
     UpdateProfileRequest:
       type: object
@@ -1274,6 +1334,15 @@ components:
           minLength: 1
           maxLength: 120
       required: [display_name]
+
+    UpdateUserPreferencesRequest:
+      type: object
+      properties:
+        appearance:
+          type: object
+          properties:
+            theme:
+              $ref: '#/components/schemas/ThemePreference'
 
     RequestEmailChangeRequest:
       type: object

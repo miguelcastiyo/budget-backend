@@ -98,7 +98,12 @@ Response `201`:
     "display_name": "Miguel",
     "avatar_url": null,
     "auth_provider": "password",
-    "onboarding_complete": true
+    "onboarding_complete": true,
+    "user_preferences": {
+      "appearance": {
+        "theme": "system"
+      }
+    }
   },
   "session": {
     "session_id": "ses_...",
@@ -155,6 +160,7 @@ Rules:
 For `client_type: "web"`, backend sets `sid` cookie.
 For `client_type: "native"`, response includes `session_token`.
 All successful auth responses include `session.csrf_token`.
+All successful auth responses also include `user.user_preferences`.
 
 ### 3.5 Sign Out
 `DELETE /auth/sessions/current`
@@ -176,7 +182,12 @@ Response:
   "auth_provider": "password",
   "email_verified": true,
   "created_at": "2026-03-05T18:33:21Z",
-  "onboarding_complete": true
+  "onboarding_complete": true,
+  "user_preferences": {
+    "appearance": {
+      "theme": "system"
+    }
+  }
 }
 ```
 
@@ -190,7 +201,50 @@ Request:
 }
 ```
 
-### 4.3 Request Email Change (Password Users Only)
+### 4.3 Get User Preferences
+`GET /me/preferences`
+
+Response:
+```json
+{
+  "appearance": {
+    "theme": "dark"
+  }
+}
+```
+
+Notes:
+- Preferences are stored at the account level on the `users` record.
+- Unknown or invalid preference keys are rejected by the backend.
+- Currently supported:
+  - `appearance.theme`: `light | dark | system`
+
+### 4.4 Update User Preferences
+`PATCH /me/preferences`
+
+Request:
+```json
+{
+  "appearance": {
+    "theme": "dark"
+  }
+}
+```
+
+Response `200`:
+```json
+{
+  "appearance": {
+    "theme": "dark"
+  }
+}
+```
+
+Notes:
+- Updates are merged server-side into the existing preference document.
+- The current frontend uses this endpoint to persist dark mode across sessions and devices.
+
+### 4.5 Request Email Change (Password Users Only)
 `POST /me/email-change/request`
 
 Request:
@@ -214,7 +268,7 @@ Response `202`:
 }
 ```
 
-### 4.4 Verify Email Change
+### 4.6 Verify Email Change
 `POST /me/email-change/verify`
 
 Request:
@@ -237,7 +291,7 @@ Response `200`:
 }
 ```
 
-### 4.5 Convert Password Account To Google Sign-In
+### 4.7 Convert Password Account To Google Sign-In
 `POST /me/auth/convert-google`
 
 Auth required: session auth only.
@@ -265,11 +319,16 @@ Response `200`:
   "auth_provider": "google",
   "email_verified": true,
   "created_at": "2026-03-05T18:33:21Z",
-  "onboarding_complete": true
+  "onboarding_complete": true,
+  "user_preferences": {
+    "appearance": {
+      "theme": "system"
+    }
+  }
 }
 ```
 
-### 4.6 List Master API Keys
+### 4.8 List Master API Keys
 `GET /me/master-api-keys`
 
 Auth required: session auth only.
@@ -290,7 +349,7 @@ Response:
 }
 ```
 
-### 4.6 Create Master API Key
+### 4.9 Create Master API Key
 `POST /me/master-api-keys`
 
 Auth required: session auth only.
@@ -315,7 +374,7 @@ Response `201`:
 }
 ```
 
-### 4.7 Revoke Master API Key
+### 4.10 Revoke Master API Key
 `DELETE /me/master-api-keys/{api_key_id}`
 
 Auth required: session auth only.
