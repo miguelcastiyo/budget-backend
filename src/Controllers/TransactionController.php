@@ -126,16 +126,24 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.source,
   tg.id AS tag_id,
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
   c.name AS card_name,
+  reo.recurring_expense_id,
   t.created_at,
   t.updated_at
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+LEFT JOIN (
+  SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
+  FROM recurring_expense_occurrences
+  WHERE transaction_id IS NOT NULL
+  GROUP BY user_id, transaction_id
+) reo ON reo.transaction_id = t.id AND reo.user_id = t.user_id
 WHERE %s
 ORDER BY %s
 LIMIT :limit OFFSET :offset
@@ -299,16 +307,24 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.source,
   tg.id AS tag_id,
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
   c.name AS card_name,
+  reo.recurring_expense_id,
   t.created_at,
   t.updated_at
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+LEFT JOIN (
+  SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
+  FROM recurring_expense_occurrences
+  WHERE transaction_id IS NOT NULL
+  GROUP BY user_id, transaction_id
+) reo ON reo.transaction_id = t.id AND reo.user_id = t.user_id
 WHERE t.id = :id AND t.user_id = :user_id AND t.deleted_at IS NULL
 LIMIT 1
 SQL;
@@ -336,6 +352,8 @@ SQL;
             'amount' => $this->fmt((string) $row['amount']),
             'category' => (string) $row['category'],
             'is_split' => ((int) $row['is_split']) === 1,
+            'source' => (string) $row['source'],
+            'recurring_expense_id' => $row['recurring_expense_id'] === null ? null : (string) $row['recurring_expense_id'],
             'tag' => [
                 'id' => (string) $row['tag_id'],
                 'name' => (string) $row['tag_name'],
