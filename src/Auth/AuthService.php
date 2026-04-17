@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Auth;
 
+use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Support\Str;
@@ -11,7 +12,10 @@ use PDO;
 
 final class AuthService
 {
-    public function __construct(private readonly PDO $pdo)
+    public function __construct(
+        private readonly PDO $pdo,
+        private readonly Config $config
+    )
     {
     }
 
@@ -67,6 +71,7 @@ final class AuthService
 SELECT
   us.session_id,
   us.csrf_token_hash,
+  us.last_seen_at,
   u.id,
   u.email,
   u.display_name,
@@ -108,8 +113,10 @@ SQL;
             }
         }
 
-        $touch = $this->pdo->prepare('UPDATE user_sessions SET last_seen_at = UTC_TIMESTAMP() WHERE session_id = :session_id');
-        $touch->execute([':session_id' => $sessionId]);
+        if ($this->shouldTouchSession($row['last_seen_at'] ?? null)) {
+            $touch = $this->pdo->prepare('UPDATE user_sessions SET last_seen_at = UTC_TIMESTAMP() WHERE session_id = :session_id');
+            $touch->execute([':session_id' => $sessionId]);
+        }
 
         return new AuthContext($row, 'session', $sessionId, null, $source);
     }
@@ -157,5 +164,24 @@ SQL;
     {
         $method = strtoupper($method);
         return !in_array($method, ['GET', 'HEAD', 'OPTIONS'], true);
+    }
+
+    private function shouldTouchSession(mixed $lastSeenAt): bool
+    {
+        if (!is_string($lastSeenAt) || trim($lastSeenAt) === '') {
+            return true;
+        }
+
+        $lastSeenUnix = strtotime($lastSeenAt . ' UTC');
+        if ($lastSeenUnix === false) {
+            return true;
+        }
+
+        $intervalSeconds = max(0, $this->config->getInt('SESSION_LAST_SEEN_UPDATE_INTERVAL_SECONDS', 300));
+        if ($intervalSeconds === 0) {
+            return true;
+        }
+
+        return $lastSeenUnix <= (time() - $intervalSeconds);
     }
 }

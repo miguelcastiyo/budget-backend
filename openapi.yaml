@@ -824,6 +824,24 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/dashboard:
+    get:
+      tags: [Metrics]
+      summary: Aggregated dashboard payload for the homepage
+      parameters:
+        - $ref: '#/components/parameters/Month'
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/metrics/insights:
     get:
       tags: [Metrics]
@@ -1855,6 +1873,22 @@ components:
           items:
             $ref: '#/components/schemas/CategoryMetricsItem'
       required: [month, monthly_income, categories]
+
+    DashboardResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        category_metrics:
+          $ref: '#/components/schemas/CategoryMetricsResponse'
+        tag_metrics:
+          $ref: '#/components/schemas/TagMetricsResponse'
+        recent_transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+      required: [month, category_metrics, tag_metrics, recent_transactions]
 
     InsightsMonthlySpendPoint:
       type: object

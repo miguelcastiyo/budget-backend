@@ -665,7 +665,63 @@ Response:
 }
 ```
 
-### 9.3 Insights Aggregation (Date Range)
+### 9.3 Dashboard Summary (Monthly)
+`GET /me/dashboard`
+
+Query params:
+- `month=2026-03`
+
+Response:
+```json
+{
+  "month": "2026-03",
+  "category_metrics": {
+    "month": "2026-03",
+    "monthly_income": "6200.00",
+    "categories": [
+      {
+        "category": "needs",
+        "budget_amount": "3100.00",
+        "actual_spend": "2800.00",
+        "percent_used": "90.32"
+      }
+    ]
+  },
+  "tag_metrics": {
+    "month": "2026-03",
+    "total_spend": "2400.00",
+    "tags": [
+      {
+        "tag_id": "12",
+        "tag_name": "Groceries",
+        "icon_key": "shopping_cart",
+        "spend": "640.00",
+        "percent_of_monthly_spend": "26.67"
+      }
+    ]
+  },
+  "recent_transactions": [
+    {
+      "id": "401",
+      "date": "2026-03-25",
+      "expense": "Trader Joe's",
+      "amount": "84.13",
+      "category": "needs",
+      "is_split": false,
+      "tag": { "id": "12", "name": "Groceries", "icon_key": "shopping_cart" },
+      "card": { "id": "4", "name": "Chase Sapphire" },
+      "created_at": "2026-03-25T20:14:00Z",
+      "updated_at": "2026-03-25T20:14:00Z"
+    }
+  ]
+}
+```
+
+Rules:
+- Uses the same month input and recurring-generation semantics as the monthly metrics endpoints.
+- Returns the exact data needed by the current homepage in one response.
+
+### 9.4 Insights Aggregation (Date Range)
 `GET /me/metrics/insights`
 
 Query params:

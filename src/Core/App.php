@@ -41,7 +41,7 @@ final class App
         $config = Config::load($root);
         $pdo = Connection::make($config);
 
-        $auth = new AuthService($pdo);
+        $auth = new AuthService($pdo, $config);
         $recurring = new RecurringExpenseService($pdo);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
@@ -111,6 +111,7 @@ final class App
 
         $add('GET', '/me/metrics/tags', fn(Request $request) => $metricsController->tags($request));
         $add('GET', '/me/metrics/categories', fn(Request $request) => $metricsController->categories($request));
+        $add('GET', '/me/dashboard', fn(Request $request) => $metricsController->dashboard($request));
         $add('GET', '/me/metrics/insights', fn(Request $request) => $metricsController->insights($request));
 
         return new self($router, $config, $rateLimiter);

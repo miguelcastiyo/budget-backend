@@ -93,8 +93,9 @@ final class RecurringExpenseService
             ':instance_month_end' => $instanceMonth,
         ]);
 
+        $existingOccurrences = $this->existingOccurrenceMap($userId, $instanceMonth);
         $insertOccurrence = $this->pdo->prepare(
-            'INSERT INTO recurring_expense_occurrences (user_id, recurring_expense_id, occurrence_month, due_date) VALUES (:user_id, :recurring_expense_id, :occurrence_month, :due_date)'
+            'INSERT IGNORE INTO recurring_expense_occurrences (user_id, recurring_expense_id, occurrence_month, due_date) VALUES (:user_id, :recurring_expense_id, :occurrence_month, :due_date)'
         );
         $insertTransaction = $this->pdo->prepare(
             "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, source)
@@ -105,6 +106,11 @@ final class RecurringExpenseService
         );
 
         foreach ($stmt->fetchAll() as $row) {
+            $recurringExpenseId = (int) $row['id'];
+            if (isset($existingOccurrences[$recurringExpenseId])) {
+                continue;
+            }
+
             $billingType = (string) $row['billing_type'];
             $billingDay = $billingType === 'last_day'
                 ? $daysInMonth
@@ -116,10 +122,15 @@ final class RecurringExpenseService
 
                 $insertOccurrence->execute([
                     ':user_id' => $userId,
-                    ':recurring_expense_id' => (int) $row['id'],
+                    ':recurring_expense_id' => $recurringExpenseId,
                     ':occurrence_month' => $instanceMonth,
                     ':due_date' => $dueDate,
                 ]);
+
+                if ($insertOccurrence->rowCount() === 0) {
+                    $this->pdo->rollBack();
+                    continue;
+                }
 
                 $occurrenceId = (int) $this->pdo->lastInsertId();
 
@@ -146,11 +157,6 @@ final class RecurringExpenseService
                     $this->pdo->rollBack();
                 }
 
-                if (($e->errorInfo[0] ?? '') === '23000') {
-                    // Occurrence already exists for this month; skip.
-                    continue;
-                }
-
                 throw $e;
             }
         }
@@ -175,5 +181,24 @@ final class RecurringExpenseService
     private function fmt(string $decimal): string
     {
         return number_format((float) $decimal, 2, '.', '');
+    }
+
+    /** @return array<int, true> */
+    private function existingOccurrenceMap(int $userId, string $instanceMonth): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT recurring_expense_id FROM recurring_expense_occurrences WHERE user_id = :user_id AND occurrence_month = :occurrence_month'
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':occurrence_month' => $instanceMonth,
+        ]);
+
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $map[(int) $row['recurring_expense_id']] = true;
+        }
+
+        return $map;
     }
 }

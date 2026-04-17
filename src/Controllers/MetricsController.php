@@ -31,52 +31,7 @@ final class MetricsController
         [$month, $startDate, $endDate] = $this->monthRangeFromQuery($request);
         $this->recurring->ensureGeneratedForMonth($ctx->userId(), $month);
 
-        $sql = <<<'SQL'
-SELECT
-  t.tag_id,
-  tg.name AS tag_name,
-  tg.icon_key AS tag_icon_key,
-  SUM(t.amount) AS spend
-FROM transactions t
-JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
-WHERE t.user_id = :user_id
-  AND t.deleted_at IS NULL
-  AND t.transaction_date BETWEEN :start_date AND :end_date
-GROUP BY t.tag_id, tg.name, tg.icon_key
-ORDER BY spend DESC, tg.name ASC
-SQL;
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':user_id' => $ctx->userId(),
-            ':start_date' => $startDate,
-            ':end_date' => $endDate,
-        ]);
-
-        $rows = $stmt->fetchAll();
-        $totalSpend = 0.0;
-        foreach ($rows as $row) {
-            $totalSpend += (float) $row['spend'];
-        }
-
-        $items = [];
-        foreach ($rows as $row) {
-            $spend = (float) $row['spend'];
-            $percent = $totalSpend > 0.0 ? ($spend / $totalSpend) * 100.0 : 0.0;
-
-            $items[] = [
-                'tag_id' => (string) $row['tag_id'],
-                'tag_name' => (string) $row['tag_name'],
-                'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
-                'spend' => $this->fmt($spend),
-                'percent_of_monthly_spend' => $this->fmt($percent),
-            ];
-        }
-
-        return Response::json([
-            'month' => $month,
-            'total_spend' => $this->fmt($totalSpend),
-            'tags' => $items,
-        ]);
+        return Response::json($this->buildMonthlyTagMetrics($ctx->userId(), $month, $startDate, $endDate));
     }
 
     public function categories(Request $request): Response
@@ -85,50 +40,20 @@ SQL;
         [$month, $startDate, $endDate] = $this->monthRangeFromQuery($request);
         $this->recurring->ensureGeneratedForMonth($ctx->userId(), $month);
 
-        $settings = $this->loadBudgetSettings($ctx->userId());
-        $plan = $this->budgetPlanFromSettings($settings);
+        return Response::json($this->buildMonthlyCategoryMetrics($ctx->userId(), $month, $startDate, $endDate));
+    }
 
-        $sql = <<<'SQL'
-SELECT
-  category,
-  SUM(amount) AS actual_spend
-FROM transactions
-WHERE user_id = :user_id
-  AND deleted_at IS NULL
-  AND transaction_date BETWEEN :start_date AND :end_date
-GROUP BY category
-SQL;
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':user_id' => $ctx->userId(),
-            ':start_date' => $startDate,
-            ':end_date' => $endDate,
-        ]);
-
-        $actualByCategory = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $actualByCategory[(string) $row['category']] = (float) $row['actual_spend'];
-        }
-
-        $categories = [];
-        foreach (self::CATEGORY_ORDER as $category) {
-            $budgetAmount = (float) ($plan['budget_amounts'][$category] ?? 0.0);
-            $actualSpend = (float) ($actualByCategory[$category] ?? 0.0);
-            $percentUsed = $budgetAmount > 0.0 ? ($actualSpend / $budgetAmount) * 100.0 : 0.0;
-
-            $categories[] = [
-                'category' => $category,
-                'budget_amount' => $this->fmt($budgetAmount),
-                'actual_spend' => $this->fmt($actualSpend),
-                'percent_used' => $this->fmt($percentUsed),
-            ];
-        }
+    public function dashboard(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        [$month, $startDate, $endDate] = $this->monthRangeFromQuery($request);
+        $this->recurring->ensureGeneratedForMonth($ctx->userId(), $month);
 
         return Response::json([
             'month' => $month,
-            'monthly_income' => $this->fmt((float) $plan['monthly_income']),
-            'categories' => $categories,
+            'category_metrics' => $this->buildMonthlyCategoryMetrics($ctx->userId(), $month, $startDate, $endDate),
+            'tag_metrics' => $this->buildMonthlyTagMetrics($ctx->userId(), $month, $startDate, $endDate),
+            'recent_transactions' => $this->queryRecentTransactionsForMonth($ctx->userId(), $startDate, $endDate),
         ]);
     }
 
@@ -281,6 +206,62 @@ SQL;
         return $value;
     }
 
+    private function buildMonthlyCategoryMetrics(int $userId, string $month, string $startDate, string $endDate): array
+    {
+        $settings = $this->loadBudgetSettings($userId);
+        $plan = $this->budgetPlanFromSettings($settings);
+        $actualByCategory = $this->queryCategoryTotals($userId, $startDate, $endDate);
+
+        $categories = [];
+        foreach (self::CATEGORY_ORDER as $category) {
+            $budgetAmount = (float) ($plan['budget_amounts'][$category] ?? 0.0);
+            $actualSpend = (float) ($actualByCategory[$category] ?? 0.0);
+            $percentUsed = $budgetAmount > 0.0 ? ($actualSpend / $budgetAmount) * 100.0 : 0.0;
+
+            $categories[] = [
+                'category' => $category,
+                'budget_amount' => $this->fmt($budgetAmount),
+                'actual_spend' => $this->fmt($actualSpend),
+                'percent_used' => $this->fmt($percentUsed),
+            ];
+        }
+
+        return [
+            'month' => $month,
+            'monthly_income' => $this->fmt((float) $plan['monthly_income']),
+            'categories' => $categories,
+        ];
+    }
+
+    private function buildMonthlyTagMetrics(int $userId, string $month, string $startDate, string $endDate): array
+    {
+        $rows = $this->queryMonthlyTagRows($userId, $startDate, $endDate);
+        $totalSpend = 0.0;
+        foreach ($rows as $row) {
+            $totalSpend += (float) $row['spend'];
+        }
+
+        $items = [];
+        foreach ($rows as $row) {
+            $spend = (float) $row['spend'];
+            $percent = $totalSpend > 0.0 ? ($spend / $totalSpend) * 100.0 : 0.0;
+
+            $items[] = [
+                'tag_id' => (string) $row['tag_id'],
+                'tag_name' => (string) $row['tag_name'],
+                'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
+                'spend' => $this->fmt($spend),
+                'percent_of_monthly_spend' => $this->fmt($percent),
+            ];
+        }
+
+        return [
+            'month' => $month,
+            'total_spend' => $this->fmt($totalSpend),
+            'tags' => $items,
+        ];
+    }
+
     /** @return array<string,float> */
     private function queryMonthlySpendTrend(int $userId, string $dateFrom, string $dateTo): array
     {
@@ -352,6 +333,32 @@ SQL;
         }
 
         return $actualByCategory;
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function queryMonthlyTagRows(int $userId, string $dateFrom, string $dateTo): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+               t.tag_id,
+               tg.name AS tag_name,
+               tg.icon_key AS tag_icon_key,
+               SUM(t.amount) AS spend
+             FROM transactions t
+             JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
+             WHERE t.user_id = :user_id
+               AND t.deleted_at IS NULL
+               AND t.transaction_date BETWEEN :date_from AND :date_to
+             GROUP BY t.tag_id, tg.name, tg.icon_key
+             ORDER BY spend DESC, tg.name ASC"
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':date_from' => $dateFrom,
+            ':date_to' => $dateTo,
+        ]);
+
+        return $stmt->fetchAll();
     }
 
     /** @return list<array{tag_id:string,tag_name:string,icon_key:?string,spend:string,percent_of_total_spend:string}> */
@@ -533,6 +540,67 @@ SQL;
         ]);
 
         return (int) ($stmt->fetch()['total'] ?? 0);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function queryRecentTransactionsForMonth(int $userId, string $dateFrom, string $dateTo): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+               t.id,
+               t.transaction_date,
+               t.expense,
+               t.amount,
+               t.category,
+               t.is_split,
+               tg.id AS tag_id,
+               tg.name AS tag_name,
+               tg.icon_key AS tag_icon_key,
+               c.id AS card_id,
+               c.name AS card_name,
+               t.created_at,
+               t.updated_at
+             FROM transactions t
+             JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
+             LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+             WHERE t.user_id = :user_id
+               AND t.deleted_at IS NULL
+               AND t.transaction_date BETWEEN :date_from AND :date_to
+             ORDER BY t.transaction_date DESC, t.id DESC
+             LIMIT 10"
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':date_from' => $dateFrom,
+            ':date_to' => $dateTo,
+        ]);
+
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $items[] = [
+                'id' => (string) $row['id'],
+                'date' => (string) $row['transaction_date'],
+                'expense' => (string) $row['expense'],
+                'amount' => $this->fmt((float) $row['amount']),
+                'category' => (string) $row['category'],
+                'is_split' => ((int) $row['is_split']) === 1,
+                'tag' => [
+                    'id' => (string) $row['tag_id'],
+                    'name' => (string) $row['tag_name'],
+                    'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
+                ],
+                'card' => $row['card_id'] === null
+                    ? null
+                    : [
+                        'id' => (string) $row['card_id'],
+                        'name' => (string) $row['card_name'],
+                    ],
+                'created_at' => (string) $row['created_at'],
+                'updated_at' => (string) $row['updated_at'],
+            ];
+        }
+
+        return $items;
     }
 
     private function countMonthsInRange(DateTimeImmutable $startDate, DateTimeImmutable $endDate): int
