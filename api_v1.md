@@ -9,6 +9,60 @@ This contract is derived from `project_info.md` and is intended for a PHP + MySQ
 - Money format: decimal string with 2 places (example: `"123.45"`)
 - Timezone: store UTC, return ISO-8601 timestamps
 
+### Health Endpoints
+
+`GET /health`
+
+Purpose:
+- Liveness check for the PHP API process.
+- Does not require authentication.
+- Does not open a database connection.
+
+Response `200`:
+```json
+{
+  "ok": true,
+  "service": "budget-api",
+  "check": "health",
+  "time": "2026-05-04T12:00:00+00:00"
+}
+```
+
+`GET /ready`
+
+Purpose:
+- Readiness check for dependencies required to serve normal API traffic.
+- Does not require authentication.
+- Checks MariaDB by opening a connection and running `SELECT 1`.
+
+Response `200` when ready:
+```json
+{
+  "ok": true,
+  "service": "budget-api",
+  "check": "ready",
+  "dependencies": {
+    "database": "ok"
+  },
+  "time": "2026-05-04T12:00:00+00:00"
+}
+```
+
+Response `503` when not ready:
+```json
+{
+  "ok": false,
+  "service": "budget-api",
+  "check": "ready",
+  "dependencies": {
+    "database": "error"
+  },
+  "time": "2026-05-04T12:00:00+00:00"
+}
+```
+
+The frontend also proxies these as `/api/v1/health` and `/api/v1/ready` from the frontend domain.
+
 ### Fixed Category Enum
 - `needs`
 - `wants`

@@ -58,8 +58,10 @@ check_request() {
   echo "OK   [$label] status=$status total=${total}s"
 }
 
-check_request "backend health" "${BACKEND_URL%/}/api/v1/health" GET 200 '"ok":true'
-check_request "frontend proxy health" "${FRONTEND_URL%/}/api/v1/health" GET 200 '"ok":true'
+check_request "backend liveness" "${BACKEND_URL%/}/api/v1/health" GET 200 '"ok":true'
+check_request "backend readiness" "${BACKEND_URL%/}/api/v1/ready" GET 200 '"ok":true'
+check_request "frontend proxy liveness" "${FRONTEND_URL%/}/api/v1/health" GET 200 '"ok":true'
+check_request "frontend proxy readiness" "${FRONTEND_URL%/}/api/v1/ready" GET 200 '"ok":true'
 check_request "frontend google sign-in probe" "${FRONTEND_URL%/}/api/v1/auth/sessions/google" POST 422 '"code":"VALIDATION_ERROR"'
 
 echo "Production health checks passed."

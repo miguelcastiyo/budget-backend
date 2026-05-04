@@ -68,6 +68,14 @@ cp .env.example .env
 ```
 
 2. Configure DB credentials in `.env`.
+Use `DB_CONNECT_TIMEOUT_SECONDS` to keep failed database connections bounded:
+```bash
+DB_DSN=mysql:host=127.0.0.1;port=3306;dbname=budget;charset=utf8mb4
+DB_USER=root
+DB_PASS=
+DB_CONNECT_TIMEOUT_SECONDS=5
+```
+
 Also configure Google client IDs used by your app:
 ```bash
 GOOGLE_CLIENT_IDS=your-web-client-id.apps.googleusercontent.com,your-ios-client-id.apps.googleusercontent.com
@@ -129,17 +137,27 @@ Health check:
 curl http://localhost:8000/api/v1/health
 ```
 
+Readiness check:
+```bash
+curl http://localhost:8000/api/v1/ready
+```
+
 ## Production monitoring
 - A scheduled production monitor lives at `.github/workflows/monitor-production.yml`.
 - It checks:
-  - direct backend health at `https://api-budget.miguelcastillo.info/api/v1/health`
-  - frontend proxy health at `https://budget.miguelcastillo.info/api/v1/health`
+  - direct backend liveness at `https://api-budget.miguelcastillo.info/api/v1/health`
+  - direct backend readiness at `https://api-budget.miguelcastillo.info/api/v1/ready`
+  - frontend proxy liveness at `https://budget.miguelcastillo.info/api/v1/health`
+  - frontend proxy readiness at `https://budget.miguelcastillo.info/api/v1/ready`
   - Google sign-in reachability by expecting a fast `422` from `POST /api/v1/auth/sessions/google` with an empty JSON body
 - The check script is `scripts/check_production_health.sh`.
 - By default the workflow runs every 10 minutes and opens or closes a GitHub issue titled `Production health check failing`.
 - Override production URLs with GitHub Actions variables:
   - `PROD_FRONTEND_URL`
   - `PROD_BACKEND_URL`
+- Use the workspace runbook at `../docs/production-health.md` to triage `curl 28` timeouts, frontend infinite loading, and Lightsail service failures before rebooting the instance when possible.
+- `/api/v1/health` is a lightweight liveness check and does not connect to MariaDB.
+- `/api/v1/ready` is a readiness check and returns `503` if MariaDB cannot be reached.
 
 ## Google auth
 Google endpoints now require a real Google ID token (`google_id_token`).

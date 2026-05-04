@@ -11,6 +11,7 @@ security:
   - sessionTokenAuth: []
   - masterApiKeyAuth: []
 tags:
+  - name: Health
   - name: Auth
   - name: Profile
   - name: ApiKeys
@@ -22,6 +23,40 @@ tags:
   - name: Metrics
   - name: ImportExport
 paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Check API process liveness
+      description: Lightweight liveness check. Does not require authentication and does not open a database connection.
+      security: []
+      responses:
+        '200':
+          description: API process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Check API readiness
+      description: Readiness check for dependencies required to serve normal API traffic.
+      security: []
+      responses:
+        '200':
+          description: API dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: One or more dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
   /auth/invitations:
     post:
       tags: [Auth]
@@ -1152,6 +1187,46 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
 
   schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        service:
+          type: string
+          enum: [budget-api]
+        check:
+          type: string
+          enum: [health]
+        time:
+          type: string
+          format: date-time
+      required: [ok, service, check, time]
+
+    ReadinessResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        service:
+          type: string
+          enum: [budget-api]
+        check:
+          type: string
+          enum: [ready]
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+          required: [database]
+        time:
+          type: string
+          format: date-time
+      required: [ok, service, check, dependencies, time]
+
     CreateInviteRequest:
       type: object
       properties:

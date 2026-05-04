@@ -14,11 +14,13 @@ final class Connection
         $dsn = (string) $config->get('DB_DSN', '');
         $user = (string) $config->get('DB_USER', '');
         $pass = (string) $config->get('DB_PASS', '');
+        $timeout = max(1, $config->getInt('DB_CONNECT_TIMEOUT_SECONDS', 5));
 
         return new PDO($dsn, $user, $pass, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_TIMEOUT => $timeout,
         ]);
     }
 }
