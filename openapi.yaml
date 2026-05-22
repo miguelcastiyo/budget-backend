@@ -1807,48 +1807,38 @@ components:
       required: [month, committed_total, items_count, items]
 
     BudgetSettings:
-      type: object
-      properties:
-        monthly_income:
-          $ref: '#/components/schemas/Money'
-        income_source_type:
-          type: string
-          enum: [monthly, hourly]
-        primary_monthly_income:
-          $ref: '#/components/schemas/NullableMoney'
-        primary_hourly_rate:
-          $ref: '#/components/schemas/NullableMoney'
-        primary_weekly_hours:
-          $ref: '#/components/schemas/NullableDecimalString'
-        side_income_type:
-          type: string
-          enum: [none, monthly, hourly]
-        side_income_label:
-          $ref: '#/components/schemas/NullableShortLabel'
-        side_monthly_income:
-          $ref: '#/components/schemas/NullableMoney'
-        side_hourly_rate:
-          $ref: '#/components/schemas/NullableMoney'
-        side_weekly_hours:
-          $ref: '#/components/schemas/NullableDecimalString'
-        allocation_mode:
-          type: string
-          enum: [percent, amount]
-        needs_percent:
-          $ref: '#/components/schemas/Percent'
-        wants_percent:
-          $ref: '#/components/schemas/Percent'
-        savings_debts_percent:
-          $ref: '#/components/schemas/Percent'
-        needs_amount:
-          $ref: '#/components/schemas/Money'
-        wants_amount:
-          $ref: '#/components/schemas/Money'
-        savings_debts_amount:
-          $ref: '#/components/schemas/Money'
-      required: [monthly_income, income_source_type, side_income_type, allocation_mode]
+      allOf:
+        - $ref: '#/components/schemas/BudgetSettingsIncomeBreakdown'
+        - type: object
+          properties:
+            allocation_mode:
+              type: string
+              enum: [percent, amount]
+            needs_percent:
+              $ref: '#/components/schemas/Percent'
+            wants_percent:
+              $ref: '#/components/schemas/Percent'
+            savings_debts_percent:
+              $ref: '#/components/schemas/Percent'
+            needs_amount:
+              $ref: '#/components/schemas/Money'
+            wants_amount:
+              $ref: '#/components/schemas/Money'
+            savings_debts_amount:
+              $ref: '#/components/schemas/Money'
+          required: [allocation_mode]
 
     BudgetSettingsPercentInput:
+      allOf:
+        - $ref: '#/components/schemas/BudgetSettingsIncomeBreakdown'
+        - $ref: '#/components/schemas/BudgetSettingsPercentAllocation'
+
+    BudgetSettingsAmountInput:
+      allOf:
+        - $ref: '#/components/schemas/BudgetSettingsIncomeBreakdown'
+        - $ref: '#/components/schemas/BudgetSettingsAmountAllocation'
+
+    BudgetSettingsIncomeBreakdown:
       type: object
       properties:
         monthly_income:
@@ -1873,6 +1863,11 @@ components:
           $ref: '#/components/schemas/NullableMoney'
         side_weekly_hours:
           $ref: '#/components/schemas/NullableDecimalString'
+      required: [monthly_income, income_source_type, side_income_type]
+
+    BudgetSettingsPercentAllocation:
+      type: object
+      properties:
         allocation_mode:
           type: string
           const: percent
@@ -1882,33 +1877,11 @@ components:
           $ref: '#/components/schemas/Percent'
         savings_debts_percent:
           $ref: '#/components/schemas/Percent'
-      required: [monthly_income, allocation_mode, needs_percent, wants_percent, savings_debts_percent]
+      required: [allocation_mode, needs_percent, wants_percent, savings_debts_percent]
 
-    BudgetSettingsAmountInput:
+    BudgetSettingsAmountAllocation:
       type: object
       properties:
-        monthly_income:
-          $ref: '#/components/schemas/Money'
-        income_source_type:
-          type: string
-          enum: [monthly, hourly]
-        primary_monthly_income:
-          $ref: '#/components/schemas/NullableMoney'
-        primary_hourly_rate:
-          $ref: '#/components/schemas/NullableMoney'
-        primary_weekly_hours:
-          $ref: '#/components/schemas/NullableDecimalString'
-        side_income_type:
-          type: string
-          enum: [none, monthly, hourly]
-        side_income_label:
-          $ref: '#/components/schemas/NullableShortLabel'
-        side_monthly_income:
-          $ref: '#/components/schemas/NullableMoney'
-        side_hourly_rate:
-          $ref: '#/components/schemas/NullableMoney'
-        side_weekly_hours:
-          $ref: '#/components/schemas/NullableDecimalString'
         allocation_mode:
           type: string
           const: amount
@@ -1918,7 +1891,7 @@ components:
           $ref: '#/components/schemas/Money'
         savings_debts_amount:
           $ref: '#/components/schemas/Money'
-      required: [monthly_income, allocation_mode, needs_amount, wants_amount, savings_debts_amount]
+      required: [allocation_mode, needs_amount, wants_amount, savings_debts_amount]
 
     TransactionRefTag:
       oneOf:
