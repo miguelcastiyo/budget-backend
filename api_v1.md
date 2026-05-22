@@ -628,6 +628,15 @@ Request (percent mode):
 ```json
 {
   "monthly_income": "6200.00",
+  "income_source_type": "monthly",
+  "primary_monthly_income": "6200.00",
+  "primary_hourly_rate": null,
+  "primary_weekly_hours": null,
+  "side_income_type": "none",
+  "side_income_label": null,
+  "side_monthly_income": null,
+  "side_hourly_rate": null,
+  "side_weekly_hours": null,
   "allocation_mode": "percent",
   "needs_percent": "50.00",
   "wants_percent": "30.00",
@@ -639,6 +648,15 @@ Request (amount mode):
 ```json
 {
   "monthly_income": "6200.00",
+  "income_source_type": "hourly",
+  "primary_monthly_income": null,
+  "primary_hourly_rate": "30.00",
+  "primary_weekly_hours": "40.00",
+  "side_income_type": "monthly",
+  "side_income_label": "Tutoring",
+  "side_monthly_income": "1000.00",
+  "side_hourly_rate": null,
+  "side_weekly_hours": null,
   "allocation_mode": "amount",
   "needs_amount": "3100.00",
   "wants_amount": "1860.00",
@@ -647,6 +665,9 @@ Request (amount mode):
 ```
 
 Validation:
+- Income breakdown fields are optional for backward compatibility. If omitted, `monthly_income` is treated as the primary monthly income with no side income.
+- `hourly` income is converted with `hourly_rate * weekly_hours * 52 / 12`.
+- When income breakdown fields are present, they must compute to `monthly_income` after rounding to cents.
 - `percent` mode must total `100.00`.
 - `amount` mode must total `monthly_income`.
 

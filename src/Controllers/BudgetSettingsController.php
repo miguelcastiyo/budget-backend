@@ -12,6 +12,8 @@ use PDO;
 
 final class BudgetSettingsController
 {
+    private const WEEKS_PER_MONTH = 52 / 12;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthService $auth
@@ -23,7 +25,7 @@ final class BudgetSettingsController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
 
         $stmt = $this->pdo->prepare(
-            'SELECT monthly_income, allocation_mode, needs_percent, wants_percent, savings_debts_percent, needs_amount, wants_amount, savings_debts_amount FROM budget_settings WHERE user_id = :user_id LIMIT 1'
+            'SELECT monthly_income, income_source_type, primary_monthly_income, primary_hourly_rate, primary_weekly_hours, side_income_type, side_income_label, side_monthly_income, side_hourly_rate, side_weekly_hours, allocation_mode, needs_percent, wants_percent, savings_debts_percent, needs_amount, wants_amount, savings_debts_amount FROM budget_settings WHERE user_id = :user_id LIMIT 1'
         );
         $stmt->execute([':user_id' => $ctx->userId()]);
         $row = $stmt->fetch();
@@ -31,6 +33,15 @@ final class BudgetSettingsController
         if (!$row) {
             return Response::json([
                 'monthly_income' => '0.00',
+                'income_source_type' => 'monthly',
+                'primary_monthly_income' => '0.00',
+                'primary_hourly_rate' => null,
+                'primary_weekly_hours' => null,
+                'side_income_type' => 'none',
+                'side_income_label' => null,
+                'side_monthly_income' => null,
+                'side_hourly_rate' => null,
+                'side_weekly_hours' => null,
                 'allocation_mode' => 'percent',
                 'needs_percent' => '50.00',
                 'wants_percent' => '30.00',
@@ -51,6 +62,7 @@ final class BudgetSettingsController
 
         $monthlyIncome = $this->decimalString($payload['monthly_income'] ?? null, 'monthly_income');
         $allocationMode = (string) ($payload['allocation_mode'] ?? '');
+        $incomeBreakdown = $this->incomeBreakdownFromPayload($payload, $monthlyIncome);
 
         if (!in_array($allocationMode, ['percent', 'amount'], true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
@@ -60,6 +72,7 @@ final class BudgetSettingsController
 
         $settings = [
             'monthly_income' => $monthlyIncome,
+            ...$incomeBreakdown,
             'allocation_mode' => $allocationMode,
             'needs_percent' => null,
             'wants_percent' => null,
@@ -112,6 +125,15 @@ final class BudgetSettingsController
 UPDATE budget_settings
 SET
   monthly_income = :monthly_income,
+  income_source_type = :income_source_type,
+  primary_monthly_income = :primary_monthly_income,
+  primary_hourly_rate = :primary_hourly_rate,
+  primary_weekly_hours = :primary_weekly_hours,
+  side_income_type = :side_income_type,
+  side_income_label = :side_income_label,
+  side_monthly_income = :side_monthly_income,
+  side_hourly_rate = :side_hourly_rate,
+  side_weekly_hours = :side_weekly_hours,
   allocation_mode = :allocation_mode,
   needs_percent = :needs_percent,
   wants_percent = :wants_percent,
@@ -128,6 +150,15 @@ SQL;
 INSERT INTO budget_settings (
   user_id,
   monthly_income,
+  income_source_type,
+  primary_monthly_income,
+  primary_hourly_rate,
+  primary_weekly_hours,
+  side_income_type,
+  side_income_label,
+  side_monthly_income,
+  side_hourly_rate,
+  side_weekly_hours,
   allocation_mode,
   needs_percent,
   wants_percent,
@@ -139,6 +170,15 @@ INSERT INTO budget_settings (
 VALUES (
   :user_id,
   :monthly_income,
+  :income_source_type,
+  :primary_monthly_income,
+  :primary_hourly_rate,
+  :primary_weekly_hours,
+  :side_income_type,
+  :side_income_label,
+  :side_monthly_income,
+  :side_hourly_rate,
+  :side_weekly_hours,
   :allocation_mode,
   :needs_percent,
   :wants_percent,
@@ -154,6 +194,15 @@ SQL;
         $stmt->execute([
             ':user_id' => $ctx->userId(),
             ':monthly_income' => $settings['monthly_income'],
+            ':income_source_type' => $settings['income_source_type'],
+            ':primary_monthly_income' => $settings['primary_monthly_income'],
+            ':primary_hourly_rate' => $settings['primary_hourly_rate'],
+            ':primary_weekly_hours' => $settings['primary_weekly_hours'],
+            ':side_income_type' => $settings['side_income_type'],
+            ':side_income_label' => $settings['side_income_label'],
+            ':side_monthly_income' => $settings['side_monthly_income'],
+            ':side_hourly_rate' => $settings['side_hourly_rate'],
+            ':side_weekly_hours' => $settings['side_weekly_hours'],
             ':allocation_mode' => $settings['allocation_mode'],
             ':needs_percent' => $settings['needs_percent'],
             ':wants_percent' => $settings['wants_percent'],
@@ -171,6 +220,15 @@ SQL;
     {
         return [
             'monthly_income' => $this->fmt((string) $row['monthly_income']),
+            'income_source_type' => (string) ($row['income_source_type'] ?? 'monthly'),
+            'primary_monthly_income' => $row['primary_monthly_income'] === null ? $this->fmt((string) $row['monthly_income']) : $this->fmt((string) $row['primary_monthly_income']),
+            'primary_hourly_rate' => $row['primary_hourly_rate'] === null ? null : $this->fmt((string) $row['primary_hourly_rate']),
+            'primary_weekly_hours' => $row['primary_weekly_hours'] === null ? null : $this->fmt((string) $row['primary_weekly_hours']),
+            'side_income_type' => (string) ($row['side_income_type'] ?? 'none'),
+            'side_income_label' => $row['side_income_label'] === null ? null : (string) $row['side_income_label'],
+            'side_monthly_income' => $row['side_monthly_income'] === null ? null : $this->fmt((string) $row['side_monthly_income']),
+            'side_hourly_rate' => $row['side_hourly_rate'] === null ? null : $this->fmt((string) $row['side_hourly_rate']),
+            'side_weekly_hours' => $row['side_weekly_hours'] === null ? null : $this->fmt((string) $row['side_weekly_hours']),
             'allocation_mode' => (string) $row['allocation_mode'],
             'needs_percent' => $row['needs_percent'] === null ? null : $this->fmt((string) $row['needs_percent']),
             'wants_percent' => $row['wants_percent'] === null ? null : $this->fmt((string) $row['wants_percent']),
@@ -179,6 +237,88 @@ SQL;
             'wants_amount' => $row['wants_amount'] === null ? null : $this->fmt((string) $row['wants_amount']),
             'savings_debts_amount' => $row['savings_debts_amount'] === null ? null : $this->fmt((string) $row['savings_debts_amount']),
         ];
+    }
+
+    /** @param array<string,mixed> $payload
+     *  @return array<string,string|null>
+     */
+    private function incomeBreakdownFromPayload(array $payload, string $monthlyIncome): array
+    {
+        if (!array_key_exists('income_source_type', $payload)) {
+            return [
+                'income_source_type' => 'monthly',
+                'primary_monthly_income' => $monthlyIncome,
+                'primary_hourly_rate' => null,
+                'primary_weekly_hours' => null,
+                'side_income_type' => 'none',
+                'side_income_label' => null,
+                'side_monthly_income' => null,
+                'side_hourly_rate' => null,
+                'side_weekly_hours' => null,
+            ];
+        }
+
+        $incomeSourceType = (string) ($payload['income_source_type'] ?? '');
+        if (!in_array($incomeSourceType, ['monthly', 'hourly'], true)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'income_source_type', 'message' => 'must be monthly or hourly'],
+            ]);
+        }
+
+        $sideIncomeType = (string) ($payload['side_income_type'] ?? 'none');
+        if (!in_array($sideIncomeType, ['none', 'monthly', 'hourly'], true)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'side_income_type', 'message' => 'must be none, monthly, or hourly'],
+            ]);
+        }
+
+        $breakdown = [
+            'income_source_type' => $incomeSourceType,
+            'primary_monthly_income' => null,
+            'primary_hourly_rate' => null,
+            'primary_weekly_hours' => null,
+            'side_income_type' => $sideIncomeType,
+            'side_income_label' => $this->optionalLabel($payload['side_income_label'] ?? null),
+            'side_monthly_income' => null,
+            'side_hourly_rate' => null,
+            'side_weekly_hours' => null,
+        ];
+
+        $computedCents = 0;
+
+        if ($incomeSourceType === 'monthly') {
+            $primaryMonthlyIncome = $this->decimalString($payload['primary_monthly_income'] ?? null, 'primary_monthly_income');
+            $computedCents += $this->asCents($primaryMonthlyIncome);
+            $breakdown['primary_monthly_income'] = $primaryMonthlyIncome;
+        } else {
+            $primaryHourlyRate = $this->positiveDecimalString($payload['primary_hourly_rate'] ?? null, 'primary_hourly_rate');
+            $primaryWeeklyHours = $this->positiveDecimalString($payload['primary_weekly_hours'] ?? null, 'primary_weekly_hours');
+            $computedCents += $this->hourlyMonthlyCents($primaryHourlyRate, $primaryWeeklyHours);
+            $breakdown['primary_hourly_rate'] = $primaryHourlyRate;
+            $breakdown['primary_weekly_hours'] = $primaryWeeklyHours;
+        }
+
+        if ($sideIncomeType === 'monthly') {
+            $sideMonthlyIncome = $this->positiveDecimalString($payload['side_monthly_income'] ?? null, 'side_monthly_income');
+            $computedCents += $this->asCents($sideMonthlyIncome);
+            $breakdown['side_monthly_income'] = $sideMonthlyIncome;
+        }
+
+        if ($sideIncomeType === 'hourly') {
+            $sideHourlyRate = $this->positiveDecimalString($payload['side_hourly_rate'] ?? null, 'side_hourly_rate');
+            $sideWeeklyHours = $this->positiveDecimalString($payload['side_weekly_hours'] ?? null, 'side_weekly_hours');
+            $computedCents += $this->hourlyMonthlyCents($sideHourlyRate, $sideWeeklyHours);
+            $breakdown['side_hourly_rate'] = $sideHourlyRate;
+            $breakdown['side_weekly_hours'] = $sideWeeklyHours;
+        }
+
+        if ($computedCents !== $this->asCents($monthlyIncome)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'monthly_income', 'message' => 'must match the income source breakdown'],
+            ]);
+        }
+
+        return $breakdown;
     }
 
     private function decimalString(mixed $value, string $field): string
@@ -190,6 +330,49 @@ SQL;
         }
 
         return $this->fmt($value);
+    }
+
+    private function positiveDecimalString(mixed $value, string $field): string
+    {
+        $decimal = $this->decimalString($value, $field);
+        if ($this->asCents($decimal) <= 0) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => $field, 'message' => 'must be greater than 0.00'],
+            ]);
+        }
+
+        return $decimal;
+    }
+
+    private function optionalLabel(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (!is_string($value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'side_income_label', 'message' => 'must be a string'],
+            ]);
+        }
+
+        $label = trim($value);
+        if ($label === '') {
+            return null;
+        }
+
+        if (strlen($label) > 80) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'side_income_label', 'message' => 'must be 80 characters or fewer'],
+            ]);
+        }
+
+        return $label;
+    }
+
+    private function hourlyMonthlyCents(string $hourlyRate, string $weeklyHours): int
+    {
+        return (int) round((float) $hourlyRate * (float) $weeklyHours * self::WEEKS_PER_MONTH * 100);
     }
 
     private function asCents(string $decimal): int

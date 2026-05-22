@@ -206,6 +206,15 @@ CREATE TABLE budget_settings (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   monthly_income DECIMAL(12,2) NOT NULL,
+  income_source_type ENUM('monthly', 'hourly') NOT NULL DEFAULT 'monthly',
+  primary_monthly_income DECIMAL(12,2) NULL,
+  primary_hourly_rate DECIMAL(12,2) NULL,
+  primary_weekly_hours DECIMAL(5,2) NULL,
+  side_income_type ENUM('none', 'monthly', 'hourly') NOT NULL DEFAULT 'none',
+  side_income_label VARCHAR(80) NULL,
+  side_monthly_income DECIMAL(12,2) NULL,
+  side_hourly_rate DECIMAL(12,2) NULL,
+  side_weekly_hours DECIMAL(5,2) NULL,
   allocation_mode ENUM('percent', 'amount') NOT NULL DEFAULT 'percent',
   needs_percent DECIMAL(5,2) NULL,
   wants_percent DECIMAL(5,2) NULL,
@@ -220,6 +229,41 @@ CREATE TABLE budget_settings (
   CONSTRAINT fk_budget_settings_user
     FOREIGN KEY (user_id) REFERENCES users (id),
   CONSTRAINT chk_budget_settings_income_nonnegative CHECK (monthly_income >= 0.00),
+  CONSTRAINT chk_budget_settings_primary_income_nonnegative CHECK (
+    primary_monthly_income IS NULL OR primary_monthly_income >= 0.00
+  ),
+  CONSTRAINT chk_budget_settings_primary_hourly_positive CHECK (
+    income_source_type <> 'hourly'
+    OR (
+      primary_hourly_rate IS NOT NULL
+      AND primary_hourly_rate > 0.00
+      AND primary_weekly_hours IS NOT NULL
+      AND primary_weekly_hours > 0.00
+    )
+  ),
+  CONSTRAINT chk_budget_settings_side_income CHECK (
+    (
+      side_income_type = 'none'
+      AND side_monthly_income IS NULL
+      AND side_hourly_rate IS NULL
+      AND side_weekly_hours IS NULL
+    )
+    OR (
+      side_income_type = 'monthly'
+      AND side_monthly_income IS NOT NULL
+      AND side_monthly_income > 0.00
+      AND side_hourly_rate IS NULL
+      AND side_weekly_hours IS NULL
+    )
+    OR (
+      side_income_type = 'hourly'
+      AND side_monthly_income IS NULL
+      AND side_hourly_rate IS NOT NULL
+      AND side_hourly_rate > 0.00
+      AND side_weekly_hours IS NOT NULL
+      AND side_weekly_hours > 0.00
+    )
+  ),
   CONSTRAINT chk_budget_settings_percent_mode CHECK (
     allocation_mode <> 'percent'
     OR (
