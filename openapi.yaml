@@ -1815,30 +1815,22 @@ components:
           type: string
           enum: [monthly, hourly]
         primary_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         side_income_type:
           type: string
           enum: [none, monthly, hourly]
         side_income_label:
-          type: string
-          nullable: true
-          maxLength: 80
+          $ref: '#/components/schemas/NullableShortLabel'
         side_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         allocation_mode:
           type: string
           enum: [percent, amount]
@@ -1865,30 +1857,22 @@ components:
           type: string
           enum: [monthly, hourly]
         primary_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         side_income_type:
           type: string
           enum: [none, monthly, hourly]
         side_income_label:
-          type: string
-          nullable: true
-          maxLength: 80
+          $ref: '#/components/schemas/NullableShortLabel'
         side_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         allocation_mode:
           type: string
           const: percent
@@ -1909,30 +1893,22 @@ components:
           type: string
           enum: [monthly, hourly]
         primary_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         primary_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         side_income_type:
           type: string
           enum: [none, monthly, hourly]
         side_income_label:
-          type: string
-          nullable: true
-          maxLength: 80
+          $ref: '#/components/schemas/NullableShortLabel'
         side_monthly_income:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_hourly_rate:
-          nullable: true
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/NullableMoney'
         side_weekly_hours:
-          nullable: true
-          $ref: '#/components/schemas/DecimalString'
+          $ref: '#/components/schemas/NullableDecimalString'
         allocation_mode:
           type: string
           const: amount
@@ -2417,9 +2393,25 @@ components:
       type: string
       pattern: '^\\d+(\\.\\d{2})$'
 
+    NullableMoney:
+      oneOf:
+        - $ref: '#/components/schemas/Money'
+        - type: 'null'
+
     DecimalString:
       type: string
       pattern: '^\\d+(\\.\\d{2})$'
+
+    NullableDecimalString:
+      oneOf:
+        - $ref: '#/components/schemas/DecimalString'
+        - type: 'null'
+
+    NullableShortLabel:
+      oneOf:
+        - type: string
+          maxLength: 80
+        - type: 'null'
 
     Percent:
       type: string

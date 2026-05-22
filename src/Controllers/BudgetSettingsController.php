@@ -13,6 +13,25 @@ use PDO;
 final class BudgetSettingsController
 {
     private const WEEKS_PER_MONTH = 52 / 12;
+    private const SETTING_COLUMNS = [
+        'monthly_income',
+        'income_source_type',
+        'primary_monthly_income',
+        'primary_hourly_rate',
+        'primary_weekly_hours',
+        'side_income_type',
+        'side_income_label',
+        'side_monthly_income',
+        'side_hourly_rate',
+        'side_weekly_hours',
+        'allocation_mode',
+        'needs_percent',
+        'wants_percent',
+        'savings_debts_percent',
+        'needs_amount',
+        'wants_amount',
+        'savings_debts_amount',
+    ];
 
     public function __construct(
         private readonly PDO $pdo,
@@ -25,7 +44,7 @@ final class BudgetSettingsController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
 
         $stmt = $this->pdo->prepare(
-            'SELECT monthly_income, income_source_type, primary_monthly_income, primary_hourly_rate, primary_weekly_hours, side_income_type, side_income_label, side_monthly_income, side_hourly_rate, side_weekly_hours, allocation_mode, needs_percent, wants_percent, savings_debts_percent, needs_amount, wants_amount, savings_debts_amount FROM budget_settings WHERE user_id = :user_id LIMIT 1'
+            'SELECT ' . implode(', ', self::SETTING_COLUMNS) . ' FROM budget_settings WHERE user_id = :user_id LIMIT 1'
         );
         $stmt->execute([':user_id' => $ctx->userId()]);
         $row = $stmt->fetch();
@@ -121,98 +140,53 @@ final class BudgetSettingsController
         $row = $exists->fetch();
 
         if ($row) {
+            $assignments = implode(",\n  ", array_map(
+                static fn(string $column): string => $column . ' = :' . $column,
+                self::SETTING_COLUMNS
+            ));
             $sql = <<<'SQL'
 UPDATE budget_settings
 SET
-  monthly_income = :monthly_income,
-  income_source_type = :income_source_type,
-  primary_monthly_income = :primary_monthly_income,
-  primary_hourly_rate = :primary_hourly_rate,
-  primary_weekly_hours = :primary_weekly_hours,
-  side_income_type = :side_income_type,
-  side_income_label = :side_income_label,
-  side_monthly_income = :side_monthly_income,
-  side_hourly_rate = :side_hourly_rate,
-  side_weekly_hours = :side_weekly_hours,
-  allocation_mode = :allocation_mode,
-  needs_percent = :needs_percent,
-  wants_percent = :wants_percent,
-  savings_debts_percent = :savings_debts_percent,
-  needs_amount = :needs_amount,
-  wants_amount = :wants_amount,
-  savings_debts_amount = :savings_debts_amount,
+  %s,
   updated_at = CURRENT_TIMESTAMP
 WHERE user_id = :user_id
 SQL;
+            $sql = sprintf($sql, $assignments);
             $stmt = $this->pdo->prepare($sql);
         } else {
+            $columns = implode(",\n  ", array_merge(['user_id'], self::SETTING_COLUMNS));
+            $placeholders = implode(",\n  ", array_map(
+                static fn(string $column): string => ':' . $column,
+                array_merge(['user_id'], self::SETTING_COLUMNS)
+            ));
             $sql = <<<'SQL'
 INSERT INTO budget_settings (
-  user_id,
-  monthly_income,
-  income_source_type,
-  primary_monthly_income,
-  primary_hourly_rate,
-  primary_weekly_hours,
-  side_income_type,
-  side_income_label,
-  side_monthly_income,
-  side_hourly_rate,
-  side_weekly_hours,
-  allocation_mode,
-  needs_percent,
-  wants_percent,
-  savings_debts_percent,
-  needs_amount,
-  wants_amount,
-  savings_debts_amount
+  %s
 )
 VALUES (
-  :user_id,
-  :monthly_income,
-  :income_source_type,
-  :primary_monthly_income,
-  :primary_hourly_rate,
-  :primary_weekly_hours,
-  :side_income_type,
-  :side_income_label,
-  :side_monthly_income,
-  :side_hourly_rate,
-  :side_weekly_hours,
-  :allocation_mode,
-  :needs_percent,
-  :wants_percent,
-  :savings_debts_percent,
-  :needs_amount,
-  :wants_amount,
-  :savings_debts_amount
+  %s
 )
 SQL;
+            $sql = sprintf($sql, $columns, $placeholders);
             $stmt = $this->pdo->prepare($sql);
         }
 
-        $stmt->execute([
-            ':user_id' => $ctx->userId(),
-            ':monthly_income' => $settings['monthly_income'],
-            ':income_source_type' => $settings['income_source_type'],
-            ':primary_monthly_income' => $settings['primary_monthly_income'],
-            ':primary_hourly_rate' => $settings['primary_hourly_rate'],
-            ':primary_weekly_hours' => $settings['primary_weekly_hours'],
-            ':side_income_type' => $settings['side_income_type'],
-            ':side_income_label' => $settings['side_income_label'],
-            ':side_monthly_income' => $settings['side_monthly_income'],
-            ':side_hourly_rate' => $settings['side_hourly_rate'],
-            ':side_weekly_hours' => $settings['side_weekly_hours'],
-            ':allocation_mode' => $settings['allocation_mode'],
-            ':needs_percent' => $settings['needs_percent'],
-            ':wants_percent' => $settings['wants_percent'],
-            ':savings_debts_percent' => $settings['savings_debts_percent'],
-            ':needs_amount' => $settings['needs_amount'],
-            ':wants_amount' => $settings['wants_amount'],
-            ':savings_debts_amount' => $settings['savings_debts_amount'],
-        ]);
+        $stmt->execute($this->statementParams($ctx->userId(), $settings));
 
         return Response::json($settings);
+    }
+
+    /** @param array<string,mixed> $settings
+     *  @return array<string,mixed>
+     */
+    private function statementParams(int $userId, array $settings): array
+    {
+        $params = [':user_id' => $userId];
+        foreach (self::SETTING_COLUMNS as $column) {
+            $params[':' . $column] = $settings[$column];
+        }
+
+        return $params;
     }
 
     /** @param array<string,mixed> $row */
@@ -221,7 +195,7 @@ SQL;
         return [
             'monthly_income' => $this->fmt((string) $row['monthly_income']),
             'income_source_type' => (string) ($row['income_source_type'] ?? 'monthly'),
-            'primary_monthly_income' => $row['primary_monthly_income'] === null ? $this->fmt((string) $row['monthly_income']) : $this->fmt((string) $row['primary_monthly_income']),
+            'primary_monthly_income' => $row['primary_monthly_income'] === null ? null : $this->fmt((string) $row['primary_monthly_income']),
             'primary_hourly_rate' => $row['primary_hourly_rate'] === null ? null : $this->fmt((string) $row['primary_hourly_rate']),
             'primary_weekly_hours' => $row['primary_weekly_hours'] === null ? null : $this->fmt((string) $row['primary_weekly_hours']),
             'side_income_type' => (string) ($row['side_income_type'] ?? 'none'),
@@ -278,7 +252,7 @@ SQL;
             'primary_hourly_rate' => null,
             'primary_weekly_hours' => null,
             'side_income_type' => $sideIncomeType,
-            'side_income_label' => $this->optionalLabel($payload['side_income_label'] ?? null),
+            'side_income_label' => $sideIncomeType === 'none' ? null : $this->optionalLabel($payload['side_income_label'] ?? null),
             'side_monthly_income' => null,
             'side_hourly_rate' => null,
             'side_weekly_hours' => null,
