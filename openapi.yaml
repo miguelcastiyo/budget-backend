@@ -307,6 +307,21 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/settings-summary:
+    get:
+      tags: [Profile]
+      summary: Get Settings page account summary
+      description: Returns account summary stats used by the Settings landing page without requiring the frontend to load all transactions.
+      responses:
+        '200':
+          description: Settings summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsSummaryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /me/email-change/request:
     post:
       tags: [Profile]
@@ -1473,6 +1488,32 @@ components:
           properties:
             theme:
               $ref: '#/components/schemas/ThemePreference'
+
+    SettingsSummaryResponse:
+      type: object
+      properties:
+        monthly_income:
+          $ref: '#/components/schemas/NullableMoney'
+        tags_count:
+          type: integer
+          minimum: 0
+        cards_count:
+          type: integer
+          minimum: 0
+        recurring_count:
+          type: integer
+          minimum: 0
+        recurring_committed_total:
+          $ref: '#/components/schemas/Money'
+        avg_monthly_spend:
+          $ref: '#/components/schemas/Money'
+      required:
+        - monthly_income
+        - tags_count
+        - cards_count
+        - recurring_count
+        - recurring_committed_total
+        - avg_monthly_spend
 
     RequestEmailChangeRequest:
       type: object

@@ -328,7 +328,33 @@ Notes:
 - Updates are merged server-side into the existing preference document.
 - The current frontend uses this endpoint to persist dark mode across sessions and devices.
 
-### 4.5 Request Email Change (Password Users Only)
+### 4.5 Settings Summary
+`GET /me/settings-summary`
+
+Purpose:
+- Returns the Settings landing-page summary in a single request.
+- Avoids loading every transaction into the frontend to calculate account-level stats.
+
+Response `200`:
+```json
+{
+  "monthly_income": "6500.00",
+  "tags_count": 12,
+  "cards_count": 4,
+  "recurring_count": 5,
+  "recurring_committed_total": "1800.00",
+  "avg_monthly_spend": "2430.22"
+}
+```
+
+Notes:
+- `monthly_income` is `null` when the user has not saved budget settings yet.
+- `tags_count` and `cards_count` count active, non-deleted records.
+- `recurring_count` counts non-deleted recurring rules.
+- `recurring_committed_total` is the active committed recurring total for the current UTC month.
+- `avg_monthly_spend` is calculated server-side from non-deleted transactions grouped by transaction month.
+
+### 4.6 Request Email Change (Password Users Only)
 `POST /me/email-change/request`
 
 Request:
@@ -352,7 +378,7 @@ Response `202`:
 }
 ```
 
-### 4.6 Verify Email Change
+### 4.7 Verify Email Change
 `POST /me/email-change/verify`
 
 Request:
@@ -375,7 +401,7 @@ Response `200`:
 }
 ```
 
-### 4.7 Convert Password Account To Google Sign-In
+### 4.8 Convert Password Account To Google Sign-In
 `POST /me/auth/convert-google`
 
 Auth required: session auth only.
@@ -412,7 +438,7 @@ Response `200`:
 }
 ```
 
-### 4.8 List Master API Keys
+### 4.9 List Master API Keys
 `GET /me/master-api-keys`
 
 Auth required: session auth only.
@@ -433,7 +459,7 @@ Response:
 }
 ```
 
-### 4.9 Create Master API Key
+### 4.10 Create Master API Key
 `POST /me/master-api-keys`
 
 Auth required: session auth only.
@@ -458,7 +484,7 @@ Response `201`:
 }
 ```
 
-### 4.10 Revoke Master API Key
+### 4.11 Revoke Master API Key
 `DELETE /me/master-api-keys/{api_key_id}`
 
 Auth required: session auth only.

@@ -14,6 +14,7 @@
   - `PATCH /api/v1/me`
   - `GET /api/v1/me/preferences`
   - `PATCH /api/v1/me/preferences`
+  - `GET /api/v1/me/settings-summary`
   - `POST /api/v1/me/email-change/request`
   - `POST /api/v1/me/email-change/verify`
   - `POST /api/v1/me/auth/convert-google`
@@ -185,6 +186,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Google sign-in/accept stores Google `picture` claim into `users.avatar_url` when available, and returns `avatar_url` on auth + `/me` responses.
 - Auth and profile responses now include `user_preferences`; the current supported account-level preference is `appearance.theme` with `light`, `dark`, or `system`.
 - `GET /me/preferences` and `PATCH /me/preferences` are the dedicated account-preferences endpoints. The frontend dark mode toggle now persists through this API instead of browser-only storage.
+- `GET /me/settings-summary` returns the Settings landing-page summary in one request so the frontend does not load all transactions to calculate account stats.
 - Recurring expense rules are generated once per month into normal transaction rows (month-based generation, current/past months only), with billing date clamped for short months.
 - API/model changes must update `api_v1.md` and `openapi.yaml` in the same change set.
 - Contract/spec docs live in:

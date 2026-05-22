@@ -12,6 +12,8 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Mail\Mailer;
 use App\Support\Str;
+use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
 
 final class ProfileController
@@ -57,6 +59,68 @@ final class ProfileController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         return Response::json($this->fetchPreferences($ctx->userId()));
+    }
+
+    public function settingsSummary(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $userId = $ctx->userId();
+        $currentMonthStart = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-01');
+
+        $budgetStmt = $this->pdo->prepare('SELECT monthly_income FROM budget_settings WHERE user_id = :user_id LIMIT 1');
+        $budgetStmt->execute([':user_id' => $userId]);
+        $budgetRow = $budgetStmt->fetch();
+
+        $tagsStmt = $this->pdo->prepare(
+            'SELECT COUNT(*) AS total FROM tags WHERE user_id = :user_id AND is_active = 1 AND deleted_at IS NULL'
+        );
+        $tagsStmt->execute([':user_id' => $userId]);
+
+        $cardsStmt = $this->pdo->prepare(
+            'SELECT COUNT(*) AS total FROM cards WHERE user_id = :user_id AND is_active = 1 AND deleted_at IS NULL'
+        );
+        $cardsStmt->execute([':user_id' => $userId]);
+
+        $recurringCountStmt = $this->pdo->prepare(
+            'SELECT COUNT(*) AS total FROM recurring_expenses WHERE user_id = :user_id AND deleted_at IS NULL'
+        );
+        $recurringCountStmt->execute([':user_id' => $userId]);
+
+        $recurringTotalStmt = $this->pdo->prepare(
+            'SELECT COALESCE(SUM(amount), 0) AS committed_total
+             FROM recurring_expenses
+             WHERE user_id = :user_id
+               AND is_active = 1
+               AND deleted_at IS NULL
+               AND starts_month <= :current_month_start
+               AND (ends_month IS NULL OR ends_month >= :current_month_end)'
+        );
+        $recurringTotalStmt->execute([
+            ':user_id' => $userId,
+            ':current_month_start' => $currentMonthStart,
+            ':current_month_end' => $currentMonthStart,
+        ]);
+
+        $avgSpendStmt = $this->pdo->prepare(
+            'SELECT AVG(monthly_total) AS avg_monthly_spend
+             FROM (
+               SELECT SUM(amount) AS monthly_total
+               FROM transactions
+               WHERE user_id = :user_id
+                 AND deleted_at IS NULL
+               GROUP BY DATE_FORMAT(transaction_date, \'%Y-%m\')
+             ) monthly_spend'
+        );
+        $avgSpendStmt->execute([':user_id' => $userId]);
+
+        return Response::json([
+            'monthly_income' => $budgetRow ? $this->fmt((string) $budgetRow['monthly_income']) : null,
+            'tags_count' => (int) ($tagsStmt->fetch()['total'] ?? 0),
+            'cards_count' => (int) ($cardsStmt->fetch()['total'] ?? 0),
+            'recurring_count' => (int) ($recurringCountStmt->fetch()['total'] ?? 0),
+            'recurring_committed_total' => $this->fmt((string) ($recurringTotalStmt->fetch()['committed_total'] ?? '0')),
+            'avg_monthly_spend' => $this->fmt((string) ($avgSpendStmt->fetch()['avg_monthly_spend'] ?? '0')),
+        ]);
     }
 
     public function updatePreferences(Request $request): Response
@@ -456,5 +520,10 @@ final class ProfileController
                 'theme' => 'system',
             ],
         ];
+    }
+
+    private function fmt(string $value): string
+    {
+        return number_format((float) $value, 2, '.', '');
     }
 }
