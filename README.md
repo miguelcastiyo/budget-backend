@@ -2,6 +2,7 @@
 
 ## What is implemented
 - Invite-only auth flows:
+  - `GET /api/v1/auth/invitations`
   - `POST /api/v1/auth/invitations`
   - `POST /api/v1/auth/invitations/accept-password`
   - `POST /api/v1/auth/invitations/accept-google`
@@ -168,6 +169,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - `MAIL_TRANSPORT=log`: writes emails to `storage/mail.log` (local dev default)
 - `MAIL_TRANSPORT=resend`: sends real emails via Resend API (`RESEND_API_KEY` required)
 - Invite creation and email-change requests both send email as part of request handling.
+- Invite creation and invite listing require the `owner` role. Invites can assign `admin` or `member`.
 
 ## Notes
 - The schema and migrations use `utf8mb4_unicode_ci` so they work cleanly on MariaDB as well as MySQL-compatible setups.

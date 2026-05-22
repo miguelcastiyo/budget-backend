@@ -110,14 +110,17 @@ Categories are fixed in v1 (not user-editable).
 ### 3.1 Create Invite
 `POST /auth/invitations`
 
-Auth required: inviter must be owner/admin.
+Auth required: inviter must be owner.
 
 Request:
 ```json
 {
+  "invitee_name": "New User",
   "email": "newuser@example.com",
-  "auth_method": "google_or_password",
-  "expires_in_days": 7
+  "role": "member",
+  "expires_at": "2026-03-12T00:00:00Z",
+  "email_subject": "You are invited to Budget App",
+  "email_body": "I sent you an invite to join Budget."
 }
 ```
 
@@ -125,9 +128,36 @@ Response `201`:
 ```json
 {
   "invite_id": "inv_123",
+  "invitee_name": "New User",
   "email": "newuser@example.com",
+  "role": "member",
   "status": "pending",
-  "expires_at": "2026-03-12T00:00:00Z"
+  "expires_at": "2026-03-12T00:00:00Z",
+  "created_at": "2026-03-05T00:00:00Z",
+  "accepted_at": null
+}
+```
+
+### 3.1.1 List Invites
+`GET /auth/invitations`
+
+Auth required: user must be owner.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "invite_id": "inv_123",
+      "invitee_name": "New User",
+      "email": "newuser@example.com",
+      "role": "member",
+      "status": "pending",
+      "expires_at": "2026-03-12T00:00:00Z",
+      "created_at": "2026-03-05T00:00:00Z",
+      "accepted_at": null
+    }
+  ]
 }
 ```
 
@@ -971,7 +1001,7 @@ Common codes:
 ## 14) Authorization Rules
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
-- Only owner/admin can create invites.
+- Only owners can create/list invites.
 - Only owner/admin can generate/list/revoke master API keys.
 - Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 

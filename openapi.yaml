@@ -58,10 +58,28 @@ paths:
                 $ref: '#/components/schemas/ReadinessResponse'
 
   /auth/invitations:
+    get:
+      tags: [Auth]
+      summary: List invites
+      description: Requires owner privileges.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      responses:
+        '200':
+          description: Invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitesResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
     post:
       tags: [Auth]
       summary: Create an invite
-      description: Requires owner/admin privileges.
+      description: Requires owner privileges.
       security:
         - cookieAuth: []
         - sessionTokenAuth: []
@@ -1230,33 +1248,64 @@ components:
     CreateInviteRequest:
       type: object
       properties:
+        invitee_name:
+          type: string
+          minLength: 1
+          maxLength: 120
         email:
           type: string
           format: email
-        auth_method:
+        role:
           type: string
-          enum: [google_or_password]
-        expires_in_days:
-          type: integer
-          minimum: 1
-          maximum: 30
-      required: [email, auth_method, expires_in_days]
+          enum: [admin, member]
+        expires_at:
+          type: string
+          format: date-time
+        email_subject:
+          type: string
+          minLength: 1
+          maxLength: 160
+        email_body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+      required: [invitee_name, email, role, expires_at, email_subject, email_body]
 
     InviteResponse:
       type: object
       properties:
         invite_id:
           type: string
+        invitee_name:
+          type: string
         email:
           type: string
           format: email
+        role:
+          type: string
+          enum: [admin, member]
         status:
           type: string
-          enum: [pending]
+          enum: [pending, accepted, expired, revoked]
         expires_at:
           type: string
           format: date-time
-      required: [invite_id, email, status, expires_at]
+        created_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: [string, 'null']
+          format: date-time
+      required: [invite_id, invitee_name, email, role, status, expires_at, created_at, accepted_at]
+
+    InvitesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteResponse'
+      required: [items]
 
     AcceptInvitePasswordRequest:
       type: object
@@ -1359,11 +1408,14 @@ components:
         auth_provider:
           type: string
           enum: [password, google]
+        role:
+          type: string
+          enum: [owner, admin, member]
         onboarding_complete:
           type: boolean
         user_preferences:
           $ref: '#/components/schemas/UserPreferences'
-      required: [id, email, display_name, auth_provider, onboarding_complete, user_preferences]
+      required: [id, email, display_name, auth_provider, role, onboarding_complete, user_preferences]
 
     AuthSessionResponse:
       type: object
@@ -1390,6 +1442,9 @@ components:
         auth_provider:
           type: string
           enum: [password, google]
+        role:
+          type: string
+          enum: [owner, admin, member]
         email_verified:
           type: boolean
         created_at:
@@ -1399,7 +1454,7 @@ components:
           type: boolean
         user_preferences:
           $ref: '#/components/schemas/UserPreferences'
-      required: [id, email, display_name, auth_provider, email_verified, created_at, onboarding_complete, user_preferences]
+      required: [id, email, display_name, auth_provider, role, email_verified, created_at, onboarding_complete, user_preferences]
 
     UpdateProfileRequest:
       type: object

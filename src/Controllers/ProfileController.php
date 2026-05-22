@@ -284,6 +284,7 @@ final class ProfileController
             'email' => (string) $user['email'],
             'display_name' => $displayName,
             'auth_provider' => (string) $user['auth_provider'],
+            'role' => (string) $user['role'],
             'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
             'email_verified' => (bool) $user['email_verified'],
             'created_at' => (string) $user['created_at'],
@@ -296,7 +297,7 @@ final class ProfileController
     private function fetchProfile(int $userId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, avatar_url, email_verified, created_at, user_preferences FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, auth_provider, role, avatar_url, email_verified, created_at, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch();
@@ -310,6 +311,7 @@ final class ProfileController
             'email' => (string) $row['email'],
             'display_name' => (string) $row['display_name'],
             'auth_provider' => (string) $row['auth_provider'],
+            'role' => (string) $row['role'],
             'avatar_url' => $row['avatar_url'] !== null ? (string) $row['avatar_url'] : null,
             'email_verified' => (bool) $row['email_verified'],
             'created_at' => (string) $row['created_at'],

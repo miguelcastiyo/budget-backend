@@ -29,50 +29,73 @@ final class AuthController
     public function createInvitation(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
-        $this->auth->requireRole($ctx, ['owner', 'admin']);
+        $this->auth->requireRole($ctx, ['owner']);
 
         $payload = $request->json();
+        $inviteeName = trim((string) ($payload['invitee_name'] ?? ''));
         $email = trim((string) ($payload['email'] ?? ''));
-        $authMethod = (string) ($payload['auth_method'] ?? '');
-        $expiresInDays = (int) ($payload['expires_in_days'] ?? 0);
+        $role = (string) ($payload['role'] ?? '');
+        $expiresAtInput = trim((string) ($payload['expires_at'] ?? ''));
+        $emailSubject = trim((string) ($payload['email_subject'] ?? ''));
+        $emailBody = trim((string) ($payload['email_body'] ?? ''));
+        $authMethod = 'google_or_password';
 
+        if ($inviteeName === '' || strlen($inviteeName) > 120) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'invitee_name', 'message' => 'is required and must be 120 characters or fewer'],
+            ]);
+        }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'email', 'message' => 'must be a valid email'],
             ]);
         }
-        if ($authMethod !== 'google_or_password') {
+        if (!in_array($role, ['admin', 'member'], true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
-                ['field' => 'auth_method', 'message' => 'must be google_or_password'],
+                ['field' => 'role', 'message' => 'must be admin or member'],
             ]);
         }
-        if ($expiresInDays < 1 || $expiresInDays > 30) {
+        if ($emailSubject === '' || strlen($emailSubject) > 160) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
-                ['field' => 'expires_in_days', 'message' => 'must be between 1 and 30'],
+                ['field' => 'email_subject', 'message' => 'is required and must be 160 characters or fewer'],
             ]);
         }
+        if ($emailBody === '' || strlen($emailBody) > 5000) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'email_body', 'message' => 'is required and must be 5000 characters or fewer'],
+            ]);
+        }
+
+        $expiresAt = $this->parseInviteExpiry($expiresAtInput);
 
         $inviteId = Str::randomId('inv');
         $inviteToken = Str::randomHex(24);
         $inviteTokenHash = Str::hashSha256($inviteToken);
-        $expiresAt = gmdate('Y-m-d H:i:s', time() + ($expiresInDays * 86400));
 
         $sql = <<<'SQL'
 INSERT INTO invitations (
   invite_id,
   invite_token_hash,
+  invitee_name,
   email,
+  role,
   auth_method,
   invited_by_user_id,
+  email_subject,
+  email_body,
   status,
   expires_at
 )
 VALUES (
   :invite_id,
   :invite_token_hash,
+  :invitee_name,
   :email,
+  :role,
   :auth_method,
   :invited_by_user_id,
+  :email_subject,
+  :email_body,
   'pending',
   :expires_at
 )
@@ -82,9 +105,13 @@ SQL;
         $stmt->execute([
             ':invite_id' => $inviteId,
             ':invite_token_hash' => $inviteTokenHash,
+            ':invitee_name' => $inviteeName,
             ':email' => strtolower($email),
+            ':role' => $role,
             ':auth_method' => $authMethod,
             ':invited_by_user_id' => $ctx->userId(),
+            ':email_subject' => $emailSubject,
+            ':email_body' => $emailBody,
             ':expires_at' => $expiresAt,
         ]);
 
@@ -92,7 +119,10 @@ SQL;
             $this->sendInviteEmail(
                 toEmail: strtolower($email),
                 inviteToken: $inviteToken,
-                expiresAt: $expiresAt
+                expiresAt: $expiresAt,
+                inviteeName: $inviteeName,
+                subject: $emailSubject,
+                body: $emailBody
             );
         } catch (\Throwable $e) {
             $cleanup = $this->pdo->prepare('DELETE FROM invitations WHERE invite_id = :invite_id');
@@ -102,10 +132,47 @@ SQL;
 
         return Response::json([
             'invite_id' => $inviteId,
+            'invitee_name' => $inviteeName,
             'email' => strtolower($email),
+            'role' => $role,
             'status' => 'pending',
             'expires_at' => $expiresAt,
+            'created_at' => gmdate('Y-m-d H:i:s'),
+            'accepted_at' => null,
         ], 201);
+    }
+
+    public function listInvitations(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $this->auth->requireRole($ctx, ['owner']);
+
+        $stmt = $this->pdo->query(
+            "SELECT invite_id, invitee_name, email, role, status, expires_at, accepted_at, created_at
+             FROM invitations
+             ORDER BY created_at DESC, id DESC"
+        );
+        $rows = $stmt ? $stmt->fetchAll() : [];
+
+        $items = array_map(static function (array $row): array {
+            $status = (string) $row['status'];
+            if ($status === 'pending' && strtotime((string) $row['expires_at'] . ' UTC') <= time()) {
+                $status = 'expired';
+            }
+
+            return [
+                'invite_id' => (string) $row['invite_id'],
+                'invitee_name' => (string) $row['invitee_name'],
+                'email' => (string) $row['email'],
+                'role' => (string) $row['role'],
+                'status' => $status,
+                'expires_at' => (string) $row['expires_at'],
+                'created_at' => (string) $row['created_at'],
+                'accepted_at' => $row['accepted_at'] !== null ? (string) $row['accepted_at'] : null,
+            ];
+        }, $rows);
+
+        return Response::json(['items' => $items]);
     }
 
     public function acceptInvitationPassword(Request $request): Response
@@ -145,7 +212,7 @@ SQL;
                 ':display_name' => $displayName,
                 ':auth_provider' => 'password',
                 ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
-                ':role' => 'member',
+                ':role' => (string) $invitation['role'],
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
@@ -200,7 +267,8 @@ SQL;
             ? $displayName
             : $this->resolveGoogleDisplayName(
                 $googleIdentity['name'] ?? null,
-                strtolower((string) $googleIdentity['email'])
+                strtolower((string) $googleIdentity['email']),
+                (string) $invitation['invitee_name']
             );
 
         $this->pdo->beginTransaction();
@@ -214,7 +282,7 @@ SQL;
                 ':auth_provider' => 'google',
                 ':google_sub' => $googleIdentity['google_sub'],
                 ':avatar_url' => $googleAvatarUrl,
-                ':role' => 'member',
+                ':role' => (string) $invitation['role'],
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
@@ -335,11 +403,11 @@ SQL;
             );
             $insertUser->execute([
                 ':email' => strtolower((string) $googleIdentity['email']),
-                ':display_name' => '',
+                ':display_name' => (string) $invitation['invitee_name'],
                 ':auth_provider' => 'google',
                 ':google_sub' => (string) $googleIdentity['google_sub'],
                 ':avatar_url' => $googleAvatarUrl,
-                ':role' => 'member',
+                ':role' => (string) $invitation['role'],
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
@@ -380,7 +448,7 @@ SQL;
         $hash = Str::hashSha256($inviteToken);
 
         $stmt = $this->pdo->prepare(
-            "SELECT id, email FROM invitations WHERE invite_token_hash = :token_hash AND status = 'pending' AND expires_at > UTC_TIMESTAMP() LIMIT 1"
+            "SELECT id, invitee_name, email, role FROM invitations WHERE invite_token_hash = :token_hash AND status = 'pending' AND expires_at > UTC_TIMESTAMP() LIMIT 1"
         );
         $stmt->execute([':token_hash' => $hash]);
         $invitation = $stmt->fetch();
@@ -445,7 +513,7 @@ SQL;
     private function buildAuthResponse(int $userId, array $session, string $clientType, int $statusCode = 200): Response
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, avatar_url, user_preferences FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, auth_provider, role, avatar_url, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $user = $stmt->fetch();
@@ -460,6 +528,7 @@ SQL;
                 'email' => (string) $user['email'],
                 'display_name' => (string) $user['display_name'],
                 'auth_provider' => (string) $user['auth_provider'],
+                'role' => (string) $user['role'],
                 'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
                 'onboarding_complete' => $this->isOnboardingComplete($userId, (string) $user['display_name']),
                 'user_preferences' => $this->normalizePreferences($user['user_preferences'] ?? null),
@@ -532,29 +601,76 @@ SQL;
         ];
     }
 
-    private function sendInviteEmail(string $toEmail, string $inviteToken, string $expiresAt): void
+    private function sendInviteEmail(
+        string $toEmail,
+        string $inviteToken,
+        string $expiresAt,
+        string $inviteeName,
+        string $subject,
+        string $body
+    ): void
     {
         $appUrl = rtrim((string) $this->config->get('APP_URL', 'http://localhost:8000'), '/');
-        $inviteUrl = $appUrl . '/sign-in?invite_token=' . rawurlencode($inviteToken);
+        $inviteUrl = $appUrl . '/invite/' . rawurlencode($inviteToken);
+        $formattedExpiresAt = InviteEmailTemplate::formatPacificExpiry($expiresAt);
 
-        $subject = 'You are invited to Budget App';
         $text = implode(PHP_EOL, [
-            'You were invited to Budget App Project.',
+            $body,
             '',
             'Accept invitation: ' . $inviteUrl,
-            'Expires at (UTC): ' . $expiresAt,
+            'Expires ' . $formattedExpiresAt,
             '',
             'If this was not expected, you can ignore this email.',
         ]);
 
-        $html = InviteEmailTemplate::render($inviteUrl, $expiresAt);
+        $html = InviteEmailTemplate::render($inviteUrl, $expiresAt, $inviteeName, $body);
 
         $this->mailer->send($toEmail, $subject, $text, $html);
     }
 
-    private function resolveGoogleDisplayName(?string $googleName, string $email): string
+    private function parseInviteExpiry(string $expiresAtInput): string
+    {
+        if ($expiresAtInput === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'expires_at', 'message' => 'is required'],
+            ]);
+        }
+
+        try {
+            $expiresAt = new \DateTimeImmutable($expiresAtInput);
+        } catch (\Exception) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'expires_at', 'message' => 'must be a valid date-time'],
+            ]);
+        }
+
+        $expiresAt = $expiresAt->setTimezone(new \DateTimeZone('UTC'));
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $max = $now->modify('+30 days');
+
+        if ($expiresAt <= $now) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'expires_at', 'message' => 'must be in the future'],
+            ]);
+        }
+
+        if ($expiresAt > $max) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'expires_at', 'message' => 'must be within 30 days'],
+            ]);
+        }
+
+        return $expiresAt->format('Y-m-d H:i:s');
+    }
+
+    private function resolveGoogleDisplayName(?string $googleName, string $email, string $inviteeName = ''): string
     {
         $candidate = trim((string) ($googleName ?? ''));
+        if ($candidate !== '') {
+            return $candidate;
+        }
+
+        $candidate = trim($inviteeName);
         if ($candidate !== '') {
             return $candidate;
         }
