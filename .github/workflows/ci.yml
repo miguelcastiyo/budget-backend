@@ -17,3 +17,6 @@ jobs:
       - name: PHP syntax check
         run: |
           find src public scripts -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Budget settings validation smoke test
+        run: php scripts/smoke_budget_settings_validation.php

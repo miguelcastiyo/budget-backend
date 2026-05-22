@@ -78,7 +78,67 @@ final class BudgetSettingsController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $payload = $request->json();
+        $settings = $this->settingsFromPayload($payload);
 
+        $exists = $this->pdo->prepare('SELECT id FROM budget_settings WHERE user_id = :user_id LIMIT 1');
+        $exists->execute([':user_id' => $ctx->userId()]);
+        $row = $exists->fetch();
+
+        if ($row) {
+            $assignments = implode(",\n  ", array_map(
+                static fn(string $column): string => $column . ' = :' . $column,
+                self::SETTING_COLUMNS
+            ));
+            $sql = <<<'SQL'
+UPDATE budget_settings
+SET
+  %s,
+  updated_at = CURRENT_TIMESTAMP
+WHERE user_id = :user_id
+SQL;
+            $sql = sprintf($sql, $assignments);
+            $stmt = $this->pdo->prepare($sql);
+        } else {
+            $columns = implode(",\n  ", array_merge(['user_id'], self::SETTING_COLUMNS));
+            $placeholders = implode(",\n  ", array_map(
+                static fn(string $column): string => ':' . $column,
+                array_merge(['user_id'], self::SETTING_COLUMNS)
+            ));
+            $sql = <<<'SQL'
+INSERT INTO budget_settings (
+  %s
+)
+VALUES (
+  %s
+)
+SQL;
+            $sql = sprintf($sql, $columns, $placeholders);
+            $stmt = $this->pdo->prepare($sql);
+        }
+
+        $stmt->execute($this->statementParams($ctx->userId(), $settings));
+
+        return Response::json($settings);
+    }
+
+    /** @param array<string,mixed> $settings
+     *  @return array<string,mixed>
+     */
+    private function statementParams(int $userId, array $settings): array
+    {
+        $params = [':user_id' => $userId];
+        foreach (self::SETTING_COLUMNS as $column) {
+            $params[':' . $column] = $settings[$column];
+        }
+
+        return $params;
+    }
+
+    /** @param array<string,mixed> $payload
+     *  @return array<string,string|null>
+     */
+    private function settingsFromPayload(array $payload): array
+    {
         $monthlyIncome = $this->decimalString($payload['monthly_income'] ?? null, 'monthly_income');
         $allocationMode = (string) ($payload['allocation_mode'] ?? '');
         $incomeBreakdown = $this->incomeBreakdownFromPayload($payload, $monthlyIncome);
@@ -135,58 +195,7 @@ final class BudgetSettingsController
             $settings['savings_debts_amount'] = $savingsDebts;
         }
 
-        $exists = $this->pdo->prepare('SELECT id FROM budget_settings WHERE user_id = :user_id LIMIT 1');
-        $exists->execute([':user_id' => $ctx->userId()]);
-        $row = $exists->fetch();
-
-        if ($row) {
-            $assignments = implode(",\n  ", array_map(
-                static fn(string $column): string => $column . ' = :' . $column,
-                self::SETTING_COLUMNS
-            ));
-            $sql = <<<'SQL'
-UPDATE budget_settings
-SET
-  %s,
-  updated_at = CURRENT_TIMESTAMP
-WHERE user_id = :user_id
-SQL;
-            $sql = sprintf($sql, $assignments);
-            $stmt = $this->pdo->prepare($sql);
-        } else {
-            $columns = implode(",\n  ", array_merge(['user_id'], self::SETTING_COLUMNS));
-            $placeholders = implode(",\n  ", array_map(
-                static fn(string $column): string => ':' . $column,
-                array_merge(['user_id'], self::SETTING_COLUMNS)
-            ));
-            $sql = <<<'SQL'
-INSERT INTO budget_settings (
-  %s
-)
-VALUES (
-  %s
-)
-SQL;
-            $sql = sprintf($sql, $columns, $placeholders);
-            $stmt = $this->pdo->prepare($sql);
-        }
-
-        $stmt->execute($this->statementParams($ctx->userId(), $settings));
-
-        return Response::json($settings);
-    }
-
-    /** @param array<string,mixed> $settings
-     *  @return array<string,mixed>
-     */
-    private function statementParams(int $userId, array $settings): array
-    {
-        $params = [':user_id' => $userId];
-        foreach (self::SETTING_COLUMNS as $column) {
-            $params[':' . $column] = $settings[$column];
-        }
-
-        return $params;
+        return $settings;
     }
 
     /** @param array<string,mixed> $row */
