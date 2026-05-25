@@ -183,6 +183,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - In local development with `MAIL_TRANSPORT=log`, check `storage/mail.log` for invite tokens and verification codes.
 - Tag payloads/responses include optional `icon_key` (`null` allowed) with an allow-list enforced by backend validation.
 - Transaction payloads/responses include `is_split` (boolean, default `false`); list/export support `is_split=split|not_split`.
+- `GET /me/transactions` returns paginated rows plus `summary` aggregates for the full filtered result set so clients do not need to load every page for stats.
 - Google sign-in/accept stores Google `picture` claim into `users.avatar_url` when available, and returns `avatar_url` on auth + `/me` responses.
 - Auth and profile responses now include `user_preferences`; the current supported account-level preference is `appearance.theme` with `light`, `dark`, or `system`.
 - `GET /me/preferences` and `PATCH /me/preferences` are the dedicated account-preferences endpoints. The frontend dark mode toggle now persists through this API instead of browser-only storage.

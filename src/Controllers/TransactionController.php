@@ -104,18 +104,23 @@ final class TransactionController
 
         $whereSql = implode(' AND ', $where);
 
-        $countStmt = $this->pdo->prepare(
-            'SELECT COUNT(*) AS total
+        $summaryStmt = $this->pdo->prepare(
+            'SELECT
+               COUNT(*) AS total,
+               COALESCE(SUM(t.amount), 0) AS total_spent,
+               COALESCE(AVG(t.amount), 0) AS avg_transaction,
+               COALESCE(SUM(CASE WHEN t.is_split = 1 THEN 1 ELSE 0 END), 0) AS split_count
              FROM transactions t
              JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
              LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
              WHERE ' . $whereSql
         );
         foreach ($params as $k => $v) {
-            $countStmt->bindValue($k, $v);
+            $summaryStmt->bindValue($k, $v);
         }
-        $countStmt->execute();
-        $totalItems = (int) ($countStmt->fetch()['total'] ?? 0);
+        $summaryStmt->execute();
+        $summaryRow = $summaryStmt->fetch() ?: [];
+        $totalItems = (int) ($summaryRow['total'] ?? 0);
 
         $offset = ($page - 1) * $pageSize;
         $sql = <<<'SQL'
@@ -167,6 +172,12 @@ SQL;
             'page' => $page,
             'page_size' => $pageSize,
             'total_items' => $totalItems,
+            'summary' => [
+                'total_spent' => $this->fmt((string) ($summaryRow['total_spent'] ?? '0')),
+                'count' => $totalItems,
+                'avg_transaction' => $this->fmt((string) ($summaryRow['avg_transaction'] ?? '0')),
+                'split_count' => (int) ($summaryRow['split_count'] ?? 0),
+            ],
         ]);
     }
 

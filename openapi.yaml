@@ -2087,7 +2087,25 @@ components:
         total_items:
           type: integer
           minimum: 0
-      required: [items, page, page_size, total_items]
+        summary:
+          $ref: '#/components/schemas/TransactionListSummary'
+      required: [items, page, page_size, total_items, summary]
+
+    TransactionListSummary:
+      type: object
+      description: Aggregates for the full filtered transaction result set, not just the returned page.
+      properties:
+        total_spent:
+          $ref: '#/components/schemas/Money'
+        count:
+          type: integer
+          minimum: 0
+        avg_transaction:
+          $ref: '#/components/schemas/Money'
+        split_count:
+          type: integer
+          minimum: 0
+      required: [total_spent, count, avg_transaction, split_count]
 
     TagMetricsItem:
       type: object

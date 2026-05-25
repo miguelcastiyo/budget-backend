@@ -774,6 +774,7 @@ Rules:
 - Filters are AND-ed together.
 - Within one filter type, values are OR-ed.
 - `q` matches `expense`, `tag.name`, and `card.name`.
+- `summary` is calculated across the full filtered result set, not just the returned page.
 
 Response `200`:
 ```json
@@ -792,7 +793,13 @@ Response `200`:
   ],
   "page": 1,
   "page_size": 50,
-  "total_items": 132
+  "total_items": 132,
+  "summary": {
+    "total_spent": "4821.30",
+    "count": 132,
+    "avg_transaction": "36.52",
+    "split_count": 7
+  }
 }
 ```
 
