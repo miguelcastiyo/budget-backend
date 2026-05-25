@@ -251,6 +251,54 @@ All successful auth responses also include `user.user_preferences`.
 
 Invalidates current session.
 
+### 3.6 Request Password Reset
+`POST /auth/password-reset/request`
+
+Request:
+```json
+{
+  "email": "newuser@example.com"
+}
+```
+
+Response `202` is intentionally generic:
+```json
+{
+  "status": "accepted",
+  "message": "If a password account exists for that email, a reset link has been sent."
+}
+```
+
+Rules:
+- Only active email/password accounts receive reset emails.
+- Unknown emails and Google-only accounts receive the same generic response.
+- Reset tokens are hashed at rest and expire after `PASSWORD_RESET_TOKEN_TTL_MINUTES` (default `30`).
+
+### 3.7 Confirm Password Reset
+`POST /auth/password-reset/confirm`
+
+Request:
+```json
+{
+  "reset_token": "...",
+  "password": "NewStrongPassword123!"
+}
+```
+
+Response `200`:
+```json
+{
+  "status": "completed",
+  "message": "Password has been reset. Sign in with your new password."
+}
+```
+
+Rules:
+- Reset tokens are one-time use.
+- New passwords must be at least 8 characters.
+- Completing a reset revokes existing sessions for that user.
+- Password reset request and completion events are audit logged.
+
 ## 4) Profile & Account
 
 ### 4.1 Get Profile
@@ -508,6 +556,8 @@ Audit logs are written for security-sensitive account events:
 - `profile.email_change_requested`
 - `profile.email_changed`
 - `profile.auth_provider_changed`
+- `profile.password_reset_requested`
+- `profile.password_reset_completed`
 
 Response:
 ```json
@@ -1114,6 +1164,8 @@ Public auth flows are limited by client address:
 - `POST /auth/sessions/google`
 - `POST /auth/invitations/accept-password`
 - `POST /auth/invitations/accept-google`
+- `POST /auth/password-reset/request`
+- `POST /auth/password-reset/confirm`
 
 Sensitive authenticated flows are limited by credential/session identity plus a coarse client-address bucket:
 - `POST /auth/invitations`

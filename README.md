@@ -9,6 +9,8 @@
   - `POST /api/v1/auth/sessions/password`
   - `POST /api/v1/auth/sessions/google`
   - `DELETE /api/v1/auth/sessions/current`
+  - `POST /api/v1/auth/password-reset/request`
+  - `POST /api/v1/auth/password-reset/confirm`
 - Profile flows:
   - `GET /api/v1/me`
   - `PATCH /api/v1/me`
@@ -84,6 +86,10 @@ GOOGLE_CLIENT_IDS=your-web-client-id.apps.googleusercontent.com,your-ios-client-
 GOOGLE_CERTS_CACHE_PATH=storage/google-certs-cache.json
 GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS=300
 ```
+Configure account recovery:
+```bash
+PASSWORD_RESET_TOKEN_TTL_MINUTES=30
+```
 Configure runtime/security flags:
 ```bash
 APP_ENV=local # set to production in prod
@@ -111,6 +117,10 @@ RATE_LIMIT_INVITE_ACCEPT_MAX=10
 RATE_LIMIT_INVITE_ACCEPT_WINDOW_SECONDS=60
 RATE_LIMIT_INVITE_CREATE_MAX=10
 RATE_LIMIT_INVITE_CREATE_WINDOW_SECONDS=3600
+RATE_LIMIT_PASSWORD_RESET_REQUEST_MAX=5
+RATE_LIMIT_PASSWORD_RESET_REQUEST_WINDOW_SECONDS=600
+RATE_LIMIT_PASSWORD_RESET_CONFIRM_MAX=10
+RATE_LIMIT_PASSWORD_RESET_CONFIRM_WINDOW_SECONDS=600
 RATE_LIMIT_EMAIL_CHANGE_REQUEST_MAX=5
 RATE_LIMIT_EMAIL_CHANGE_REQUEST_WINDOW_SECONDS=600
 RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX=10
@@ -205,6 +215,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
 - Auth, invitation, API key, CSV import/export, profile-change, email-change, account-conversion, and metrics endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- Password reset emails are generic for unknown emails to avoid account enumeration. Completed resets revoke existing sessions and are audit logged.
 - Master API key auth rejects expired keys. New key expirations must be future-dated and within `MASTER_API_KEY_MAX_TTL_DAYS`; `expires_at=null` intentionally creates a non-expiring key.
 - Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
 - CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.

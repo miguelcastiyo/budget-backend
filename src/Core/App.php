@@ -77,6 +77,8 @@ final class App
         $add('POST', '/auth/sessions/password', fn(Request $request) => $authController->signInPassword($request));
         $add('POST', '/auth/sessions/google', fn(Request $request) => $authController->signInGoogle($request));
         $add('DELETE', '/auth/sessions/current', fn(Request $request) => $authController->signOutCurrentSession($request));
+        $add('POST', '/auth/password-reset/request', fn(Request $request) => $authController->requestPasswordReset($request));
+        $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $authController->confirmPasswordReset($request));
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
         $add('PATCH', '/me', fn(Request $request) => $profileController->updateMe($request));
@@ -182,6 +184,20 @@ final class App
             $max = $this->config->getInt('RATE_LIMIT_INVITE_ACCEPT_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_INVITE_ACCEPT_WINDOW_SECONDS', 60);
             $this->rateLimiter->hit('invite-accept:' . $path . ':' . $clientIdentifier, $max, $window);
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/auth/password-reset/request') {
+            $max = $this->config->getInt('RATE_LIMIT_PASSWORD_RESET_REQUEST_MAX', 5);
+            $window = $this->config->getInt('RATE_LIMIT_PASSWORD_RESET_REQUEST_WINDOW_SECONDS', 600);
+            $this->rateLimiter->hit('password-reset-request:' . $clientIdentifier, $max, $window);
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/auth/password-reset/confirm') {
+            $max = $this->config->getInt('RATE_LIMIT_PASSWORD_RESET_CONFIRM_MAX', 10);
+            $window = $this->config->getInt('RATE_LIMIT_PASSWORD_RESET_CONFIRM_WINDOW_SECONDS', 600);
+            $this->rateLimiter->hit('password-reset-confirm:' . $clientIdentifier, $max, $window);
             return;
         }
 

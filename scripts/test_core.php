@@ -6,6 +6,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Controllers\AuthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
 use App\Core\App;
@@ -151,6 +152,17 @@ assertSame('revoked', $apiKeyStatus->invoke($apiKeyController, [
     'revoked_at' => gmdate('Y-m-d H:i:s'),
     'expires_at' => null,
 ]), 'api key status reports revoked key');
+
+$authReflection = new ReflectionClass(AuthController::class);
+$authController = $authReflection->newInstanceWithoutConstructor();
+$validatePassword = $authReflection->getMethod('validatePassword');
+$validatePassword->invoke($authController, 'Strong123');
+expectHttpException(
+    fn() => $validatePassword->invoke($authController, 'short'),
+    422,
+    'VALIDATION_ERROR',
+    'password reset rejects short passwords'
+);
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

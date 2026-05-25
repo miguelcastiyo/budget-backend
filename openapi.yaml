@@ -232,6 +232,54 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenError'
 
+  /auth/password-reset/request:
+    post:
+      tags: [Auth]
+      summary: Request an email/password account reset link
+      description: Always returns the same accepted response for valid email syntax. Only active password accounts receive reset emails.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Reset request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequestedResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Auth]
+      summary: Confirm password reset with reset token
+      description: Sets a new password, marks the reset token used, and revokes existing sessions.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '200':
+          description: Password reset completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmedResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
   /me:
     get:
       tags: [Profile]
@@ -1410,6 +1458,45 @@ components:
           type: string
           enum: [web, native]
       required: [google_id_token, client_type]
+
+    PasswordResetRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required: [email]
+
+    PasswordResetRequestedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        message:
+          type: string
+      required: [status, message]
+
+    PasswordResetConfirmRequest:
+      type: object
+      properties:
+        reset_token:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 8
+      required: [reset_token, password]
+
+    PasswordResetConfirmedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [completed]
+        message:
+          type: string
+      required: [status, message]
 
     SessionInfo:
       type: object

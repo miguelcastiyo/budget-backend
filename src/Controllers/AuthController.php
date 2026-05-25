@@ -516,6 +516,169 @@ SQL;
         return $response;
     }
 
+    public function requestPasswordReset(Request $request): Response
+    {
+        $payload = $request->json();
+        $email = strtolower(trim((string) ($payload['email'] ?? '')));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'email', 'message' => 'must be a valid email'],
+            ]);
+        }
+
+        $genericResponse = Response::json([
+            'status' => 'accepted',
+            'message' => 'If a password account exists for that email, a reset link has been sent.',
+        ], 202);
+
+        $lookup = $this->pdo->prepare(
+            'SELECT id, email, display_name FROM users WHERE email = :email AND auth_provider = :auth_provider AND is_active = 1 LIMIT 1'
+        );
+        $lookup->execute([
+            ':email' => $email,
+            ':auth_provider' => 'password',
+        ]);
+        $user = $lookup->fetch();
+
+        if (!$user) {
+            return $genericResponse;
+        }
+
+        $requestId = Str::randomId('prr');
+        $resetToken = Str::randomHex(24);
+        $resetTokenHash = Str::hashSha256($resetToken);
+        $ttlMinutes = max(1, $this->config->getInt('PASSWORD_RESET_TOKEN_TTL_MINUTES', 30));
+        $expiresAt = gmdate('Y-m-d H:i:s', time() + ($ttlMinutes * 60));
+
+        $this->pdo->beginTransaction();
+        try {
+            $cancelPending = $this->pdo->prepare(
+                "UPDATE password_reset_requests SET status = 'cancelled' WHERE user_id = :user_id AND status = 'pending'"
+            );
+            $cancelPending->execute([':user_id' => $user['id']]);
+
+            $insert = $this->pdo->prepare(
+                "INSERT INTO password_reset_requests (request_id, user_id, reset_token_hash, status, expires_at) VALUES (:request_id, :user_id, :reset_token_hash, 'pending', :expires_at)"
+            );
+            $insert->execute([
+                ':request_id' => $requestId,
+                ':user_id' => $user['id'],
+                ':reset_token_hash' => $resetTokenHash,
+                ':expires_at' => $expiresAt,
+            ]);
+
+            $this->sendPasswordResetEmail(
+                toEmail: (string) $user['email'],
+                resetToken: $resetToken,
+                expiresAt: $expiresAt,
+                displayName: (string) $user['display_name']
+            );
+
+            $this->audit->record(
+                $request,
+                null,
+                'system',
+                'profile.password_reset_requested',
+                'user',
+                (string) $user['id'],
+                [
+                    'email' => (string) $user['email'],
+                    'reset_request_id' => $requestId,
+                    'expires_at' => $expiresAt,
+                ]
+            );
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        return $genericResponse;
+    }
+
+    public function confirmPasswordReset(Request $request): Response
+    {
+        $payload = $request->json();
+        $resetToken = trim((string) ($payload['reset_token'] ?? ''));
+        $password = (string) ($payload['password'] ?? '');
+
+        if ($resetToken === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'reset_token', 'message' => 'is required'],
+            ]);
+        }
+
+        $this->validatePassword($password);
+        $resetTokenHash = Str::hashSha256($resetToken);
+
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                prr.id,
+                prr.request_id,
+                prr.user_id,
+                u.email
+             FROM password_reset_requests prr
+             JOIN users u ON u.id = prr.user_id
+             WHERE prr.reset_token_hash = :reset_token_hash
+               AND prr.status = 'pending'
+               AND prr.expires_at > UTC_TIMESTAMP()
+               AND u.auth_provider = 'password'
+               AND u.is_active = 1
+             LIMIT 1"
+        );
+        $stmt->execute([':reset_token_hash' => $resetTokenHash]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Password reset link is invalid or expired');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $updatePassword = $this->pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
+            $updatePassword->execute([
+                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                ':id' => $row['user_id'],
+            ]);
+
+            $markUsed = $this->pdo->prepare("UPDATE password_reset_requests SET status = 'used', used_at = UTC_TIMESTAMP() WHERE id = :id");
+            $markUsed->execute([':id' => $row['id']]);
+
+            $revokeSessions = $this->pdo->prepare('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND revoked_at IS NULL');
+            $revokeSessions->execute([':user_id' => $row['user_id']]);
+
+            $this->audit->record(
+                $request,
+                (int) $row['user_id'],
+                'system',
+                'profile.password_reset_completed',
+                'user',
+                (string) $row['user_id'],
+                [
+                    'email' => (string) $row['email'],
+                    'reset_request_id' => (string) $row['request_id'],
+                    'sessions_revoked' => $revokeSessions->rowCount(),
+                ]
+            );
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        return Response::json([
+            'status' => 'completed',
+            'message' => 'Password has been reset. Sign in with your new password.',
+        ]);
+    }
+
     /** @return array<string,mixed> */
     private function getActiveInvitationByToken(string $inviteToken): array
     {
@@ -702,6 +865,44 @@ SQL;
         $this->mailer->send($toEmail, $subject, $text, $html);
     }
 
+    private function sendPasswordResetEmail(string $toEmail, string $resetToken, string $expiresAt, string $displayName): void
+    {
+        $appUrl = rtrim((string) $this->config->get('APP_URL', 'http://localhost:8000'), '/');
+        $resetUrl = $appUrl . '/password-reset/' . rawurlencode($resetToken);
+        $expiresLabel = InviteEmailTemplate::formatPacificExpiry($expiresAt);
+        $name = trim($displayName) !== '' ? trim($displayName) : 'there';
+
+        $subject = 'Reset your Budget password';
+        $text = implode(PHP_EOL, [
+            'Hi ' . $name . ',',
+            '',
+            'Use this link to reset your Budget password:',
+            $resetUrl,
+            '',
+            'This link expires ' . $expiresLabel . '.',
+            '',
+            'If you did not request this, you can ignore this email.',
+        ]);
+
+        $safeResetUrl = htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8');
+        $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+        $safeExpires = htmlspecialchars($expiresLabel, ENT_QUOTES, 'UTF-8');
+        $html = <<<HTML
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #111827;">
+    <p>Hi {$safeName},</p>
+    <p>Use this link to reset your Budget password:</p>
+    <p><a href="{$safeResetUrl}">Reset password</a></p>
+    <p>This link expires {$safeExpires}.</p>
+    <p>If you did not request this, you can ignore this email.</p>
+  </body>
+</html>
+HTML;
+
+        $this->mailer->send($toEmail, $subject, $text, $html);
+    }
+
     private function parseInviteExpiry(string $expiresAtInput): string
     {
         if ($expiresAtInput === '') {
@@ -735,6 +936,15 @@ SQL;
         }
 
         return $expiresAt->format('Y-m-d H:i:s');
+    }
+
+    private function validatePassword(string $password): void
+    {
+        if (strlen($password) < 8) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'password', 'message' => 'must be at least 8 characters'],
+            ]);
+        }
     }
 
     private function resolveGoogleDisplayName(?string $googleName, string $email, string $inviteeName = ''): string
