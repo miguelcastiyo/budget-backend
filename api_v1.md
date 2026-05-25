@@ -1101,7 +1101,35 @@ Common codes:
 - `RATE_LIMITED` (`429`)
 - `INTERNAL_ERROR` (`500`)
 
-## 14) Authorization Rules
+## 14) Rate Limits
+
+Rate limited endpoints return `429 RATE_LIMITED`.
+
+Public auth flows are limited by client address:
+- `POST /auth/sessions/password`
+- `POST /auth/sessions/google`
+- `POST /auth/invitations/accept-password`
+- `POST /auth/invitations/accept-google`
+
+Sensitive authenticated flows are limited by credential/session identity plus a coarse client-address bucket:
+- `POST /auth/invitations`
+- `POST /me/master-api-keys`
+- `DELETE /me/master-api-keys/{api_key_id}`
+- `POST /me/transactions/import.csv`
+- `GET /me/transactions/export.csv`
+- `GET /me/metrics/tags`
+- `GET /me/metrics/categories`
+- `GET /me/dashboard`
+- `GET /me/metrics/insights`
+- `PATCH /me`
+- `PATCH /me/preferences`
+- `POST /me/email-change/request`
+- `POST /me/email-change/verify`
+- `POST /me/auth/convert-google`
+
+Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in `.env.example`.
+
+## 15) Authorization Rules
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
@@ -1109,7 +1137,7 @@ Common codes:
 - Only owner/admin can list audit logs.
 - Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 
-## 15) Non-Goals (v1)
+## 16) Non-Goals (v1)
 - Public self-signup
 - Bank aggregation integrations
 - Shared household budgets

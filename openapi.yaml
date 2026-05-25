@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Budget API
   version: 1.0.0
-  description: Session-based API contract for the budget app backend.
+  description: Session-based API contract for the budget app backend. Sensitive auth, account, import/export, and metrics routes may return 429 RATE_LIMITED when configured limits are exceeded.
 servers:
   - url: /api/v1
     description: v1 base path
@@ -1246,6 +1246,12 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
     ValidationError:
       description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimitedError:
+      description: Too many attempts in the configured rate-limit window.
       content:
         application/json:
           schema:

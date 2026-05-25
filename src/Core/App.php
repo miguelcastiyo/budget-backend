@@ -167,46 +167,161 @@ final class App
 
     private function enforceRateLimits(Request $request): void
     {
-        if ($request->method !== 'POST') {
-            return;
-        }
-
+        $method = strtoupper($request->method);
         $path = $this->normalizePath($request->path);
-        $identifier = $this->clientIdentifier($request);
+        $clientIdentifier = $this->clientIdentifier($request);
 
-        if (in_array($path, ['/auth/sessions/password', '/auth/sessions/google'], true)) {
+        if ($method === 'POST' && in_array($path, ['/auth/sessions/password', '/auth/sessions/google'], true)) {
             $max = $this->config->getInt('RATE_LIMIT_AUTH_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_AUTH_WINDOW_SECONDS', 60);
-            $this->rateLimiter->hit('auth:' . $path . ':' . $identifier, $max, $window);
+            $this->rateLimiter->hit('auth:' . $path . ':' . $clientIdentifier, $max, $window);
             return;
         }
 
-        if (in_array($path, ['/auth/invitations/accept-password', '/auth/invitations/accept-google'], true)) {
+        if ($method === 'POST' && in_array($path, ['/auth/invitations/accept-password', '/auth/invitations/accept-google'], true)) {
             $max = $this->config->getInt('RATE_LIMIT_INVITE_ACCEPT_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_INVITE_ACCEPT_WINDOW_SECONDS', 60);
-            $this->rateLimiter->hit('invite-accept:' . $path . ':' . $identifier, $max, $window);
+            $this->rateLimiter->hit('invite-accept:' . $path . ':' . $clientIdentifier, $max, $window);
             return;
         }
 
-        if ($path === '/me/email-change/request') {
+        if ($method === 'POST' && $path === '/auth/invitations') {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'invite-create',
+                $this->config->getInt('RATE_LIMIT_INVITE_CREATE_MAX', 10),
+                $this->config->getInt('RATE_LIMIT_INVITE_CREATE_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/me/master-api-keys') {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'api-key-create',
+                $this->config->getInt('RATE_LIMIT_API_KEY_CREATE_MAX', 5),
+                $this->config->getInt('RATE_LIMIT_API_KEY_CREATE_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'DELETE' && preg_match('#^/me/master-api-keys/[^/]+$#', $path) === 1) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'api-key-revoke',
+                $this->config->getInt('RATE_LIMIT_API_KEY_REVOKE_MAX', 20),
+                $this->config->getInt('RATE_LIMIT_API_KEY_REVOKE_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/me/transactions/import.csv') {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'csv-import',
+                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_MAX', 10),
+                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/me/transactions/export.csv') {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'csv-export',
+                $this->config->getInt('RATE_LIMIT_CSV_EXPORT_MAX', 30),
+                $this->config->getInt('RATE_LIMIT_CSV_EXPORT_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'GET' && in_array($path, ['/me/metrics/tags', '/me/metrics/categories', '/me/dashboard', '/me/metrics/insights'], true)) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'metrics',
+                $this->config->getInt('RATE_LIMIT_METRICS_MAX', 120),
+                $this->config->getInt('RATE_LIMIT_METRICS_WINDOW_SECONDS', 60)
+            );
+            return;
+        }
+
+        if ($method === 'PATCH' && in_array($path, ['/me', '/me/preferences'], true)) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'profile-change',
+                $this->config->getInt('RATE_LIMIT_PROFILE_CHANGE_MAX', 30),
+                $this->config->getInt('RATE_LIMIT_PROFILE_CHANGE_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/me/email-change/request') {
             $max = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_REQUEST_MAX', 5);
             $window = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_REQUEST_WINDOW_SECONDS', 600);
-            $this->rateLimiter->hit('email-change-request:' . $identifier, $max, $window);
+            $this->hitAuthenticatedRateLimit($request, 'email-change-request', $max, $window);
             return;
         }
 
-        if ($path === '/me/email-change/verify') {
+        if ($method === 'POST' && $path === '/me/email-change/verify') {
             $max = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS', 600);
-            $this->rateLimiter->hit('email-change-verify:' . $identifier, $max, $window);
+            $this->hitAuthenticatedRateLimit($request, 'email-change-verify', $max, $window);
             return;
         }
 
-        if ($path === '/me/auth/convert-google') {
-            $max = $this->config->getInt('RATE_LIMIT_AUTH_MAX', 10);
-            $window = $this->config->getInt('RATE_LIMIT_AUTH_WINDOW_SECONDS', 60);
-            $this->rateLimiter->hit('convert-google:' . $identifier, $max, $window);
+        if ($method === 'POST' && $path === '/me/auth/convert-google') {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'convert-google',
+                $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_MAX', 5),
+                $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_WINDOW_SECONDS', 600)
+            );
         }
+    }
+
+    private function hitAuthenticatedRateLimit(Request $request, string $bucket, int $max, int $windowSeconds): void
+    {
+        $actorIdentifier = $this->requestCredentialIdentifier($request);
+        $clientIdentifier = $this->clientIdentifier($request);
+
+        $this->rateLimiter->hit($bucket . ':actor:' . $actorIdentifier, $max, $windowSeconds);
+        $this->rateLimiter->hit($bucket . ':client:' . $clientIdentifier, max($max * 5, $max), $windowSeconds);
+    }
+
+    private function requestCredentialIdentifier(Request $request): string
+    {
+        $authHeader = (string) ($request->header('Authorization') ?? '');
+        if (str_starts_with($authHeader, 'Session ')) {
+            $sessionId = $this->sessionIdFromToken(trim(substr($authHeader, 8)));
+            if ($sessionId !== null) {
+                return 'session:' . hash('sha256', $sessionId);
+            }
+        }
+
+        $cookieToken = (string) ($request->cookies['sid'] ?? '');
+        if ($cookieToken !== '') {
+            $sessionId = $this->sessionIdFromToken($cookieToken);
+            if ($sessionId !== null) {
+                return 'session:' . hash('sha256', $sessionId);
+            }
+        }
+
+        $apiKey = trim((string) ($request->header('X-API-Key') ?? ''));
+        if ($apiKey !== '') {
+            return 'api-key:' . hash('sha256', $apiKey);
+        }
+
+        return 'client:' . $this->clientIdentifier($request);
+    }
+
+    private function sessionIdFromToken(string $token): ?string
+    {
+        $parts = explode('.', $token, 2);
+        if (count($parts) !== 2 || trim($parts[0]) === '') {
+            return null;
+        }
+
+        return trim($parts[0]);
     }
 
     private function normalizePath(string $path): string

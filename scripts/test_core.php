@@ -7,6 +7,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Controllers\ImportExportController;
+use App\Core\App;
 use App\Support\Str;
 use App\Security\AuditLogger;
 
@@ -121,6 +122,15 @@ assertSame('[redacted]', $redactedMetadata['invite_token'], 'audit logger redact
 assertSame('[redacted]', $redactedMetadata['password'], 'audit logger redacts password metadata');
 assertSame('[redacted]', $redactedMetadata['profile']['verification_code'], 'audit logger redacts nested code metadata');
 assertSame('owner@example.com', $redactedMetadata['profile']['email'], 'audit logger keeps safe nested metadata');
+
+$appReflection = new ReflectionClass(App::class);
+$app = $appReflection->newInstanceWithoutConstructor();
+$normalizePath = $appReflection->getMethod('normalizePath');
+$sessionIdFromToken = $appReflection->getMethod('sessionIdFromToken');
+assertSame('/me/dashboard', $normalizePath->invoke($app, '/api/v1/me/dashboard'), 'rate limiter normalizes api v1 paths');
+assertSame('/me/dashboard', $normalizePath->invoke($app, '/me/dashboard'), 'rate limiter keeps direct paths');
+assertSame('ses_abc', $sessionIdFromToken->invoke($app, 'ses_abc.secret'), 'rate limiter extracts session id from token');
+assertSame(null, $sessionIdFromToken->invoke($app, 'broken-token'), 'rate limiter rejects malformed session token');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

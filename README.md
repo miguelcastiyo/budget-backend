@@ -105,10 +105,26 @@ RATE_LIMIT_AUTH_MAX=10
 RATE_LIMIT_AUTH_WINDOW_SECONDS=60
 RATE_LIMIT_INVITE_ACCEPT_MAX=10
 RATE_LIMIT_INVITE_ACCEPT_WINDOW_SECONDS=60
+RATE_LIMIT_INVITE_CREATE_MAX=10
+RATE_LIMIT_INVITE_CREATE_WINDOW_SECONDS=3600
 RATE_LIMIT_EMAIL_CHANGE_REQUEST_MAX=5
 RATE_LIMIT_EMAIL_CHANGE_REQUEST_WINDOW_SECONDS=600
 RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX=10
 RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS=600
+RATE_LIMIT_AUTH_CONVERT_MAX=5
+RATE_LIMIT_AUTH_CONVERT_WINDOW_SECONDS=600
+RATE_LIMIT_API_KEY_CREATE_MAX=5
+RATE_LIMIT_API_KEY_CREATE_WINDOW_SECONDS=3600
+RATE_LIMIT_API_KEY_REVOKE_MAX=20
+RATE_LIMIT_API_KEY_REVOKE_WINDOW_SECONDS=3600
+RATE_LIMIT_CSV_IMPORT_MAX=10
+RATE_LIMIT_CSV_IMPORT_WINDOW_SECONDS=3600
+RATE_LIMIT_CSV_EXPORT_MAX=30
+RATE_LIMIT_CSV_EXPORT_WINDOW_SECONDS=3600
+RATE_LIMIT_METRICS_MAX=120
+RATE_LIMIT_METRICS_WINDOW_SECONDS=60
+RATE_LIMIT_PROFILE_CHANGE_MAX=30
+RATE_LIMIT_PROFILE_CHANGE_WINDOW_SECONDS=3600
 RATE_LIMIT_STORAGE_PATH=storage/rate-limit
 ```
 Configure CSV import guardrails:
@@ -184,7 +200,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Tokens/codes are not returned in API responses.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
-- Auth, invitation-accept, and email-change verification endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- Auth, invitation, API key, CSV import/export, profile-change, email-change, account-conversion, and metrics endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
 - Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
 - CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.
 - Security headers are attached to API responses (`X-Content-Type-Options`, `X-Frame-Options`, CSP, etc.). HSTS is added on HTTPS requests.
