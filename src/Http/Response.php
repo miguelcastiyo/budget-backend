@@ -10,7 +10,8 @@ final class Response
     private function __construct(
         public readonly int $status,
         public readonly string $body,
-        public readonly array $headers = []
+        public readonly array $headers = [],
+        private readonly mixed $stream = null
     ) {
     }
 
@@ -31,12 +32,18 @@ final class Response
         return new self($status, $body, $headers);
     }
 
+    /** @param callable():void $stream */
+    public static function stream(callable $stream, int $status = 200, array $headers = []): self
+    {
+        return new self($status, '', $headers, $stream);
+    }
+
     public function withHeader(string $name, string $value): self
     {
         $headers = $this->headers;
         $headers[$name] = $value;
 
-        return new self($this->status, $this->body, $headers);
+        return new self($this->status, $this->body, $headers, $this->stream);
     }
 
     public function send(): void
@@ -44,6 +51,11 @@ final class Response
         http_response_code($this->status);
         foreach ($this->headers as $name => $value) {
             header($name . ': ' . $value, true);
+        }
+
+        if (is_callable($this->stream)) {
+            ($this->stream)();
+            return;
         }
 
         if ($this->body !== '') {

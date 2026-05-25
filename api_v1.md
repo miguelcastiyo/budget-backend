@@ -979,11 +979,13 @@ Response:
 
 ## 11) CSV Export
 
-### 10.1 Export Transactions CSV
+### 11.1 Export Transactions CSV
 `GET /me/transactions/export.csv`
 
 Supports the same filters as `GET /me/transactions`.
 Includes `is_split` as a CSV column (`true|false`) for round-trip imports.
+The response streams rows as CSV instead of buffering the full export first.
+Exported cells are escaped when they start with spreadsheet formula prefixes (`=`, `+`, `-`, `@`, tab, carriage return, or leading whitespace before a formula prefix).
 
 Examples:
 - Month: `/me/transactions/export.csv?preset=last_month`
@@ -995,7 +997,7 @@ Response:
 
 ## 12) CSV Import
 
-### 11.1 Import Transactions CSV
+### 12.1 Import Transactions CSV
 `POST /me/transactions/import.csv`
 
 Request:
@@ -1005,19 +1007,25 @@ Request:
 
 Rules:
 - `dry_run` validates and returns parse/mapping results without writing.
-- `commit` writes valid rows.
+- `commit` validates the file first, then writes valid rows. Oversized files or too many rows are rejected before any transaction rows are inserted.
+- Import limits are configurable with `CSV_IMPORT_MAX_BYTES` (default `5242880`), `CSV_IMPORT_MAX_ROWS` (default `5000`), and `CSV_IMPORT_MAX_ERRORS` (default `100`).
 - Optional `is_split` CSV column is supported (`true|false|1|0|yes|no`), defaults to `false` when absent.
 - Duplicate detection key (per user): `date + amount + normalized_expense + category + is_split + tag + card`.
+- Row-level errors are capped in the response. `errors_truncated=true` means additional rows failed but were not returned.
 
 Response `200`:
 ```json
 {
+  "status": "partial",
+  "message": "Validated 110 row(s), but 3 row(s) failed validation.",
   "mode": "dry_run",
   "total_rows": 120,
   "valid_rows": 110,
   "imported_rows": 0,
   "duplicate_rows": 7,
   "invalid_rows": 3,
+  "errors_truncated": false,
+  "max_returned_errors": 100,
   "errors": [
     {
       "row": 14,

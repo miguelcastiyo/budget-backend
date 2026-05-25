@@ -111,6 +111,12 @@ RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX=10
 RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS=600
 RATE_LIMIT_STORAGE_PATH=storage/rate-limit
 ```
+Configure CSV import guardrails:
+```bash
+CSV_IMPORT_MAX_BYTES=5242880
+CSV_IMPORT_MAX_ROWS=5000
+CSV_IMPORT_MAX_ERRORS=100
+```
 
 3. Create local storage paths if missing:
 
@@ -179,6 +185,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
 - Auth, invitation-accept, and email-change verification endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.
 - Security headers are attached to API responses (`X-Content-Type-Options`, `X-Frame-Options`, CSP, etc.). HSTS is added on HTTPS requests.
 - In local development with `MAIL_TRANSPORT=log`, check `storage/mail.log` for invite tokens and verification codes.
 - Tag payloads/responses include optional `icon_key` (`null` allowed) with an allow-list enforced by backend validation.

@@ -48,7 +48,7 @@ final class App
         $googleTokenVerifier = new GoogleTokenVerifier($config);
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config);
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
-        $importExportController = new ImportExportController($pdo, $auth);
+        $importExportController = new ImportExportController($pdo, $auth, $config);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth);

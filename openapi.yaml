@@ -971,6 +971,7 @@ paths:
     get:
       tags: [ImportExport]
       summary: Export filtered transactions as CSV
+      description: Streams filtered transactions as CSV. Exported cell values are escaped when they start with spreadsheet formula prefixes.
       parameters:
         - $ref: '#/components/parameters/DateFrom'
         - $ref: '#/components/parameters/DateTo'
@@ -998,6 +999,7 @@ paths:
     post:
       tags: [ImportExport]
       summary: Import transactions from CSV
+      description: Validates import size and row limits before writing rows. Row-level errors are capped in the response.
       parameters:
         - $ref: '#/components/parameters/XCsrfToken'
       requestBody:
@@ -2356,6 +2358,11 @@ components:
     CsvImportResponse:
       type: object
       properties:
+        status:
+          type: string
+          enum: [completed, partial, failed]
+        message:
+          type: string
         mode:
           type: string
           enum: [dry_run, commit]
@@ -2374,11 +2381,16 @@ components:
         invalid_rows:
           type: integer
           minimum: 0
+        errors_truncated:
+          type: boolean
+        max_returned_errors:
+          type: integer
+          minimum: 1
         errors:
           type: array
           items:
             $ref: '#/components/schemas/CsvImportErrorItem'
-      required: [mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors]
+      required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors_truncated, max_returned_errors, errors]
 
     ErrorDetail:
       type: object

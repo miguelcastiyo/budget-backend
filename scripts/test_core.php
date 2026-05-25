@@ -6,6 +6,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Controllers\ImportExportController;
 use App\Support\Str;
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -23,6 +24,13 @@ $rawResponse = Response::raw('csv', 202, ['Content-Type' => 'text/csv']);
 assertSame(202, $rawResponse->status, 'raw response keeps status');
 assertSame('csv', $rawResponse->body, 'raw response keeps body');
 assertSame('text/csv', $rawResponse->headers['Content-Type'] ?? null, 'raw response keeps headers');
+
+$streamResponse = Response::stream(static function (): void {
+    echo 'streamed';
+}, 203, ['Content-Type' => 'text/plain']);
+assertSame(203, $streamResponse->status, 'stream response keeps status');
+assertSame('', $streamResponse->body, 'stream response has empty buffered body');
+assertSame('text/plain', $streamResponse->headers['Content-Type'] ?? null, 'stream response keeps headers');
 
 $request = new Request(
     method: 'POST',
@@ -86,6 +94,16 @@ assertMatches('/^[a-f0-9]{16}$/', Str::randomHex(8), 'randomHex emits requested 
 assertSame(hash('sha256', 'budget'), Str::hashSha256('budget'), 'hashSha256 matches PHP hash');
 assertMatches('/^\d{6}$/', Str::randomNumericCode(), 'randomNumericCode defaults to six digits');
 assertMatches('/^\d{8}$/', Str::randomNumericCode(8), 'randomNumericCode supports custom lengths');
+
+$importExportReflection = new ReflectionClass(ImportExportController::class);
+$importExportController = $importExportReflection->newInstanceWithoutConstructor();
+$csvCell = $importExportReflection->getMethod('csvCell');
+assertSame("'=SUM(A1:A2)", $csvCell->invoke($importExportController, '=SUM(A1:A2)'), 'csv export escapes equals formulas');
+assertSame("'+cmd", $csvCell->invoke($importExportController, '+cmd'), 'csv export escapes plus formulas');
+assertSame("'-cmd", $csvCell->invoke($importExportController, '-cmd'), 'csv export escapes minus formulas');
+assertSame("'@cmd", $csvCell->invoke($importExportController, '@cmd'), 'csv export escapes at formulas');
+assertSame("' =cmd", $csvCell->invoke($importExportController, ' =cmd'), 'csv export escapes formulas after leading whitespace');
+assertSame('Groceries', $csvCell->invoke($importExportController, 'Groceries'), 'csv export leaves normal cells unchanged');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

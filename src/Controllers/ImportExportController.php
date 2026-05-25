@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
@@ -16,10 +17,14 @@ use PDO;
 final class ImportExportController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
+    private const DEFAULT_MAX_IMPORT_BYTES = 5242880;
+    private const DEFAULT_MAX_IMPORT_ROWS = 5000;
+    private const DEFAULT_MAX_IMPORT_ERRORS = 100;
 
     public function __construct(
         private readonly PDO $pdo,
-        private readonly AuthService $auth
+        private readonly AuthService $auth,
+        private readonly Config $config
     ) {
     }
 
@@ -52,38 +57,32 @@ SQL;
         }
         $stmt->execute();
 
-        $stream = fopen('php://temp', 'w+');
-        if ($stream === false) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Could not open CSV stream');
-        }
-
-        fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at'], ',', '"', '\\');
-
-        foreach ($stmt->fetchAll() as $row) {
-            fputcsv($stream, [
-                (string) $row['transaction_date'],
-                (string) $row['expense'],
-                $this->fmt((string) $row['amount']),
-                (string) $row['category'],
-                ((int) $row['is_split']) === 1 ? 'true' : 'false',
-                (string) $row['tag_name'],
-                $row['card_name'] === null ? '' : (string) $row['card_name'],
-                (string) $row['created_at'],
-                (string) $row['updated_at'],
-            ], ',', '"', '\\');
-        }
-
-        rewind($stream);
-        $csv = stream_get_contents($stream);
-        fclose($stream);
-
-        if ($csv === false) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Could not generate CSV');
-        }
-
         $filename = 'transactions_' . gmdate('Ymd_His') . '.csv';
 
-        return Response::raw($csv, 200, [
+        return Response::stream(function () use ($stmt): void {
+            $stream = fopen('php://output', 'w');
+            if ($stream === false) {
+                return;
+            }
+
+            fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at'], ',', '"', '\\');
+
+            foreach ($stmt as $row) {
+                fputcsv($stream, [
+                    $this->csvCell((string) $row['transaction_date']),
+                    $this->csvCell((string) $row['expense']),
+                    $this->csvCell($this->fmt((string) $row['amount'])),
+                    $this->csvCell((string) $row['category']),
+                    $this->csvCell(((int) $row['is_split']) === 1 ? 'true' : 'false'),
+                    $this->csvCell((string) $row['tag_name']),
+                    $this->csvCell($row['card_name'] === null ? '' : (string) $row['card_name']),
+                    $this->csvCell((string) $row['created_at']),
+                    $this->csvCell((string) $row['updated_at']),
+                ], ',', '"', '\\');
+            }
+
+            fclose($stream);
+        }, 200, [
             'Content-Type' => 'text/csv; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
@@ -112,6 +111,21 @@ SQL;
             throw new HttpException(422, 'VALIDATION_ERROR', 'Uploaded file is missing');
         }
 
+        $maxImportBytes = $this->maxImportBytes();
+        $maxImportRows = $this->maxImportRows();
+        $maxImportErrors = $this->maxImportErrors();
+        $uploadedBytes = (int) ($file['size'] ?? 0);
+        if ($uploadedBytes <= 0) {
+            $detectedBytes = filesize($tmpName);
+            $uploadedBytes = $detectedBytes === false ? 0 : (int) $detectedBytes;
+        }
+
+        if ($uploadedBytes > $maxImportBytes) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'CSV file is too large', [
+                ['field' => 'file', 'message' => 'must be <= ' . $maxImportBytes . ' bytes'],
+            ]);
+        }
+
         $handle = fopen($tmpName, 'r');
         if ($handle === false) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Could not read uploaded file');
@@ -123,7 +137,12 @@ SQL;
             throw new HttpException(422, 'VALIDATION_ERROR', 'CSV must include a header row');
         }
 
-        $index = $this->buildColumnIndex($header);
+        try {
+            $index = $this->buildColumnIndex($header);
+        } catch (HttpException $e) {
+            fclose($handle);
+            throw $e;
+        }
 
         $totalRows = 0;
         $validRows = 0;
@@ -131,39 +150,44 @@ SQL;
         $duplicateRows = 0;
         $invalidRows = 0;
         $errors = [];
+        $errorsTruncated = false;
+        $parsedRows = [];
 
         while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
             $totalRows++;
             $rowNum = $totalRows + 1;
 
+            if ($totalRows > $maxImportRows) {
+                fclose($handle);
+                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV contains too many rows', [
+                    ['field' => 'file', 'message' => 'must contain <= ' . $maxImportRows . ' data rows'],
+                ]);
+            }
+
             try {
                 $parsed = $this->parseImportRow($cols, $index, $rowNum);
                 $validRows++;
-
-                if ($mode === 'commit') {
-                    $inserted = $this->commitImportedRow($ctx->userId(), $parsed);
-                    if ($inserted) {
-                        $importedRows++;
-                    } else {
-                        $duplicateRows++;
-                    }
-                }
+                $parsedRows[] = $parsed;
             } catch (HttpException $e) {
                 $invalidRows++;
                 foreach ($e->details() as $detail) {
-                    $errors[] = [
-                        'row' => $rowNum,
-                        'field' => $detail['field'],
-                        'message' => $detail['message'],
-                    ];
+                    $errorsTruncated = $this->appendImportError(
+                        $errors,
+                        $rowNum,
+                        (string) $detail['field'],
+                        (string) $detail['message'],
+                        $maxImportErrors
+                    ) || $errorsTruncated;
                 }
             } catch (\Throwable) {
                 $invalidRows++;
-                $errors[] = [
-                    'row' => $rowNum,
-                    'field' => 'row',
-                    'message' => 'unexpected import error',
-                ];
+                $errorsTruncated = $this->appendImportError(
+                    $errors,
+                    $rowNum,
+                    'row',
+                    'unexpected import error',
+                    $maxImportErrors
+                ) || $errorsTruncated;
             }
         }
 
@@ -171,31 +195,60 @@ SQL;
 
         if ($mode === 'dry_run') {
             $importedRows = 0;
-            $duplicateRows = $this->estimateDryRunDuplicates($ctx->userId(), $tmpName);
+            $duplicateRows = $this->estimateDryRunDuplicates($ctx->userId(), $parsedRows);
+        } else {
+            $ownsTransaction = !$this->pdo->inTransaction();
+            if ($ownsTransaction) {
+                $this->pdo->beginTransaction();
+            }
+
+            try {
+                foreach ($parsedRows as $parsed) {
+                    $inserted = $this->commitImportedRow($ctx->userId(), $parsed);
+                    if ($inserted) {
+                        $importedRows++;
+                    } else {
+                        $duplicateRows++;
+                    }
+                }
+
+                if ($ownsTransaction) {
+                    $this->pdo->commit();
+                }
+            } catch (\Throwable $e) {
+                if ($ownsTransaction && $this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                throw $e;
+            }
         }
 
-        $status = $invalidRows > 0 ? 'failed' : 'completed';
+        $status = $this->importStatus($validRows, $invalidRows);
+        $message = $this->importMessage($mode, $status, $validRows, $importedRows, $duplicateRows, $invalidRows, $errorsTruncated, $maxImportErrors);
         $this->recordImportRun(
             userId: $ctx->userId(),
             mode: $mode,
-            status: $status,
+            status: $status === 'completed' ? 'completed' : 'failed',
             sourceFilename: (string) ($file['name'] ?? 'upload.csv'),
             totalRows: $totalRows,
             validRows: $validRows,
             importedRows: $importedRows,
             duplicateRows: $duplicateRows,
             invalidRows: $invalidRows,
-            errorSummary: $invalidRows > 0 ? 'Some rows failed validation' : null
+            errorSummary: $invalidRows > 0 ? $message : null
         );
 
         return Response::json([
             'status' => $status,
+            'message' => $message,
             'mode' => $mode,
             'total_rows' => $totalRows,
             'valid_rows' => $validRows,
             'imported_rows' => $importedRows,
             'duplicate_rows' => $duplicateRows,
             'invalid_rows' => $invalidRows,
+            'errors_truncated' => $errorsTruncated,
+            'max_returned_errors' => $maxImportErrors,
             'errors' => $errors,
         ]);
     }
@@ -360,26 +413,13 @@ SQL;
         }
     }
 
-    private function estimateDryRunDuplicates(int $userId, string $tmpName): int
+    /** @param array<int,array<string,mixed>> $parsedRows */
+    private function estimateDryRunDuplicates(int $userId, array $parsedRows): int
     {
-        $handle = fopen($tmpName, 'r');
-        if ($handle === false) {
-            return 0;
-        }
-
-        $header = fgetcsv($handle, 0, ',', '"', '\\');
-        if (!is_array($header)) {
-            fclose($handle);
-            return 0;
-        }
-
-        $index = $this->buildColumnIndex($header);
         $count = 0;
 
-        while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
+        foreach ($parsedRows as $parsed) {
             try {
-                $parsed = $this->parseImportRow($cols, $index, 0);
-
                 $tagId = $this->findTagId($userId, (string) $parsed['tag_name']);
                 $cardId = trim((string) $parsed['card_name']) === '' ? null : $this->findCardId($userId, (string) $parsed['card_name']);
                 if ($tagId === null) {
@@ -402,8 +442,85 @@ SQL;
             }
         }
 
-        fclose($handle);
         return $count;
+    }
+
+    /** @param array<int,array{row:int,field:string,message:string}> $errors */
+    private function appendImportError(array &$errors, int $rowNum, string $field, string $message, int $maxErrors): bool
+    {
+        if (count($errors) >= $maxErrors) {
+            return true;
+        }
+
+        $errors[] = [
+            'row' => $rowNum,
+            'field' => $field,
+            'message' => $message,
+        ];
+
+        return false;
+    }
+
+    private function importStatus(int $validRows, int $invalidRows): string
+    {
+        if ($invalidRows === 0) {
+            return 'completed';
+        }
+
+        return $validRows > 0 ? 'partial' : 'failed';
+    }
+
+    private function importMessage(
+        string $mode,
+        string $status,
+        int $validRows,
+        int $importedRows,
+        int $duplicateRows,
+        int $invalidRows,
+        bool $errorsTruncated,
+        int $maxImportErrors
+    ): string {
+        if ($status === 'completed') {
+            $message = $mode === 'dry_run'
+                ? sprintf('Validated %d row(s); %d duplicate row(s) would be skipped.', $validRows, $duplicateRows)
+                : sprintf('Imported %d row(s); skipped %d duplicate row(s).', $importedRows, $duplicateRows);
+        } elseif ($status === 'partial') {
+            $message = $mode === 'dry_run'
+                ? sprintf('Validated %d row(s), but %d row(s) failed validation.', $validRows, $invalidRows)
+                : sprintf('Imported %d row(s), skipped %d duplicate row(s), and %d row(s) failed validation.', $importedRows, $duplicateRows, $invalidRows);
+        } else {
+            $message = sprintf('Import failed: %d row(s) failed validation.', $invalidRows);
+        }
+
+        if ($errorsTruncated) {
+            $message .= ' Only the first ' . $maxImportErrors . ' row error(s) were returned.';
+        }
+
+        return $message;
+    }
+
+    private function maxImportBytes(): int
+    {
+        return max(1, $this->config->getInt('CSV_IMPORT_MAX_BYTES', self::DEFAULT_MAX_IMPORT_BYTES));
+    }
+
+    private function maxImportRows(): int
+    {
+        return max(1, $this->config->getInt('CSV_IMPORT_MAX_ROWS', self::DEFAULT_MAX_IMPORT_ROWS));
+    }
+
+    private function maxImportErrors(): int
+    {
+        return max(1, $this->config->getInt('CSV_IMPORT_MAX_ERRORS', self::DEFAULT_MAX_IMPORT_ERRORS));
+    }
+
+    private function csvCell(string $value): string
+    {
+        if ($value !== '' && preg_match('/^(?:[=+\-@\t\r]|\s+[=+\-@])/', $value) === 1) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 
     private function recordImportRun(
