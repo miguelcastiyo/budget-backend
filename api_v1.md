@@ -453,7 +453,8 @@ Response:
       "key_prefix": "bgtm_live_7fA9",
       "created_at": "2026-03-05T19:12:00Z",
       "last_used_at": "2026-03-05T19:30:44Z",
-      "expires_at": null
+      "expires_at": null,
+      "status": "active"
     }
   ]
 }
@@ -472,6 +473,8 @@ Request:
 }
 ```
 
+`expires_at` may be `null` for a non-expiring key. When provided, it must be a valid future date-time within `MASTER_API_KEY_MAX_TTL_DAYS` (default `365`). Expired keys are rejected during API key authentication.
+
 Response `201`:
 ```json
 {
@@ -480,7 +483,8 @@ Response `201`:
   "api_key": "bgtm_live_2M4...full_secret...",
   "key_prefix": "bgtm_live_2M4x",
   "created_at": "2026-03-05T19:12:00Z",
-  "expires_at": null
+  "expires_at": null,
+  "status": "active"
 }
 ```
 

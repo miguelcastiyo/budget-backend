@@ -55,7 +55,7 @@ final class App
         $importExportController = new ImportExportController($pdo, $auth, $config);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
-        $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger);
+        $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
         $metricsController = new MetricsController($pdo, $auth, $recurring);

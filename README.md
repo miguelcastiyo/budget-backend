@@ -99,6 +99,10 @@ MAIL_FROM_NAME=Budget App
 MAIL_LOG_PATH=storage/mail.log
 RESEND_API_KEY=
 ```
+Configure master API key expiry:
+```bash
+MASTER_API_KEY_MAX_TTL_DAYS=365
+```
 Configure auth/invite rate limiting:
 ```bash
 RATE_LIMIT_AUTH_MAX=10
@@ -201,6 +205,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
 - Auth, invitation, API key, CSV import/export, profile-change, email-change, account-conversion, and metrics endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- Master API key auth rejects expired keys. New key expirations must be future-dated and within `MASTER_API_KEY_MAX_TTL_DAYS`; `expires_at=null` intentionally creates a non-expiring key.
 - Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
 - CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.
 - Security headers are attached to API responses (`X-Content-Type-Options`, `X-Frame-Options`, CSP, etc.). HSTS is added on HTTPS requests.

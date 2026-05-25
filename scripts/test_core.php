@@ -7,6 +7,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Controllers\ImportExportController;
+use App\Controllers\MasterApiKeyController;
 use App\Core\App;
 use App\Support\Str;
 use App\Security\AuditLogger;
@@ -131,6 +132,25 @@ assertSame('/me/dashboard', $normalizePath->invoke($app, '/api/v1/me/dashboard')
 assertSame('/me/dashboard', $normalizePath->invoke($app, '/me/dashboard'), 'rate limiter keeps direct paths');
 assertSame('ses_abc', $sessionIdFromToken->invoke($app, 'ses_abc.secret'), 'rate limiter extracts session id from token');
 assertSame(null, $sessionIdFromToken->invoke($app, 'broken-token'), 'rate limiter rejects malformed session token');
+
+$apiKeyReflection = new ReflectionClass(MasterApiKeyController::class);
+$apiKeyController = $apiKeyReflection->newInstanceWithoutConstructor();
+$apiKeyStatus = $apiKeyReflection->getMethod('apiKeyStatus');
+assertSame('active', $apiKeyStatus->invoke($apiKeyController, [
+    'is_active' => 1,
+    'revoked_at' => null,
+    'expires_at' => gmdate('Y-m-d H:i:s', time() + 3600),
+]), 'api key status reports active unexpired key');
+assertSame('expired', $apiKeyStatus->invoke($apiKeyController, [
+    'is_active' => 1,
+    'revoked_at' => null,
+    'expires_at' => gmdate('Y-m-d H:i:s', time() - 3600),
+]), 'api key status reports expired key');
+assertSame('revoked', $apiKeyStatus->invoke($apiKeyController, [
+    'is_active' => 0,
+    'revoked_at' => gmdate('Y-m-d H:i:s'),
+    'expires_at' => null,
+]), 'api key status reports revoked key');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

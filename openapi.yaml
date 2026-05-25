@@ -431,7 +431,7 @@ paths:
     post:
       tags: [ApiKeys]
       summary: Create a master API key
-      description: Session auth only. Returns full key once at creation.
+      description: Session auth only. Returns full key once at creation. expires_at may be null for a non-expiring key; provided expirations must be future-dated and within the configured max TTL.
       security:
         - cookieAuth: []
         - sessionTokenAuth: []
@@ -1657,6 +1657,7 @@ components:
           minLength: 1
           maxLength: 120
         expires_at:
+          description: Null creates a non-expiring key. A date-time must be in the future and within MASTER_API_KEY_MAX_TTL_DAYS.
           anyOf:
             - type: string
               format: date-time
@@ -1685,7 +1686,10 @@ components:
             - type: string
               format: date-time
             - type: 'null'
-      required: [id, name, key_prefix, created_at, last_used_at, expires_at]
+        status:
+          type: string
+          enum: [active, expired, revoked]
+      required: [id, name, key_prefix, created_at, last_used_at, expires_at, status]
 
     MasterApiKeyListResponse:
       type: object
