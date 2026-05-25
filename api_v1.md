@@ -489,6 +489,47 @@ Response `201`:
 
 Auth required: session auth only.
 
+### 4.12 List Audit Logs
+`GET /me/audit-logs?limit=50`
+
+Auth required: session auth only. User must be `owner` or `admin`.
+
+Audit logs are written for security-sensitive account events:
+- `invitation.created`
+- `invitation.accepted`
+- `master_api_key.created`
+- `master_api_key.revoked`
+- `profile.updated`
+- `profile.preferences_updated`
+- `profile.email_change_requested`
+- `profile.email_changed`
+- `profile.auth_provider_changed`
+
+Response:
+```json
+{
+  "items": [
+    {
+      "event_id": "aud_123",
+      "actor_user_id": "1",
+      "actor_email": "owner@example.com",
+      "actor_auth_type": "session",
+      "action": "master_api_key.created",
+      "target_type": "master_api_key",
+      "target_id": "mak_123",
+      "ip_address": "127.0.0.1",
+      "user_agent": "Mozilla/5.0",
+      "metadata": {
+        "name": "local-postman",
+        "key_prefix": "bgtm_live_2M4x",
+        "expires_at": null
+      },
+      "created_at": "2026-03-05 19:12:00"
+    }
+  ]
+}
+```
+
 ## 5) Tags
 
 ### 5.1 List Tags
@@ -1065,6 +1106,7 @@ Common codes:
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
 - Only owner/admin can generate/list/revoke master API keys.
+- Only owner/admin can list audit logs.
 - Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 
 ## 15) Non-Goals (v1)

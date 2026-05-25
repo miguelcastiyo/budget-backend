@@ -8,6 +8,7 @@ use App\Http\Response;
 use App\Http\Router;
 use App\Controllers\ImportExportController;
 use App\Support\Str;
+use App\Security\AuditLogger;
 
 require __DIR__ . '/../src/bootstrap.php';
 
@@ -104,6 +105,22 @@ assertSame("'-cmd", $csvCell->invoke($importExportController, '-cmd'), 'csv expo
 assertSame("'@cmd", $csvCell->invoke($importExportController, '@cmd'), 'csv export escapes at formulas');
 assertSame("' =cmd", $csvCell->invoke($importExportController, ' =cmd'), 'csv export escapes formulas after leading whitespace');
 assertSame('Groceries', $csvCell->invoke($importExportController, 'Groceries'), 'csv export leaves normal cells unchanged');
+
+$auditReflection = new ReflectionClass(AuditLogger::class);
+$auditLogger = $auditReflection->newInstanceWithoutConstructor();
+$redactMetadata = $auditReflection->getMethod('redactMetadata');
+$redactedMetadata = $redactMetadata->invoke($auditLogger, [
+    'invite_token' => 'secret-token',
+    'password' => 'secret-password',
+    'profile' => [
+        'verification_code' => '123456',
+        'email' => 'owner@example.com',
+    ],
+]);
+assertSame('[redacted]', $redactedMetadata['invite_token'], 'audit logger redacts token metadata');
+assertSame('[redacted]', $redactedMetadata['password'], 'audit logger redacts password metadata');
+assertSame('[redacted]', $redactedMetadata['profile']['verification_code'], 'audit logger redacts nested code metadata');
+assertSame('owner@example.com', $redactedMetadata['profile']['email'], 'audit logger keeps safe nested metadata');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

@@ -15,6 +15,7 @@ tags:
   - name: Auth
   - name: Profile
   - name: ApiKeys
+  - name: AuditLogs
   - name: Tags
   - name: Cards
   - name: Recurring
@@ -476,6 +477,35 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+
+  /me/audit-logs:
+    get:
+      tags: [AuditLogs]
+      summary: List recent audit log events
+      description: Session auth only. Owner/admin access required.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Audit log events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
 
   /me/tags:
     get:
@@ -1490,6 +1520,56 @@ components:
           properties:
             theme:
               $ref: '#/components/schemas/ThemePreference'
+
+    AuditLogEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+        actor_user_id:
+          type: [string, 'null']
+        actor_email:
+          type: [string, 'null']
+          format: email
+        actor_auth_type:
+          type: string
+          enum: [session, api_key, system]
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: [string, 'null']
+        ip_address:
+          type: [string, 'null']
+        user_agent:
+          type: [string, 'null']
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+      required:
+        - event_id
+        - actor_user_id
+        - actor_email
+        - actor_auth_type
+        - action
+        - target_type
+        - target_id
+        - ip_address
+        - user_agent
+        - metadata
+        - created_at
+
+    AuditLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEvent'
+      required: [items]
 
     SettingsSummaryResponse:
       type: object

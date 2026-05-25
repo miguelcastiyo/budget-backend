@@ -12,6 +12,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Mail\InviteEmailTemplate;
 use App\Mail\Mailer;
+use App\Security\AuditLogger;
 use App\Support\Str;
 use PDO;
 
@@ -22,7 +23,8 @@ final class AuthController
         private readonly AuthService $auth,
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
-        private readonly Config $config
+        private readonly Config $config,
+        private readonly AuditLogger $audit
     ) {
     }
 
@@ -130,6 +132,21 @@ SQL;
             throw $e;
         }
 
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            'invitation.created',
+            'invitation',
+            $inviteId,
+            [
+                'email' => strtolower($email),
+                'role' => $role,
+                'invitee_name' => $inviteeName,
+                'expires_at' => $expiresAt,
+            ]
+        );
+
         return Response::json([
             'invite_id' => $inviteId,
             'invitee_name' => $inviteeName,
@@ -217,6 +234,20 @@ SQL;
 
             $userId = (int) $this->pdo->lastInsertId();
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
+            $this->audit->record(
+                $request,
+                $userId,
+                'session',
+                'invitation.accepted',
+                'invitation',
+                (string) $invitation['invite_id'],
+                [
+                    'accepted_user_id' => (string) $userId,
+                    'email' => $email,
+                    'role' => (string) $invitation['role'],
+                    'auth_provider' => 'password',
+                ]
+            );
 
             $session = $this->createSession($userId, $clientType, $request);
 
@@ -287,6 +318,20 @@ SQL;
 
             $userId = (int) $this->pdo->lastInsertId();
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
+            $this->audit->record(
+                $request,
+                $userId,
+                'session',
+                'invitation.accepted',
+                'invitation',
+                (string) $invitation['invite_id'],
+                [
+                    'accepted_user_id' => (string) $userId,
+                    'email' => strtolower((string) $googleIdentity['email']),
+                    'role' => (string) $invitation['role'],
+                    'auth_provider' => 'google',
+                ]
+            );
 
             $session = $this->createSession($userId, $clientType, $request);
 
@@ -392,6 +437,21 @@ SQL;
 
             $this->syncGoogleAvatarUrl((int) $row['id'], $googleAvatarUrl);
             $this->markInvitationAccepted((int) $invitation['id'], (int) $row['id']);
+            $this->audit->record(
+                $request,
+                (int) $row['id'],
+                'session',
+                'invitation.accepted',
+                'invitation',
+                (string) $invitation['invite_id'],
+                [
+                    'accepted_user_id' => (string) $row['id'],
+                    'email' => strtolower((string) $googleIdentity['email']),
+                    'role' => (string) $invitation['role'],
+                    'auth_provider' => 'google',
+                    'existing_user' => true,
+                ]
+            );
             $session = $this->createSession((int) $row['id'], $clientType, $request);
             return $this->buildAuthResponse((int) $row['id'], $session, $clientType);
         }
@@ -412,6 +472,20 @@ SQL;
 
             $userId = (int) $this->pdo->lastInsertId();
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
+            $this->audit->record(
+                $request,
+                $userId,
+                'session',
+                'invitation.accepted',
+                'invitation',
+                (string) $invitation['invite_id'],
+                [
+                    'accepted_user_id' => (string) $userId,
+                    'email' => strtolower((string) $googleIdentity['email']),
+                    'role' => (string) $invitation['role'],
+                    'auth_provider' => 'google',
+                ]
+            );
             $session = $this->createSession($userId, $clientType, $request);
 
             $this->pdo->commit();
@@ -448,7 +522,7 @@ SQL;
         $hash = Str::hashSha256($inviteToken);
 
         $stmt = $this->pdo->prepare(
-            "SELECT id, invitee_name, email, role FROM invitations WHERE invite_token_hash = :token_hash AND status = 'pending' AND expires_at > UTC_TIMESTAMP() LIMIT 1"
+            "SELECT id, invite_id, invitee_name, email, role FROM invitations WHERE invite_token_hash = :token_hash AND status = 'pending' AND expires_at > UTC_TIMESTAMP() LIMIT 1"
         );
         $stmt->execute([':token_hash' => $hash]);
         $invitation = $stmt->fetch();

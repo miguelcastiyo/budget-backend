@@ -11,6 +11,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Mail\Mailer;
+use App\Security\AuditLogger;
 use App\Support\Str;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -23,7 +24,8 @@ final class ProfileController
         private readonly AuthService $auth,
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
-        private readonly Config $config
+        private readonly Config $config,
+        private readonly AuditLogger $audit
     ) {
     }
 
@@ -45,11 +47,28 @@ final class ProfileController
             ]);
         }
 
-        $stmt = $this->pdo->prepare('UPDATE users SET display_name = :display_name WHERE id = :id');
-        $stmt->execute([
-            ':display_name' => $displayName,
-            ':id' => $ctx->userId(),
-        ]);
+        $previousDisplayName = (string) $ctx->user['display_name'];
+        if ($displayName !== $previousDisplayName) {
+            $stmt = $this->pdo->prepare('UPDATE users SET display_name = :display_name WHERE id = :id');
+            $stmt->execute([
+                ':display_name' => $displayName,
+                ':id' => $ctx->userId(),
+            ]);
+
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'profile.updated',
+                'user',
+                (string) $ctx->userId(),
+                [
+                    'fields' => ['display_name'],
+                    'display_name_previous' => $previousDisplayName,
+                    'display_name_next' => $displayName,
+                ]
+            );
+        }
 
         $profile = $this->fetchProfile($ctx->userId());
         return Response::json($profile);
@@ -144,6 +163,21 @@ final class ProfileController
             ':id' => $ctx->userId(),
         ]);
 
+        if ($next !== $current) {
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'profile.preferences_updated',
+                'user',
+                (string) $ctx->userId(),
+                [
+                    'previous' => $current,
+                    'next' => $next,
+                ]
+            );
+        }
+
         return Response::json($next);
     }
 
@@ -197,6 +231,20 @@ final class ProfileController
                 'This code expires in ' . $ttlMinutes . ' minutes.',
             ]);
             $this->mailer->send($newEmail, $subject, $text);
+
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'profile.email_change_requested',
+                'email_change_request',
+                $requestId,
+                [
+                    'current_email' => (string) $ctx->user['email'],
+                    'new_email' => $newEmail,
+                    'expires_at' => $expiresAt,
+                ]
+            );
 
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -254,6 +302,20 @@ final class ProfileController
 
             $updateReq = $this->pdo->prepare("UPDATE email_change_requests SET status = 'verified', verified_at = UTC_TIMESTAMP() WHERE id = :id");
             $updateReq->execute([':id' => $row['id']]);
+
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'profile.email_changed',
+                'user',
+                (string) $ctx->userId(),
+                [
+                    'previous_email' => (string) $ctx->user['email'],
+                    'new_email' => (string) $row['new_email'],
+                    'email_change_id' => $requestId,
+                ]
+            );
 
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -324,6 +386,20 @@ final class ProfileController
                     ':session_id' => $ctx->sessionId,
                 ]);
             }
+
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'profile.auth_provider_changed',
+                'user',
+                (string) $ctx->userId(),
+                [
+                    'previous_auth_provider' => 'password',
+                    'next_auth_provider' => 'google',
+                    'other_sessions_revoked' => $ctx->sessionId !== null,
+                ]
+            );
 
             $this->pdo->commit();
         } catch (\Throwable $e) {

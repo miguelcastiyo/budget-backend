@@ -8,6 +8,7 @@ use App\Auth\AuthService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
+use App\Security\AuditLogger;
 use App\Support\Str;
 use PDO;
 
@@ -15,7 +16,8 @@ final class MasterApiKeyController
 {
     public function __construct(
         private readonly PDO $pdo,
-        private readonly AuthService $auth
+        private readonly AuthService $auth,
+        private readonly AuditLogger $audit
     ) {
     }
 
@@ -80,6 +82,20 @@ final class MasterApiKeyController
         $lookup->execute([':key_id' => $keyId]);
         $row = $lookup->fetch();
 
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            'master_api_key.created',
+            'master_api_key',
+            $keyId,
+            [
+                'name' => $name,
+                'key_prefix' => $keyPrefix,
+                'expires_at' => $row['expires_at'] ?? null,
+            ]
+        );
+
         return Response::json([
             'id' => $keyId,
             'name' => $name,
@@ -115,6 +131,15 @@ final class MasterApiKeyController
         if ($stmt->rowCount() === 0) {
             throw new HttpException(404, 'NOT_FOUND', 'Master API key not found');
         }
+
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            'master_api_key.revoked',
+            'master_api_key',
+            $apiKeyId
+        );
 
         return Response::noContent();
     }

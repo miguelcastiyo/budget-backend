@@ -6,6 +6,7 @@ namespace App\Core;
 
 use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
+use App\Controllers\AuditLogController;
 use App\Controllers\AuthController;
 use App\Controllers\BudgetSettingsController;
 use App\Controllers\HealthController;
@@ -22,6 +23,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Mail\Mailer;
+use App\Security\AuditLogger;
 use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
 use Throwable;
@@ -45,13 +47,15 @@ final class App
         $recurring = new RecurringExpenseService($pdo);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
+        $auditLogger = new AuditLogger($pdo);
         $googleTokenVerifier = new GoogleTokenVerifier($config);
-        $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config);
+        $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
+        $auditLogController = new AuditLogController($pdo, $auth);
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
         $importExportController = new ImportExportController($pdo, $auth, $config);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
-        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config);
-        $masterApiKeyController = new MasterApiKeyController($pdo, $auth);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
+        $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
         $metricsController = new MetricsController($pdo, $auth, $recurring);
@@ -86,6 +90,7 @@ final class App
         $add('GET', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->listKeys($request));
         $add('POST', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->create($request));
         $add('DELETE', '/me/master-api-keys/{api_key_id}', fn(Request $request, array $params) => $masterApiKeyController->revoke($request, $params));
+        $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
         $add('GET', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->get($request));
         $add('PUT', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->upsert($request));
