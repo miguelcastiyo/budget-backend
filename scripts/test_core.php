@@ -10,6 +10,8 @@ use App\Controllers\AuthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
 use App\Core\App;
+use App\Core\Config;
+use App\Monitoring\StructuredLogger;
 use App\Support\Str;
 use App\Security\AuditLogger;
 
@@ -129,10 +131,32 @@ $appReflection = new ReflectionClass(App::class);
 $app = $appReflection->newInstanceWithoutConstructor();
 $normalizePath = $appReflection->getMethod('normalizePath');
 $sessionIdFromToken = $appReflection->getMethod('sessionIdFromToken');
+$requestId = $appReflection->getMethod('requestId');
 assertSame('/me/dashboard', $normalizePath->invoke($app, '/api/v1/me/dashboard'), 'rate limiter normalizes api v1 paths');
 assertSame('/me/dashboard', $normalizePath->invoke($app, '/me/dashboard'), 'rate limiter keeps direct paths');
 assertSame('ses_abc', $sessionIdFromToken->invoke($app, 'ses_abc.secret'), 'rate limiter extracts session id from token');
 assertSame(null, $sessionIdFromToken->invoke($app, 'broken-token'), 'rate limiter rejects malformed session token');
+assertSame('req_client_123', $requestId->invoke($app, new Request('GET', '/health', '', [], [], [], [], ['X-Request-ID' => 'req_client_123'])), 'request id accepts safe client header');
+assertMatches('/^req_[a-f0-9]{24}$/', $requestId->invoke($app, new Request('GET', '/health', '', [], [], [], [], ['X-Request-ID' => 'bad value'])), 'request id rejects unsafe client header');
+
+$configReflection = new ReflectionClass(Config::class);
+$config = $configReflection->newInstanceWithoutConstructor();
+$valuesProperty = $configReflection->getProperty('values');
+$valuesProperty->setValue($config, ['APP_ENV' => 'test']);
+$structuredLogger = new StructuredLogger($config);
+$structuredLog = json_decode($structuredLogger->format('error', 'server_error', 'Failed with token=abc123', [
+    'password' => 'secret-password',
+    'nested' => [
+        'api_key' => 'secret-key',
+        'safe' => 'visible',
+    ],
+]), true);
+assertSame('budget-api', $structuredLog['service'] ?? null, 'structured logger includes service');
+assertSame('test', $structuredLog['environment'] ?? null, 'structured logger includes environment');
+assertSame('Failed with token=[redacted]', $structuredLog['message'] ?? null, 'structured logger redacts sensitive message fragments');
+assertSame('[redacted]', $structuredLog['context']['password'] ?? null, 'structured logger redacts sensitive top-level context');
+assertSame('[redacted]', $structuredLog['context']['nested']['api_key'] ?? null, 'structured logger redacts sensitive nested context');
+assertSame('visible', $structuredLog['context']['nested']['safe'] ?? null, 'structured logger keeps non-sensitive context');
 
 $apiKeyReflection = new ReflectionClass(MasterApiKeyController::class);
 $apiKeyController = $apiKeyReflection->newInstanceWithoutConstructor();

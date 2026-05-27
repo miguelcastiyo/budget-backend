@@ -23,6 +23,8 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Mail\Mailer;
+use App\Monitoring\ErrorReporter;
+use App\Monitoring\StructuredLogger;
 use App\Security\AuditLogger;
 use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
@@ -33,7 +35,8 @@ final class App
     private function __construct(
         private readonly Router $router,
         private readonly Config $config,
-        private readonly RateLimiter $rateLimiter
+        private readonly RateLimiter $rateLimiter,
+        private readonly ErrorReporter $errorReporter
     ) {
     }
 
@@ -47,8 +50,10 @@ final class App
         $recurring = new RecurringExpenseService($pdo);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
+        $structuredLogger = new StructuredLogger($config);
+        $errorReporter = new ErrorReporter($config, $structuredLogger);
         $auditLogger = new AuditLogger($pdo);
-        $googleTokenVerifier = new GoogleTokenVerifier($config);
+        $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $auditLogController = new AuditLogController($pdo, $auth);
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
@@ -59,7 +64,7 @@ final class App
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
         $metricsController = new MetricsController($pdo, $auth, $recurring);
-        $healthController = new HealthController();
+        $healthController = new HealthController($structuredLogger);
 
         $router = new Router();
 
@@ -125,17 +130,19 @@ final class App
         $add('GET', '/me/dashboard', fn(Request $request) => $metricsController->dashboard($request));
         $add('GET', '/me/metrics/insights', fn(Request $request) => $metricsController->insights($request));
 
-        return new self($router, $config, $rateLimiter);
+        return new self($router, $config, $rateLimiter, $errorReporter);
     }
 
     public function handle(Request $request): Response
     {
+        $requestId = $this->requestId($request);
+
         try {
             $this->enforceRateLimits($request);
             $response = $this->router->dispatch($request);
         } catch (HttpException $e) {
             if ($e->status >= 500) {
-                $this->logServerError($request, $e);
+                $this->errorReporter->reportException($request, $e, $e->status, $requestId);
             }
             $response = Response::json([
                 'error' => [
@@ -160,11 +167,12 @@ final class App
                 ];
             }
 
-            $this->logServerError($request, $e);
+            $this->errorReporter->reportException($request, $e, 500, $requestId);
             $response = Response::json($body, 500);
         }
 
-        return $this->applySecurityHeaders($request, $response);
+        return $this->applySecurityHeaders($request, $response)
+            ->withHeader('X-Request-ID', $requestId);
     }
 
     private function enforceRateLimits(Request $request): void
@@ -410,16 +418,13 @@ final class App
         return false;
     }
 
-    private function logServerError(Request $request, Throwable $e): void
+    private function requestId(Request $request): string
     {
-        $message = sprintf(
-            '[budget-api] %s %s failed with %s: %s',
-            $request->method,
-            $request->path,
-            $e::class,
-            $e->getMessage()
-        );
+        $incoming = trim((string) ($request->header('X-Request-ID') ?? ''));
+        if (preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $incoming) === 1) {
+            return $incoming;
+        }
 
-        error_log($message);
+        return 'req_' . bin2hex(random_bytes(12));
     }
 }

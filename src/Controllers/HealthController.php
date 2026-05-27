@@ -6,10 +6,15 @@ namespace App\Controllers;
 
 use App\Http\Request;
 use App\Http\Response;
+use App\Monitoring\StructuredLogger;
 use Throwable;
 
 final class HealthController
 {
+    public function __construct(private readonly ?StructuredLogger $logger = null)
+    {
+    }
+
     public function __invoke(Request $request): Response
     {
         return $this->liveness($request);
@@ -40,7 +45,12 @@ final class HealthController
                 'time' => gmdate('c'),
             ]));
         } catch (Throwable $e) {
-            error_log('[budget-api] readiness check failed with ' . $e::class . ': ' . $e->getMessage());
+            $this->logger?->error('readiness_check_failed', 'Database readiness check failed', [
+                'exception' => [
+                    'class' => $e::class,
+                    'message' => $e->getMessage(),
+                ],
+            ]);
 
             return $this->withSecurityHeaders($request, Response::json([
                 'ok' => false,
@@ -57,6 +67,7 @@ final class HealthController
     private function withSecurityHeaders(Request $request, Response $response): Response
     {
         $response = $response
+            ->withHeader('X-Request-ID', $this->requestId($request))
             ->withHeader('X-Content-Type-Options', 'nosniff')
             ->withHeader('X-Frame-Options', 'DENY')
             ->withHeader('Referrer-Policy', 'no-referrer')
@@ -71,5 +82,15 @@ final class HealthController
         }
 
         return $response;
+    }
+
+    private function requestId(Request $request): string
+    {
+        $incoming = trim((string) ($request->header('X-Request-ID') ?? ''));
+        if (preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $incoming) === 1) {
+            return $incoming;
+        }
+
+        return 'req_' . bin2hex(random_bytes(12));
     }
 }

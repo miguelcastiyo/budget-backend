@@ -97,6 +97,12 @@ APP_DEBUG=true # set to false in prod
 SESSION_COOKIE_SECURE= # true|false, empty = auto by APP_ENV
 TRUST_PROXY_HEADERS=false # true behind trusted reverse proxy
 ```
+Configure backend error reporting:
+```bash
+ERROR_ALERT_WEBHOOK_URL= # optional Slack, Discord, or generic webhook URL for 5xx exceptions
+ERROR_ALERT_WEBHOOK_FORMAT=json # json|slack|discord
+ERROR_ALERT_TIMEOUT_SECONDS=2
+```
 Configure email delivery:
 ```bash
 MAIL_TRANSPORT=log # use `resend` for real delivery
@@ -196,6 +202,9 @@ curl http://localhost:8000/api/v1/ready
 - Use the workspace runbook at `../docs/production-health.md` to triage `curl 28` timeouts, frontend infinite loading, and Lightsail service failures before rebooting the instance when possible.
 - `/api/v1/health` is a lightweight liveness check and does not connect to MariaDB.
 - `/api/v1/ready` is a readiness check and returns `503` if MariaDB cannot be reached.
+- Backend 5xx exceptions are written as structured JSON logs with `event=server_error`, a stable `fingerprint`, and `request_id`.
+- API responses, including health/readiness responses, include `X-Request-ID`; use that value to find the matching structured log entry.
+- Set `ERROR_ALERT_WEBHOOK_URL` in production to alert on backend 5xx exceptions independently of scheduled health checks. Use `ERROR_ALERT_WEBHOOK_FORMAT=slack`, `discord`, or `json` to match the target webhook.
 
 ## Google auth
 Google endpoints now require a real Google ID token (`google_id_token`).
@@ -220,6 +229,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
 - CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.
 - Security headers are attached to API responses (`X-Content-Type-Options`, `X-Frame-Options`, CSP, etc.). HSTS is added on HTTPS requests.
+- Backend server errors use structured JSON logs and can send optional webhook alerts when `ERROR_ALERT_WEBHOOK_URL` is configured.
 - In local development with `MAIL_TRANSPORT=log`, check `storage/mail.log` for invite tokens and verification codes.
 - Tag payloads/responses include optional `icon_key` (`null` allowed) with an allow-list enforced by backend validation.
 - Transaction payloads/responses include `is_split` (boolean, default `false`); list/export support `is_split=split|not_split`.

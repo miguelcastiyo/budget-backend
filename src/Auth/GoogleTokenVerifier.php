@@ -6,6 +6,7 @@ namespace App\Auth;
 
 use App\Core\Config;
 use App\Http\HttpException;
+use App\Monitoring\StructuredLogger;
 
 final class GoogleTokenVerifier
 {
@@ -14,8 +15,15 @@ final class GoogleTokenVerifier
     /** @var list<string> */
     private array $allowedClientIds;
 
-    public function __construct(private readonly Config $config)
+    private readonly Config $config;
+
+    private readonly StructuredLogger $logger;
+
+    public function __construct(Config $config, ?StructuredLogger $logger = null)
     {
+        $this->config = $config;
+        $this->logger = $logger ?? new StructuredLogger($config);
+
         $raw = trim((string) $this->config->get('GOOGLE_CLIENT_IDS', ''));
         $parts = array_map('trim', explode(',', $raw));
         $this->allowedClientIds = array_values(array_filter($parts, static fn(string $v): bool => $v !== ''));
@@ -189,11 +197,13 @@ final class GoogleTokenVerifier
             }
         } catch (HttpException $e) {
             if ($this->cacheCanBeUsedStale($cache) && isset($cache['certs'][$kid]) && is_string($cache['certs'][$kid])) {
-                error_log(sprintf(
-                    '[budget-api] Using stale Google signing certificate cache for kid=%s after refresh failure: %s',
-                    $kid,
-                    $e->getMessage()
-                ));
+                $this->logger->warning('google_certs_stale_cache_used', 'Using stale Google signing certificate cache after refresh failure', [
+                    'kid' => $kid,
+                    'refresh_error' => [
+                        'code' => $e->errorCode,
+                        'message' => $e->getMessage(),
+                    ],
+                ]);
                 return $cache['certs'][$kid];
             }
 
@@ -201,10 +211,9 @@ final class GoogleTokenVerifier
         }
 
         if ($this->cacheCanBeUsedStale($cache) && isset($cache['certs'][$kid]) && is_string($cache['certs'][$kid])) {
-            error_log(sprintf(
-                '[budget-api] Using stale Google signing certificate cache for unknown refreshed kid=%s',
-                $kid
-            ));
+            $this->logger->warning('google_certs_stale_cache_used', 'Using stale Google signing certificate cache for unknown refreshed key id', [
+                'kid' => $kid,
+            ]);
             return $cache['certs'][$kid];
         }
 
@@ -319,32 +328,29 @@ final class GoogleTokenVerifier
         $curlError = curl_error($ch);
 
         if ($body === false) {
-            error_log(sprintf(
-                '[budget-api] Google certificate fetch failed (errno=%d, http_code=%d): %s',
-                $curlErrno,
-                $httpCode,
-                $curlError
-            ));
+            $this->logger->error('google_certs_fetch_failed', 'Google certificate fetch failed', [
+                'curl_errno' => $curlErrno,
+                'http_code' => $httpCode,
+                'curl_error' => $curlError,
+            ]);
             curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate fetch failed: ' . $curlError);
         }
 
         $json = json_decode($body, true);
         if (!is_array($json)) {
-            error_log(sprintf(
-                '[budget-api] Google certificate fetch returned invalid JSON (http_code=%d, body_prefix=%s)',
-                $httpCode,
-                substr($body, 0, 200)
-            ));
+            $this->logger->error('google_certs_invalid_json', 'Google certificate fetch returned invalid JSON', [
+                'http_code' => $httpCode,
+                'body_prefix' => substr($body, 0, 200),
+            ]);
             curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate fetch returned invalid JSON');
         }
 
         if ($httpCode >= 400) {
-            error_log(sprintf(
-                '[budget-api] Google certificate fetch failed with http_code=%d',
-                $httpCode
-            ));
+            $this->logger->error('google_certs_http_error', 'Google certificate fetch returned an error response', [
+                'http_code' => $httpCode,
+            ]);
             curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate service unavailable');
         }
