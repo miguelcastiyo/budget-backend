@@ -110,15 +110,15 @@ SELECT *
 FROM (
   SELECT
     ci.id AS run_id,
-    CONCAT('import_', ci.id) AS id,
-    'import' AS type,
+    CAST(CONCAT('import_', ci.id) AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS id,
+    CAST('import' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS type,
     CASE
-      WHEN ci.invalid_rows = 0 THEN 'completed'
-      WHEN ci.valid_rows > 0 AND ci.invalid_rows > 0 THEN 'partial'
-      ELSE 'failed'
+      WHEN ci.invalid_rows = 0 THEN CAST('completed' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+      WHEN ci.valid_rows > 0 AND ci.invalid_rows > 0 THEN CAST('partial' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+      ELSE CAST('failed' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
     END AS status,
     ci.created_at,
-    ci.source_filename,
+    CAST(ci.source_filename AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS source_filename,
     NULL AS date_from,
     NULL AS date_to,
     ci.total_rows,
@@ -126,7 +126,7 @@ FROM (
     ci.imported_rows,
     ci.duplicate_rows,
     ci.invalid_rows,
-    ci.error_summary
+    CAST(ci.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary
   FROM csv_import_runs ci
   WHERE ci.user_id = :import_user_id
     AND ci.mode = 'commit'
@@ -135,11 +135,11 @@ FROM (
 
   SELECT
     ce.id AS run_id,
-    CONCAT('export_', ce.id) AS id,
-    'export' AS type,
-    ce.status,
+    CAST(CONCAT('export_', ce.id) AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS id,
+    CAST('export' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS type,
+    CAST(ce.status AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS status,
     ce.created_at,
-    NULL AS source_filename,
+    CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS source_filename,
     ce.date_from,
     ce.date_to,
     ce.total_rows,
@@ -147,7 +147,7 @@ FROM (
     NULL AS imported_rows,
     NULL AS duplicate_rows,
     NULL AS invalid_rows,
-    ce.error_summary
+    CAST(ce.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary
   FROM csv_export_runs ce
   WHERE ce.user_id = :export_user_id
 ) runs
