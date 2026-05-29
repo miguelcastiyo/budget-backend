@@ -23,6 +23,7 @@ tags:
   - name: Transactions
   - name: Metrics
   - name: ImportExport
+  - name: DataRuns
 paths:
   /health:
     get:
@@ -1108,6 +1109,31 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/data-runs:
+    get:
+      tags: [DataRuns]
+      summary: List recent import/export activity
+      description: Returns recent committed CSV imports and CSV exports for the authenticated user. Export records are activity-only and do not include saved CSV files.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of activity records to return. Values are clamped to 1..100.
+      responses:
+        '200':
+          description: Recent data runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataRunsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1393,7 +1419,6 @@ components:
           format: date-time
         created_at:
           type: string
-          format: date-time
         accepted_at:
           type: [string, 'null']
           format: date-time
@@ -2568,6 +2593,70 @@ components:
           items:
             $ref: '#/components/schemas/CsvImportErrorItem'
       required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors_truncated, max_returned_errors, errors]
+
+    DataRunItem:
+      type: object
+      properties:
+        id:
+          type: string
+          examples: [import_123, export_45]
+        type:
+          type: string
+          enum: [import, export]
+        status:
+          type: string
+          enum: [started, completed, partial, failed]
+        created_at:
+          type: string
+          format: date-time
+        source_filename:
+          type: [string, 'null']
+        date_from:
+          type: [string, 'null']
+          format: date
+        date_to:
+          type: [string, 'null']
+          format: date
+        total_rows:
+          type: integer
+          minimum: 0
+        valid_rows:
+          type: [integer, 'null']
+          minimum: 0
+        imported_rows:
+          type: [integer, 'null']
+          minimum: 0
+        duplicate_rows:
+          type: [integer, 'null']
+          minimum: 0
+        invalid_rows:
+          type: [integer, 'null']
+          minimum: 0
+        error_summary:
+          type: [string, 'null']
+      required:
+        - id
+        - type
+        - status
+        - created_at
+        - source_filename
+        - date_from
+        - date_to
+        - total_rows
+        - valid_rows
+        - imported_rows
+        - duplicate_rows
+        - invalid_rows
+        - error_summary
+
+    DataRunsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataRunItem'
+      required: [items]
 
     ErrorDetail:
       type: object

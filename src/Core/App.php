@@ -124,6 +124,7 @@ final class App
 
         $add('GET', '/me/transactions/export.csv', fn(Request $request) => $importExportController->exportCsv($request));
         $add('POST', '/me/transactions/import.csv', fn(Request $request) => $importExportController->importCsv($request));
+        $add('GET', '/me/data-runs', fn(Request $request) => $importExportController->listDataRuns($request));
 
         $add('GET', '/me/metrics/tags', fn(Request $request) => $metricsController->tags($request));
         $add('GET', '/me/metrics/categories', fn(Request $request) => $metricsController->categories($request));

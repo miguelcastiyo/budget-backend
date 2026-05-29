@@ -110,6 +110,53 @@ assertSame("'-cmd", $csvCell->invoke($importExportController, '-cmd'), 'csv expo
 assertSame("'@cmd", $csvCell->invoke($importExportController, '@cmd'), 'csv export escapes at formulas');
 assertSame("' =cmd", $csvCell->invoke($importExportController, ' =cmd'), 'csv export escapes formulas after leading whitespace');
 assertSame('Groceries', $csvCell->invoke($importExportController, 'Groceries'), 'csv export leaves normal cells unchanged');
+$clampedDataRunsLimit = $importExportReflection->getMethod('clampedDataRunsLimit');
+assertSame(50, $clampedDataRunsLimit->invoke($importExportController, null), 'data runs limit defaults to 50');
+assertSame(1, $clampedDataRunsLimit->invoke($importExportController, '0'), 'data runs limit clamps minimum');
+assertSame(100, $clampedDataRunsLimit->invoke($importExportController, '500'), 'data runs limit clamps maximum');
+assertSame(25, $clampedDataRunsLimit->invoke($importExportController, '25'), 'data runs limit accepts in-range values');
+$dataRunItem = $importExportReflection->getMethod('dataRunItem');
+$importRunItem = $dataRunItem->invoke($importExportController, [
+    'id' => 'import_123',
+    'type' => 'import',
+    'status' => 'partial',
+    'created_at' => '2026-05-29 12:00:00',
+    'source_filename' => 'transactions.csv',
+    'date_from' => null,
+    'date_to' => null,
+    'total_rows' => '120',
+    'valid_rows' => '110',
+    'imported_rows' => '108',
+    'duplicate_rows' => '2',
+    'invalid_rows' => '10',
+    'error_summary' => 'Validated 110 row(s), but 10 row(s) failed validation.',
+]);
+assertSame('import_123', $importRunItem['id'], 'data runs import item keeps stable prefixed id');
+assertSame('import', $importRunItem['type'], 'data runs import item keeps type');
+assertSame('partial', $importRunItem['status'], 'data runs import item keeps normalized partial status');
+assertSame(120, $importRunItem['total_rows'], 'data runs import item casts total rows');
+assertSame(108, $importRunItem['imported_rows'], 'data runs import item casts imported rows');
+assertSame(null, $importRunItem['date_from'], 'data runs import item has no date range');
+$exportRunItem = $dataRunItem->invoke($importExportController, [
+    'id' => 'export_45',
+    'type' => 'export',
+    'status' => 'completed',
+    'created_at' => '2026-05-29 12:05:00',
+    'source_filename' => null,
+    'date_from' => '2026-01-01',
+    'date_to' => '2026-03-31',
+    'total_rows' => '240',
+    'valid_rows' => null,
+    'imported_rows' => null,
+    'duplicate_rows' => null,
+    'invalid_rows' => null,
+    'error_summary' => null,
+]);
+assertSame('export_45', $exportRunItem['id'], 'data runs export item keeps stable prefixed id');
+assertSame('export', $exportRunItem['type'], 'data runs export item keeps type');
+assertSame('2026-01-01', $exportRunItem['date_from'], 'data runs export item keeps date_from');
+assertSame(null, $exportRunItem['valid_rows'], 'data runs export item has null import counters');
+assertSame(240, $exportRunItem['total_rows'], 'data runs export item casts total rows');
 
 $auditReflection = new ReflectionClass(AuditLogger::class);
 $auditLogger = $auditReflection->newInstanceWithoutConstructor();

@@ -31,7 +31,8 @@ final class ImportExportController
     public function exportCsv(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
-        [$whereSql, $params] = $this->buildFilterWhere($request->query, $ctx->userId());
+        [$dateFrom, $dateTo] = $this->resolveDateRange($request->query);
+        [$whereSql, $params] = $this->buildFilterWhere($request->query, $ctx->userId(), [$dateFrom, $dateTo]);
 
         $sql = <<<'SQL'
 SELECT
@@ -57,35 +58,115 @@ SQL;
         }
         $stmt->execute();
 
+        $exportRunId = $this->recordExportRun($ctx->userId(), $dateFrom, $dateTo);
         $filename = 'transactions_' . gmdate('Ymd_His') . '.csv';
 
-        return Response::stream(function () use ($stmt): void {
+        return Response::stream(function () use ($stmt, $exportRunId): void {
             $stream = fopen('php://output', 'w');
             if ($stream === false) {
-                return;
+                $this->completeExportRun($exportRunId, 'failed', 0, 'Could not open output stream');
+                throw new \RuntimeException('Could not open output stream');
             }
 
-            fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at'], ',', '"', '\\');
+            $totalRows = 0;
+            try {
+                fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at'], ',', '"', '\\');
 
-            foreach ($stmt as $row) {
-                fputcsv($stream, [
-                    $this->csvCell((string) $row['transaction_date']),
-                    $this->csvCell((string) $row['expense']),
-                    $this->csvCell($this->fmt((string) $row['amount'])),
-                    $this->csvCell((string) $row['category']),
-                    $this->csvCell(((int) $row['is_split']) === 1 ? 'true' : 'false'),
-                    $this->csvCell((string) $row['tag_name']),
-                    $this->csvCell($row['card_name'] === null ? '' : (string) $row['card_name']),
-                    $this->csvCell((string) $row['created_at']),
-                    $this->csvCell((string) $row['updated_at']),
-                ], ',', '"', '\\');
+                foreach ($stmt as $row) {
+                    fputcsv($stream, [
+                        $this->csvCell((string) $row['transaction_date']),
+                        $this->csvCell((string) $row['expense']),
+                        $this->csvCell($this->fmt((string) $row['amount'])),
+                        $this->csvCell((string) $row['category']),
+                        $this->csvCell(((int) $row['is_split']) === 1 ? 'true' : 'false'),
+                        $this->csvCell((string) $row['tag_name']),
+                        $this->csvCell($row['card_name'] === null ? '' : (string) $row['card_name']),
+                        $this->csvCell((string) $row['created_at']),
+                        $this->csvCell((string) $row['updated_at']),
+                    ], ',', '"', '\\');
+                    $totalRows++;
+                }
+
+                $this->completeExportRun($exportRunId, 'completed', $totalRows);
+            } catch (\Throwable $e) {
+                $this->completeExportRun($exportRunId, 'failed', $totalRows, $this->shortErrorSummary($e->getMessage()));
+                throw $e;
+            } finally {
+                fclose($stream);
             }
-
-            fclose($stream);
         }, 200, [
             'Content-Type' => 'text/csv; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    public function listDataRuns(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $limit = $this->clampedDataRunsLimit($request->query['limit'] ?? null);
+
+        $sql = <<<'SQL'
+SELECT *
+FROM (
+  SELECT
+    ci.id AS run_id,
+    CONCAT('import_', ci.id) AS id,
+    'import' AS type,
+    CASE
+      WHEN ci.invalid_rows = 0 THEN 'completed'
+      WHEN ci.valid_rows > 0 AND ci.invalid_rows > 0 THEN 'partial'
+      ELSE 'failed'
+    END AS status,
+    ci.created_at,
+    ci.source_filename,
+    NULL AS date_from,
+    NULL AS date_to,
+    ci.total_rows,
+    ci.valid_rows,
+    ci.imported_rows,
+    ci.duplicate_rows,
+    ci.invalid_rows,
+    ci.error_summary
+  FROM csv_import_runs ci
+  WHERE ci.user_id = :import_user_id
+    AND ci.mode = 'commit'
+
+  UNION ALL
+
+  SELECT
+    ce.id AS run_id,
+    CONCAT('export_', ce.id) AS id,
+    'export' AS type,
+    ce.status,
+    ce.created_at,
+    NULL AS source_filename,
+    ce.date_from,
+    ce.date_to,
+    ce.total_rows,
+    NULL AS valid_rows,
+    NULL AS imported_rows,
+    NULL AS duplicate_rows,
+    NULL AS invalid_rows,
+    ce.error_summary
+  FROM csv_export_runs ce
+  WHERE ce.user_id = :export_user_id
+) runs
+ORDER BY created_at DESC, run_id DESC
+LIMIT :limit
+SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindValue(':import_user_id', $ctx->userId(), PDO::PARAM_INT);
+        $stmt->bindValue(':export_user_id', $ctx->userId(), PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $items[] = $this->dataRunItem($row);
+        }
+
+        return Response::json(['items' => $items]);
     }
 
     public function importCsv(Request $request): Response
@@ -576,6 +657,99 @@ SQL;
         ]);
     }
 
+    private function recordExportRun(int $userId, ?string $dateFrom, ?string $dateTo): int
+    {
+        $sql = <<<'SQL'
+INSERT INTO csv_export_runs (
+  user_id,
+  status,
+  date_from,
+  date_to,
+  total_rows
+)
+VALUES (
+  :user_id,
+  'started',
+  :date_from,
+  :date_to,
+  0
+)
+SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':date_from' => $dateFrom,
+            ':date_to' => $dateTo,
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function completeExportRun(int $exportRunId, string $status, int $totalRows, ?string $errorSummary = null): void
+    {
+        $sql = <<<'SQL'
+UPDATE csv_export_runs
+SET
+  status = :status,
+  total_rows = :total_rows,
+  error_summary = :error_summary,
+  completed_at = UTC_TIMESTAMP()
+WHERE id = :id
+SQL;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':id' => $exportRunId,
+                ':status' => $status,
+                ':total_rows' => $totalRows,
+                ':error_summary' => $errorSummary,
+            ]);
+        } catch (\Throwable) {
+            // Preserve the CSV download path if the activity update fails after streaming starts.
+        }
+    }
+
+    private function clampedDataRunsLimit(mixed $value): int
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return 50;
+        }
+
+        return min(100, max(1, (int) $value));
+    }
+
+    /** @param array<string,mixed> $row */
+    private function dataRunItem(array $row): array
+    {
+        return [
+            'id' => (string) $row['id'],
+            'type' => (string) $row['type'],
+            'status' => (string) $row['status'],
+            'created_at' => (string) $row['created_at'],
+            'source_filename' => $row['source_filename'] !== null ? (string) $row['source_filename'] : null,
+            'date_from' => $row['date_from'] !== null ? (string) $row['date_from'] : null,
+            'date_to' => $row['date_to'] !== null ? (string) $row['date_to'] : null,
+            'total_rows' => (int) $row['total_rows'],
+            'valid_rows' => $row['valid_rows'] !== null ? (int) $row['valid_rows'] : null,
+            'imported_rows' => $row['imported_rows'] !== null ? (int) $row['imported_rows'] : null,
+            'duplicate_rows' => $row['duplicate_rows'] !== null ? (int) $row['duplicate_rows'] : null,
+            'invalid_rows' => $row['invalid_rows'] !== null ? (int) $row['invalid_rows'] : null,
+            'error_summary' => $row['error_summary'] !== null ? (string) $row['error_summary'] : null,
+        ];
+    }
+
+    private function shortErrorSummary(string $message): string
+    {
+        $summary = trim($message);
+        if ($summary === '') {
+            return 'Export failed';
+        }
+
+        return mb_substr($summary, 0, 1000);
+    }
+
     private function buildImportFingerprint(
         string $date,
         string $amount,
@@ -732,9 +906,9 @@ SQL;
     }
 
     /** @param array<string,mixed> $query */
-    private function buildFilterWhere(array $query, int $userId): array
+    private function buildFilterWhere(array $query, int $userId, ?array $resolvedDateRange = null): array
     {
-        [$dateFrom, $dateTo] = $this->resolveDateRange($query);
+        [$dateFrom, $dateTo] = $resolvedDateRange ?? $this->resolveDateRange($query);
 
         $where = ['t.user_id = :user_id', 't.deleted_at IS NULL'];
         $params = [':user_id' => $userId];

@@ -50,6 +50,7 @@
 - CSV flows:
   - `GET /api/v1/me/transactions/export.csv`
   - `POST /api/v1/me/transactions/import.csv` (`mode=dry_run|commit`, multipart with `file`)
+  - `GET /api/v1/me/data-runs?limit=50`
 - Metrics flows:
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
   - `GET /api/v1/me/metrics/categories?month=YYYY-MM`

@@ -1131,7 +1131,55 @@ Response `200`:
 }
 ```
 
-## 13) Standard Errors
+## 13) Data Runs
+
+### 13.1 List Recent Data Runs
+`GET /me/data-runs?limit=50`
+
+Returns recent committed CSV imports and CSV exports for the authenticated user. Dry-run imports are recorded internally but excluded from this activity list. Export records are activity-only and do not include saved CSV files or re-download links.
+
+Query:
+- `limit`: optional integer, default `50`, clamped to `1..100`.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "id": "import_123",
+      "type": "import",
+      "status": "completed",
+      "created_at": "2026-05-29 12:00:00",
+      "source_filename": "transactions.csv",
+      "date_from": null,
+      "date_to": null,
+      "total_rows": 120,
+      "valid_rows": 120,
+      "imported_rows": 118,
+      "duplicate_rows": 2,
+      "invalid_rows": 0,
+      "error_summary": null
+    },
+    {
+      "id": "export_45",
+      "type": "export",
+      "status": "completed",
+      "created_at": "2026-05-29 12:05:00",
+      "source_filename": null,
+      "date_from": "2026-01-01",
+      "date_to": "2026-03-31",
+      "total_rows": 240,
+      "valid_rows": null,
+      "imported_rows": null,
+      "duplicate_rows": null,
+      "invalid_rows": null,
+      "error_summary": null
+    }
+  ]
+}
+```
+
+## 14) Standard Errors
 
 Error shape:
 ```json
@@ -1155,7 +1203,7 @@ Common codes:
 - `RATE_LIMITED` (`429`)
 - `INTERNAL_ERROR` (`500`)
 
-## 14) Rate Limits
+## 15) Rate Limits
 
 Rate limited endpoints return `429 RATE_LIMITED`.
 
@@ -1185,7 +1233,7 @@ Sensitive authenticated flows are limited by credential/session identity plus a 
 
 Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in `.env.example`.
 
-## 15) Authorization Rules
+## 16) Authorization Rules
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
