@@ -200,7 +200,7 @@ curl http://localhost:8000/api/v1/ready
 - Override production URLs with GitHub Actions variables:
   - `PROD_FRONTEND_URL`
   - `PROD_BACKEND_URL`
-- Use the workspace runbook at `../docs/production-health.md` to triage `curl 28` timeouts, frontend infinite loading, and Lightsail service failures before rebooting the instance when possible.
+- Use the workspace runbook at `../docs/operations/production-health.md` to triage `curl 28` timeouts, frontend infinite loading, and Lightsail service failures before rebooting the instance when possible.
 - `/api/v1/health` is a lightweight liveness check and does not connect to MariaDB.
 - `/api/v1/ready` is a readiness check and returns `503` if MariaDB cannot be reached.
 - Backend 5xx exceptions are written as structured JSON logs with `event=server_error`, a stable `fingerprint`, and `request_id`.
@@ -240,9 +240,9 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - `GET /me/preferences` and `PATCH /me/preferences` are the dedicated account-preferences endpoints. The frontend dark mode toggle now persists through this API instead of browser-only storage.
 - `GET /me/settings-summary` returns the Settings landing-page summary in one request so the frontend does not load all transactions to calculate account stats.
 - Recurring expense rules are generated once per month into normal transaction rows (month-based generation, current/past months only), with billing date clamped for short months.
-- API/model changes must update `api_v1.md` and `openapi.yaml` in the same change set.
+- API/model changes must update `openapi.yaml` in the same change set; `api_v1.md` is secondary human-readable backend context.
 - Contract/spec docs live in:
   - `project_info.md`
   - `api_v1.md`
   - `openapi.yaml`
-- Production deployment steps for the frontend + backend stack live in the workspace root at `DEPLOYMENT.md`.
+- Production deployment steps for the frontend + backend stack live at `../docs/operations/deployment.md`.
