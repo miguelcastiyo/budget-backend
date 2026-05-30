@@ -355,6 +355,7 @@ CREATE TABLE transactions (
   UNIQUE KEY uq_transactions_import_dedupe (user_id, import_fingerprint),
   KEY idx_transactions_user_date (user_id, transaction_date),
   KEY idx_transactions_user_deleted_date_id (user_id, deleted_at, transaction_date, id),
+  KEY idx_transactions_user_expense (user_id, expense),
   KEY idx_transactions_user_category (user_id, category),
   KEY idx_transactions_user_tag (user_id, tag_id),
   KEY idx_transactions_user_card (user_id, card_id),

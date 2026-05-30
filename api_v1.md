@@ -898,6 +898,45 @@ Response `200`:
 }
 ```
 
+### 9.5 Transaction Suggestions
+`GET /me/transactions/suggestions`
+
+Query params:
+- `q=trader` (required, 2-80 characters)
+- `limit=5` (optional, 1-10, default `5`)
+
+Rules:
+- Suggestions are derived from the authenticated user's prior non-deleted transactions.
+- Matching checks normalized expense text and prefers exact matches, then prefix matches, then contains matches.
+- Suggested category, tag, card, and split state come from the most common prior setup, with recency as the tiebreaker.
+- Inactive or deleted tags/cards are not returned.
+- No AI, templates, or new merchant table are used for v1 suggestions.
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "expense": "Trader Joe's",
+      "category": "needs",
+      "tag": {
+        "id": "12",
+        "name": "Groceries",
+        "icon_key": "shopping_cart"
+      },
+      "card": {
+        "id": "4",
+        "name": "Chase Sapphire"
+      },
+      "is_split": false,
+      "confidence": "high",
+      "last_used_at": "2026-05-22",
+      "usage_count": 8
+    }
+  ]
+}
+```
+
 ## 10) Metrics
 
 ### 9.1 Tag Spend Metrics (Monthly)

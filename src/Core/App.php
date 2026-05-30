@@ -118,6 +118,7 @@ final class App
         $add('DELETE', '/me/recurring-expenses/{recurring_expense_id}', fn(Request $request, array $params) => $recurringExpenseController->delete($request, $params));
 
         $add('GET', '/me/transactions', fn(Request $request) => $transactionController->list($request));
+        $add('GET', '/me/transactions/suggestions', fn(Request $request) => $transactionController->suggestions($request));
         $add('POST', '/me/transactions', fn(Request $request) => $transactionController->create($request));
         $add('PATCH', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->update($request, $params));
         $add('DELETE', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->delete($request, $params));

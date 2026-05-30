@@ -929,6 +929,39 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/transactions/suggestions:
+    get:
+      tags: [Transactions]
+      summary: Suggest transaction setup from prior matching expenses
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 80
+          description: Merchant or description text to match against previous transaction expenses.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+      responses:
+        '200':
+          description: Suggested transaction setups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuggestionsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/transactions/{transaction_id}:
     patch:
       tags: [Transactions]
@@ -2310,6 +2343,41 @@ components:
           type: integer
           minimum: 0
       required: [total_spent, count, avg_transaction, split_count]
+
+    TransactionSuggestion:
+      type: object
+      properties:
+        expense:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        tag:
+          $ref: '#/components/schemas/Tag'
+        card:
+          anyOf:
+            - $ref: '#/components/schemas/Card'
+            - type: 'null'
+        is_split:
+          type: boolean
+        confidence:
+          type: string
+          enum: [high, medium, low]
+        last_used_at:
+          type: string
+          format: date
+        usage_count:
+          type: integer
+          minimum: 1
+      required: [expense, category, tag, card, is_split, confidence, last_used_at, usage_count]
+
+    TransactionSuggestionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionSuggestion'
+      required: [items]
 
     TagMetricsItem:
       type: object

@@ -15,6 +15,7 @@ use PDOException;
 final class TransactionController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
+    private const SUGGESTION_CANDIDATE_LIMIT = 300;
 
     public function __construct(
         private readonly PDO $pdo,
@@ -213,6 +214,62 @@ SQL;
         return Response::json($this->fetchTransaction($ctx->userId(), (int) $this->pdo->lastInsertId()), 201);
     }
 
+    public function suggestions(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $query = $this->validatedSuggestionQuery($request->query['q'] ?? null);
+        $limit = $this->validatedSuggestionLimit($request->query['limit'] ?? null);
+        $lowerQuery = mb_strtolower($query);
+
+        $sql = <<<'SQL'
+SELECT
+  t.id,
+  t.expense,
+  t.category,
+  t.is_split,
+  t.transaction_date,
+  tg.id AS tag_id,
+  tg.name AS tag_name,
+  tg.icon_key AS tag_icon_key,
+  c.id AS card_id,
+  c.name AS card_name
+FROM transactions t
+JOIN tags tg ON tg.id = t.tag_id
+  AND tg.user_id = t.user_id
+  AND tg.is_active = 1
+  AND tg.deleted_at IS NULL
+LEFT JOIN cards c ON c.id = t.card_id
+  AND c.user_id = t.user_id
+  AND c.is_active = 1
+  AND c.deleted_at IS NULL
+WHERE t.user_id = :user_id
+  AND t.deleted_at IS NULL
+  AND LOWER(t.expense) LIKE :contains_query
+  AND (t.card_id IS NULL OR c.id IS NOT NULL)
+ORDER BY
+  CASE
+    WHEN LOWER(TRIM(t.expense)) = :exact_query THEN 0
+    WHEN LOWER(TRIM(t.expense)) LIKE :prefix_query THEN 1
+    ELSE 2
+  END,
+  t.transaction_date DESC,
+  t.id DESC
+LIMIT :candidate_limit
+SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindValue(':user_id', $ctx->userId(), PDO::PARAM_INT);
+        $stmt->bindValue(':contains_query', '%' . $lowerQuery . '%');
+        $stmt->bindValue(':exact_query', $lowerQuery);
+        $stmt->bindValue(':prefix_query', $lowerQuery . '%');
+        $stmt->bindValue(':candidate_limit', self::SUGGESTION_CANDIDATE_LIMIT, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return Response::json([
+            'items' => array_slice($this->buildTransactionSuggestions($stmt->fetchAll(), $query), 0, $limit),
+        ]);
+    }
+
     /** @param array{transaction_id:string} $params */
     public function update(Request $request, array $params): Response
     {
@@ -379,6 +436,209 @@ SQL;
             'created_at' => (string) $row['created_at'],
             'updated_at' => (string) $row['updated_at'],
         ];
+    }
+
+    private function validatedSuggestionQuery(mixed $value): string
+    {
+        $query = trim((string) $value);
+        $query = preg_replace('/\s+/', ' ', $query) ?? $query;
+        $length = mb_strlen($query);
+
+        if ($length < 2 || $length > 80) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'q', 'message' => 'must be between 2 and 80 characters'],
+            ]);
+        }
+
+        return $query;
+    }
+
+    private function validatedSuggestionLimit(mixed $value): int
+    {
+        if ($value === null || $value === '') {
+            return 5;
+        }
+
+        if (!ctype_digit((string) $value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'limit', 'message' => 'must be between 1 and 10'],
+            ]);
+        }
+
+        $limit = (int) $value;
+        if ($limit < 1 || $limit > 10) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'limit', 'message' => 'must be between 1 and 10'],
+            ]);
+        }
+
+        return $limit;
+    }
+
+    /** @param list<array<string,mixed>> $rows */
+    private function buildTransactionSuggestions(array $rows, string $query): array
+    {
+        $normalizedQuery = $this->normalizeSuggestionText($query);
+        $groups = [];
+
+        foreach ($rows as $row) {
+            $normalizedExpense = $this->normalizeSuggestionText((string) ($row['expense'] ?? ''));
+            if ($normalizedExpense === '' || !str_contains($normalizedExpense, $normalizedQuery)) {
+                continue;
+            }
+
+            if (!isset($groups[$normalizedExpense])) {
+                $groups[$normalizedExpense] = [
+                    'expense' => (string) $row['expense'],
+                    'usage_count' => 0,
+                    'last_used_at' => (string) $row['transaction_date'],
+                    'last_id' => (int) $row['id'],
+                    'match_rank' => $this->suggestionMatchRank($normalizedExpense, $normalizedQuery),
+                    'categories' => [],
+                    'tags' => [],
+                    'cards' => [],
+                    'splits' => [],
+                ];
+            }
+
+            $group = &$groups[$normalizedExpense];
+            $usedAt = (string) $row['transaction_date'];
+            $rowId = (int) $row['id'];
+            if ($usedAt > $group['last_used_at'] || ($usedAt === $group['last_used_at'] && $rowId > $group['last_id'])) {
+                $group['expense'] = (string) $row['expense'];
+                $group['last_used_at'] = $usedAt;
+                $group['last_id'] = $rowId;
+            }
+
+            $group['usage_count']++;
+            $this->countSuggestionValue($group['categories'], (string) $row['category'], $usedAt, $rowId);
+            $this->countSuggestionValue($group['tags'], (string) $row['tag_id'], $usedAt, $rowId, [
+                'id' => (string) $row['tag_id'],
+                'name' => (string) $row['tag_name'],
+                'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
+            ]);
+            $this->countSuggestionValue($group['cards'], $row['card_id'] === null ? '' : (string) $row['card_id'], $usedAt, $rowId, $row['card_id'] === null ? null : [
+                'id' => (string) $row['card_id'],
+                'name' => (string) $row['card_name'],
+            ]);
+            $this->countSuggestionValue($group['splits'], ((int) $row['is_split']) === 1 ? '1' : '0', $usedAt, $rowId);
+            unset($group);
+        }
+
+        $suggestions = [];
+        foreach ($groups as $group) {
+            $category = $this->bestSuggestionValue($group['categories']);
+            $tag = $this->bestSuggestionValue($group['tags']);
+            $card = $this->bestSuggestionValue($group['cards']);
+            $split = $this->bestSuggestionValue($group['splits']);
+
+            if ($category === null || $tag === null || $split === null) {
+                continue;
+            }
+
+            $suggestions[] = [
+                'expense' => $group['expense'],
+                'category' => $category['value'],
+                'tag' => $tag['payload'],
+                'card' => $card['payload'],
+                'is_split' => $split['value'] === '1',
+                'confidence' => $this->suggestionConfidence((int) $group['match_rank'], (int) $group['usage_count'], max((int) $category['count'], (int) $tag['count'])),
+                'last_used_at' => $group['last_used_at'],
+                'usage_count' => (int) $group['usage_count'],
+                '_rank' => [
+                    'match' => (int) $group['match_rank'],
+                    'usage' => (int) $group['usage_count'],
+                    'last_used_at' => $group['last_used_at'],
+                    'last_id' => (int) $group['last_id'],
+                ],
+            ];
+        }
+
+        usort($suggestions, static function (array $a, array $b): int {
+            $rankA = $a['_rank'];
+            $rankB = $b['_rank'];
+
+            return [$rankA['match'], -$rankA['usage'], $rankB['last_used_at'], -$rankA['last_id']]
+                <=> [$rankB['match'], -$rankB['usage'], $rankA['last_used_at'], -$rankB['last_id']];
+        });
+
+        return array_map(static function (array $suggestion): array {
+            unset($suggestion['_rank']);
+            return $suggestion;
+        }, $suggestions);
+    }
+
+    private function normalizeSuggestionText(string $value): string
+    {
+        $normalized = mb_strtolower(trim($value));
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+    }
+
+    private function suggestionMatchRank(string $normalizedExpense, string $normalizedQuery): int
+    {
+        if ($normalizedExpense === $normalizedQuery) {
+            return 0;
+        }
+
+        if (str_starts_with($normalizedExpense, $normalizedQuery)) {
+            return 1;
+        }
+
+        return 2;
+    }
+
+    /** @param array<string,array{value:string,count:int,last_used_at:string,last_id:int,payload:mixed}> $bucket */
+    private function countSuggestionValue(array &$bucket, string $value, string $usedAt, int $rowId, mixed $payload = null): void
+    {
+        if (!isset($bucket[$value])) {
+            $bucket[$value] = [
+                'value' => $value,
+                'count' => 0,
+                'last_used_at' => $usedAt,
+                'last_id' => $rowId,
+                'payload' => $payload ?? $value,
+            ];
+        }
+
+        $bucket[$value]['count']++;
+        if ($usedAt > $bucket[$value]['last_used_at'] || ($usedAt === $bucket[$value]['last_used_at'] && $rowId > $bucket[$value]['last_id'])) {
+            $bucket[$value]['last_used_at'] = $usedAt;
+            $bucket[$value]['last_id'] = $rowId;
+            $bucket[$value]['payload'] = $payload ?? $value;
+        }
+    }
+
+    /** @param array<string,array{value:string,count:int,last_used_at:string,last_id:int,payload:mixed}> $bucket */
+    private function bestSuggestionValue(array $bucket): ?array
+    {
+        if ($bucket === []) {
+            return null;
+        }
+
+        usort($bucket, static fn(array $a, array $b): int => [
+            -$a['count'],
+            $b['last_used_at'],
+            -$a['last_id'],
+        ] <=> [
+            -$b['count'],
+            $a['last_used_at'],
+            -$b['last_id'],
+        ]);
+
+        return $bucket[0];
+    }
+
+    private function suggestionConfidence(int $matchRank, int $usageCount, int $strongestSetupCount): string
+    {
+        if ($matchRank === 0 && ($usageCount >= 2 || $strongestSetupCount >= 2)) {
+            return 'high';
+        }
+
+        if ($matchRank <= 1 || ($matchRank === 0 && $usageCount === 1)) {
+            return 'medium';
+        }
+
+        return 'low';
     }
 
     /** @param array<string,mixed> $payload */

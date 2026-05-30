@@ -9,6 +9,7 @@ use App\Http\Router;
 use App\Controllers\AuthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
+use App\Controllers\TransactionController;
 use App\Core\App;
 use App\Core\Config;
 use App\Monitoring\StructuredLogger;
@@ -157,6 +158,102 @@ assertSame('export', $exportRunItem['type'], 'data runs export item keeps type')
 assertSame('2026-01-01', $exportRunItem['date_from'], 'data runs export item keeps date_from');
 assertSame(null, $exportRunItem['valid_rows'], 'data runs export item has null import counters');
 assertSame(240, $exportRunItem['total_rows'], 'data runs export item casts total rows');
+
+$transactionReflection = new ReflectionClass(TransactionController::class);
+$transactionController = $transactionReflection->newInstanceWithoutConstructor();
+$validatedSuggestionQuery = $transactionReflection->getMethod('validatedSuggestionQuery');
+assertSame('Trader Joe', $validatedSuggestionQuery->invoke($transactionController, ' Trader   Joe '), 'suggestion query trims and compacts whitespace');
+expectHttpException(
+    fn() => $validatedSuggestionQuery->invoke($transactionController, 'a'),
+    422,
+    'VALIDATION_ERROR',
+    'suggestions reject short query'
+);
+$buildTransactionSuggestions = $transactionReflection->getMethod('buildTransactionSuggestions');
+$suggestions = $buildTransactionSuggestions->invoke($transactionController, [
+    [
+        'id' => '1',
+        'expense' => 'Trader Joe\'s',
+        'category' => 'needs',
+        'is_split' => '0',
+        'transaction_date' => '2026-05-20',
+        'tag_id' => '12',
+        'tag_name' => 'Groceries',
+        'tag_icon_key' => 'shopping_cart',
+        'card_id' => '4',
+        'card_name' => 'Chase Sapphire',
+    ],
+    [
+        'id' => '2',
+        'expense' => 'Trader Joe\'s',
+        'category' => 'needs',
+        'is_split' => '0',
+        'transaction_date' => '2026-05-28',
+        'tag_id' => '12',
+        'tag_name' => 'Groceries',
+        'tag_icon_key' => 'shopping_cart',
+        'card_id' => '4',
+        'card_name' => 'Chase Sapphire',
+    ],
+    [
+        'id' => '3',
+        'expense' => 'Trader Joe\'s Express',
+        'category' => 'wants',
+        'is_split' => '1',
+        'transaction_date' => '2026-05-29',
+        'tag_id' => '8',
+        'tag_name' => 'Dining',
+        'tag_icon_key' => null,
+        'card_id' => null,
+        'card_name' => null,
+    ],
+    [
+        'id' => '4',
+        'expense' => 'Downtown Trader Joe Market',
+        'category' => 'needs',
+        'is_split' => '0',
+        'transaction_date' => '2026-05-30',
+        'tag_id' => '12',
+        'tag_name' => 'Groceries',
+        'tag_icon_key' => 'shopping_cart',
+        'card_id' => '5',
+        'card_name' => 'Debit',
+    ],
+], 'Trader Joe\'s');
+assertSame('Trader Joe\'s', $suggestions[0]['expense'], 'suggestions rank exact match first');
+assertSame('Groceries', $suggestions[0]['tag']['name'], 'suggestions choose most common tag');
+assertSame('needs', $suggestions[0]['category'], 'suggestions choose most common category');
+assertSame('Chase Sapphire', $suggestions[0]['card']['name'], 'suggestions choose most common card');
+assertSame(false, $suggestions[0]['is_split'], 'suggestions choose most common split state');
+assertSame('high', $suggestions[0]['confidence'], 'repeated exact suggestions are high confidence');
+$tieSuggestions = $buildTransactionSuggestions->invoke($transactionController, [
+    [
+        'id' => '10',
+        'expense' => 'Target',
+        'category' => 'needs',
+        'is_split' => '0',
+        'transaction_date' => '2026-05-01',
+        'tag_id' => '12',
+        'tag_name' => 'Groceries',
+        'tag_icon_key' => null,
+        'card_id' => null,
+        'card_name' => null,
+    ],
+    [
+        'id' => '11',
+        'expense' => 'Target',
+        'category' => 'wants',
+        'is_split' => '0',
+        'transaction_date' => '2026-05-30',
+        'tag_id' => '8',
+        'tag_name' => 'Shopping',
+        'tag_icon_key' => null,
+        'card_id' => null,
+        'card_name' => null,
+    ],
+], 'target');
+assertSame('wants', $tieSuggestions[0]['category'], 'suggestions break equal-count category ties by recency');
+assertSame('Shopping', $tieSuggestions[0]['tag']['name'], 'suggestions break equal-count tag ties by recency');
 
 $auditReflection = new ReflectionClass(AuditLogger::class);
 $auditLogger = $auditReflection->newInstanceWithoutConstructor();
