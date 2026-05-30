@@ -609,7 +609,32 @@ Request:
 }
 ```
 
-### 5.3 Update Tag
+### 5.3 Tag Quick Picks
+`GET /me/tags/quick-picks`
+
+Query params:
+- `limit=5` (optional, clamps to `1..10`, default `5`)
+
+Rules:
+- Returns active tags for the authenticated user.
+- Tags used in transaction history are ranked by transaction count, then most recent use, then tag name.
+- If history returns fewer than `limit` tags, remaining slots are filled from active tags alphabetically.
+- Deleted transactions and inactive/deleted tags are excluded.
+
+Response:
+```json
+{
+  "items": [
+    {
+      "id": "12",
+      "name": "Groceries",
+      "icon_key": "shopping_cart"
+    }
+  ]
+}
+```
+
+### 5.4 Update Tag
 `PATCH /me/tags/{tag_id}`
 
 Request:
@@ -620,7 +645,7 @@ Request:
 }
 ```
 
-### 5.4 Delete Tag
+### 5.5 Delete Tag
 `DELETE /me/tags/{tag_id}`
 
 Rules:

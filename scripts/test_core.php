@@ -9,6 +9,7 @@ use App\Http\Router;
 use App\Controllers\AuthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
+use App\Controllers\TaxonomyController;
 use App\Controllers\TransactionController;
 use App\Core\App;
 use App\Core\Config;
@@ -158,6 +159,52 @@ assertSame('export', $exportRunItem['type'], 'data runs export item keeps type')
 assertSame('2026-01-01', $exportRunItem['date_from'], 'data runs export item keeps date_from');
 assertSame(null, $exportRunItem['valid_rows'], 'data runs export item has null import counters');
 assertSame(240, $exportRunItem['total_rows'], 'data runs export item casts total rows');
+
+$taxonomyReflection = new ReflectionClass(TaxonomyController::class);
+$taxonomyController = $taxonomyReflection->newInstanceWithoutConstructor();
+$quickPickLimit = $taxonomyReflection->getMethod('clampedQuickPickLimit');
+assertSame(5, $quickPickLimit->invoke($taxonomyController, null), 'tag quick picks default to five');
+assertSame(1, $quickPickLimit->invoke($taxonomyController, '0'), 'tag quick pick limit clamps minimum');
+assertSame(10, $quickPickLimit->invoke($taxonomyController, '25'), 'tag quick pick limit clamps maximum');
+expectHttpException(
+    fn() => $quickPickLimit->invoke($taxonomyController, 'many'),
+    422,
+    'VALIDATION_ERROR',
+    'tag quick picks reject nonnumeric limit'
+);
+$buildTagQuickPicks = $taxonomyReflection->getMethod('buildTagQuickPicks');
+$quickPicks = $buildTagQuickPicks->invoke($taxonomyController, [
+    [
+        'id' => '3',
+        'name' => 'Coffee',
+        'icon_key' => 'coffee',
+        'usage_count' => '10',
+        'last_used_at' => '2026-05-10',
+    ],
+    [
+        'id' => '2',
+        'name' => 'Dining',
+        'icon_key' => null,
+        'usage_count' => '2',
+        'last_used_at' => '2026-05-29',
+    ],
+    [
+        'id' => '1',
+        'name' => 'Groceries',
+        'icon_key' => 'shopping_cart',
+        'usage_count' => '2',
+        'last_used_at' => '2026-05-29',
+    ],
+], [
+    ['id' => '3', 'name' => 'Coffee', 'icon_key' => 'coffee'],
+    ['id' => '4', 'name' => 'Gas', 'icon_key' => 'car'],
+    ['id' => '5', 'name' => 'Rent', 'icon_key' => 'home'],
+], 5);
+assertSame('3', $quickPicks[0]['id'], 'tag quick picks rank highest transaction count first');
+assertSame('2', $quickPicks[1]['id'], 'tag quick picks break equal-count recency ties by tag name');
+assertSame('1', $quickPicks[2]['id'], 'tag quick picks include same-recency history before fallback tags');
+assertSame('4', $quickPicks[3]['id'], 'tag quick picks fill remaining slots from active tags');
+assertSame('5', $quickPicks[4]['id'], 'tag quick picks keep fallback alphabetical order');
 
 $transactionReflection = new ReflectionClass(TransactionController::class);
 $transactionController = $transactionReflection->newInstanceWithoutConstructor();

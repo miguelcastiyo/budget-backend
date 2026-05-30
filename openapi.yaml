@@ -566,13 +566,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Tag'
-                required: [items]
+                $ref: '#/components/schemas/TagsResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
     post:
@@ -599,6 +593,31 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '409':
           $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/tags/quick-picks:
+    get:
+      tags: [Tags]
+      summary: List most-used tag quick picks
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+      responses:
+        '200':
+          description: Tag quick picks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -1914,6 +1933,15 @@ components:
             - $ref: '#/components/schemas/TagIconKey'
             - type: 'null'
       required: [id, name, icon_key]
+
+    TagsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+      required: [items]
 
     Card:
       type: object

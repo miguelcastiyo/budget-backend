@@ -103,6 +103,7 @@ final class App
         $add('PUT', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->upsert($request));
 
         $add('GET', '/me/tags', fn(Request $request) => $taxonomyController->listTags($request));
+        $add('GET', '/me/tags/quick-picks', fn(Request $request) => $taxonomyController->tagQuickPicks($request));
         $add('POST', '/me/tags', fn(Request $request) => $taxonomyController->createTag($request));
         $add('PATCH', '/me/tags/{tag_id}', fn(Request $request, array $params) => $taxonomyController->updateTag($request, $params));
         $add('DELETE', '/me/tags/{tag_id}', fn(Request $request, array $params) => $taxonomyController->deleteTag($request, $params));

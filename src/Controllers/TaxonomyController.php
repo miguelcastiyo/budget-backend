@@ -50,6 +50,34 @@ final class TaxonomyController
         return Response::json(['items' => $this->listByTable('tags', $ctx->userId())]);
     }
 
+    public function tagQuickPicks(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $limit = $this->clampedQuickPickLimit($request->query['limit'] ?? null);
+
+        $historyStmt = $this->pdo->prepare(
+            'SELECT
+               tg.id,
+               tg.name,
+               tg.icon_key,
+               COUNT(t.id) AS usage_count,
+               MAX(t.transaction_date) AS last_used_at
+             FROM transactions t
+             JOIN tags tg ON tg.id = t.tag_id
+               AND tg.user_id = t.user_id
+               AND tg.is_active = 1
+               AND tg.deleted_at IS NULL
+             WHERE t.user_id = :user_id
+               AND t.deleted_at IS NULL
+             GROUP BY tg.id, tg.name, tg.icon_key'
+        );
+        $historyStmt->execute([':user_id' => $ctx->userId()]);
+
+        return Response::json([
+            'items' => $this->buildTagQuickPicks($historyStmt->fetchAll(), $this->listByTable('tags', $ctx->userId()), $limit),
+        ]);
+    }
+
     public function createTag(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
@@ -128,6 +156,86 @@ final class TaxonomyController
         }
 
         return $items;
+    }
+
+    private function clampedQuickPickLimit(mixed $value): int
+    {
+        if ($value === null || $value === '') {
+            return 5;
+        }
+
+        if (!ctype_digit((string) $value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'limit', 'message' => 'must be an integer'],
+            ]);
+        }
+
+        return min(max((int) $value, 1), 10);
+    }
+
+    /**
+     * @param list<array<string,mixed>> $historyRows
+     * @param list<array<string,mixed>> $fallbackRows
+     * @return list<array<string,mixed>>
+     */
+    private function buildTagQuickPicks(array $historyRows, array $fallbackRows, int $limit): array
+    {
+        usort($historyRows, static function (array $a, array $b): int {
+            $countCompare = (int) ($b['usage_count'] ?? 0) <=> (int) ($a['usage_count'] ?? 0);
+            if ($countCompare !== 0) {
+                return $countCompare;
+            }
+
+            $dateCompare = strcmp((string) ($b['last_used_at'] ?? ''), (string) ($a['last_used_at'] ?? ''));
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+        });
+
+        $items = [];
+        $seen = [];
+
+        foreach ($historyRows as $row) {
+            if (count($items) >= $limit) {
+                break;
+            }
+
+            $id = (string) ($row['id'] ?? '');
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+
+            $items[] = $this->tagItemFromRow($row);
+            $seen[$id] = true;
+        }
+
+        foreach ($fallbackRows as $row) {
+            if (count($items) >= $limit) {
+                break;
+            }
+
+            $id = (string) ($row['id'] ?? '');
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+
+            $items[] = $this->tagItemFromRow($row);
+            $seen[$id] = true;
+        }
+
+        return $items;
+    }
+
+    /** @param array<string,mixed> $row */
+    private function tagItemFromRow(array $row): array
+    {
+        return [
+            'id' => (string) $row['id'],
+            'name' => (string) $row['name'],
+            'icon_key' => $row['icon_key'] === null ? null : (string) $row['icon_key'],
+        ];
     }
 
     /** @return array<string,mixed> */
