@@ -9,45 +9,182 @@ require __DIR__ . '/../src/bootstrap.php';
 
 const MIGRATIONS_TABLE = 'schema_migrations';
 
+$mode = parseCliMode($argv);
+if ($mode === 'help') {
+    echo usage();
+    exit(0);
+}
+
 $config = Config::load(dirname(__DIR__));
 $pdo = Connection::make($config);
 
-ensureMigrationsTable($pdo);
+$state = inspectMigrationState($pdo);
 
-$migrationFiles = migrationFiles();
-$appliedMigrations = appliedMigrations($pdo);
-$schemaInitialized = applicationSchemaExists($pdo);
-
-if (!$schemaInitialized) {
-    applySqlFile($pdo, __DIR__ . '/../schema.sql');
-    markMigrationsApplied($pdo, $migrationFiles);
-    echo "Schema applied successfully.\n";
+if ($mode === 'status') {
+    echo renderStatus($state);
     exit(0);
 }
 
-if ($appliedMigrations === []) {
-    markMigrationsApplied($pdo, $migrationFiles);
-    echo "Existing schema detected; baseline migrations recorded.\n";
+applyMigrations($pdo, $state);
+
+/**
+ * @return 'apply'|'status'|'help'
+ */
+function parseCliMode(array $argv): string
+{
+    $args = array_slice($argv, 1);
+    if ($args === []) {
+        return 'apply';
+    }
+
+    if (count($args) === 1 && ($args[0] === '--help' || $args[0] === '-h')) {
+        return 'help';
+    }
+    if (count($args) === 1 && $args[0] === '--status') {
+        return 'status';
+    }
+
+    fwrite(STDERR, 'Unknown argument(s): ' . implode(' ', $args) . PHP_EOL);
+    fwrite(STDERR, usage());
+    exit(2);
+}
+
+function usage(): string
+{
+    return <<<TXT
+Usage:
+  php scripts/migrate.php            Apply migrations (default)
+  php scripts/migrate.php --status   Show migration status only (no changes)
+  php scripts/migrate.php --help     Show this help
+
+TXT;
+}
+
+/**
+ * @return array{
+ *   schema_exists: bool,
+ *   migrations_table_exists: bool,
+ *   migration_files: list<string>,
+ *   applied_migrations: list<string>,
+ *   pending_migrations: list<string>,
+ *   action_summary: string
+ * }
+ */
+function inspectMigrationState(PDO $pdo): array
+{
+    $schemaExists = applicationSchemaExists($pdo);
+    $migrationsTableExists = migrationsTableExists($pdo);
+    $migrationFiles = migrationFiles();
+    $appliedMigrations = $migrationsTableExists ? appliedMigrations($pdo) : [];
+
+    $pendingMigrations = pendingMigrations($migrationFiles, $appliedMigrations);
+
+    if (!$schemaExists) {
+        $actionSummary = 'would apply schema.sql and mark all migrations applied.';
+    } elseif ($appliedMigrations === []) {
+        $actionSummary = 'would baseline existing schema by marking all migrations applied.';
+    } elseif ($pendingMigrations !== []) {
+        $actionSummary = 'would apply pending migrations in filename order.';
+    } else {
+        $actionSummary = 'no migration action needed.';
+    }
+
+    return [
+        'schema_exists' => $schemaExists,
+        'migrations_table_exists' => $migrationsTableExists,
+        'migration_files' => $migrationFiles,
+        'applied_migrations' => $appliedMigrations,
+        'pending_migrations' => $pendingMigrations,
+        'action_summary' => $actionSummary,
+    ];
+}
+
+/**
+ * @param array{
+ *   schema_exists: bool,
+ *   migrations_table_exists: bool,
+ *   migration_files: list<string>,
+ *   applied_migrations: list<string>,
+ *   pending_migrations: list<string>,
+ *   action_summary: string
+ * } $state
+ */
+function renderStatus(array $state): string
+{
+    $lines = [];
+    $lines[] = 'Application schema exists: ' . ($state['schema_exists'] ? 'yes' : 'no');
+    $lines[] = 'schema_migrations exists: ' . ($state['migrations_table_exists'] ? 'yes' : 'no');
+    $lines[] = 'Migration files found: ' . count($state['migration_files']);
+    $lines[] = 'Applied migrations recorded: ' . count($state['applied_migrations']);
+    $lines[] = 'Pending migrations: ' . count($state['pending_migrations']);
+    $lines[] = '';
+    $lines[] = 'Action summary: ' . $state['action_summary'];
+
+    if ($state['pending_migrations'] !== []) {
+        $lines[] = '';
+        $lines[] = 'Pending migration filenames:';
+        foreach ($state['pending_migrations'] as $path) {
+            $lines[] = basename($path);
+        }
+    }
+
+    return implode(PHP_EOL, $lines) . PHP_EOL;
+}
+
+/**
+ * @param list<string> $migrationFiles
+ * @param list<string> $appliedMigrations
+ * @return list<string>
+ */
+function pendingMigrations(array $migrationFiles, array $appliedMigrations): array
+{
+    return array_values(array_filter(
+        $migrationFiles,
+        static fn(string $migration): bool => !in_array(basename($migration), $appliedMigrations, true)
+    ));
+}
+
+/**
+ * @param array{
+ *   schema_exists: bool,
+ *   migrations_table_exists: bool,
+ *   migration_files: list<string>,
+ *   applied_migrations: list<string>,
+ *   pending_migrations: list<string>,
+ *   action_summary: string
+ * } $state
+ */
+function applyMigrations(PDO $pdo, array $state): void
+{
+    ensureMigrationsTable($pdo);
+
+    if (!$state['schema_exists']) {
+        applySqlFile($pdo, __DIR__ . '/../schema.sql');
+        markMigrationsApplied($pdo, $state['migration_files']);
+        echo "Schema applied successfully.\n";
+        exit(0);
+    }
+
+    if ($state['applied_migrations'] === []) {
+        markMigrationsApplied($pdo, $state['migration_files']);
+        echo "Existing schema detected; baseline migrations recorded.\n";
+        exit(0);
+    }
+
+    if ($state['pending_migrations'] === []) {
+        echo "No pending migrations.\n";
+        exit(0);
+    }
+
+    foreach ($state['pending_migrations'] as $migrationFile) {
+        applySqlFile($pdo, $migrationFile);
+        recordMigration($pdo, basename($migrationFile));
+        echo "Applied migration: " . basename($migrationFile) . "\n";
+    }
+
+    echo "All pending migrations applied successfully.\n";
     exit(0);
 }
-
-$pendingMigrations = array_values(array_filter(
-    $migrationFiles,
-    static fn(string $migration): bool => !in_array(basename($migration), $appliedMigrations, true)
-));
-
-if ($pendingMigrations === []) {
-    echo "No pending migrations.\n";
-    exit(0);
-}
-
-foreach ($pendingMigrations as $migrationFile) {
-    applySqlFile($pdo, $migrationFile);
-    recordMigration($pdo, basename($migrationFile));
-    echo "Applied migration: " . basename($migrationFile) . "\n";
-}
-
-echo "All pending migrations applied successfully.\n";
 
 function ensureMigrationsTable(PDO $pdo): void
 {
@@ -82,6 +219,16 @@ function appliedMigrations(PDO $pdo): array
     $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
 
     return array_values(array_filter($rows, static fn(mixed $row): bool => is_string($row) && $row !== ''));
+}
+
+function migrationsTableExists(PDO $pdo): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name'
+    );
+    $stmt->execute([':table_name' => MIGRATIONS_TABLE]);
+
+    return (int) $stmt->fetchColumn() > 0;
 }
 
 function applicationSchemaExists(PDO $pdo): bool
