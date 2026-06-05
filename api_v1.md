@@ -1162,17 +1162,67 @@ Response:
 Request:
 - `multipart/form-data`
 - field `file`: csv file
-- field `mode`: `dry_run | commit`
+- field `mode`: `preview | dry_run | commit`
+- field `mapping`: JSON object required for `dry_run` and `commit`; maps Budget fields to CSV headers.
+
+Mapping shape:
+```json
+{
+  "date": "Posted Date",
+  "expense": "Description",
+  "amount": "Amount",
+  "category": "Budget Category",
+  "tag": "Tag",
+  "card": "Account",
+  "is_split": "Split"
+}
+```
+
+Required mapped fields: `date`, `expense`, `amount`, `category`, `tag`. Optional mapped fields: `card`, `is_split`.
 
 Rules:
-- `dry_run` validates and returns parse/mapping results without writing.
-- `commit` validates the file first, then writes valid rows. Oversized files or too many rows are rejected before any transaction rows are inserted.
+- `preview` validates the upload envelope and returns headers, sample rows, inferred mapping, row count, and limits without writing.
+- `dry_run` validates rows using the provided mapping and returns planned new tags/cards without writing.
+- `commit` validates the file with the same mapping, then writes valid rows. Oversized files or too many rows are rejected before any transaction rows are inserted.
 - Import limits are configurable with `CSV_IMPORT_MAX_BYTES` (default `5242880`), `CSV_IMPORT_MAX_ROWS` (default `5000`), and `CSV_IMPORT_MAX_ERRORS` (default `100`).
-- Optional `is_split` CSV column is supported (`true|false|1|0|yes|no`), defaults to `false` when absent.
+- Optional mapped `is_split` values support `true|false|1|0|yes|no` and default to `false` when absent.
 - Duplicate detection key (per user): `date + amount + normalized_expense + category + is_split + tag + card`.
 - Row-level errors are capped in the response. `errors_truncated=true` means additional rows failed but were not returned.
+- Missing tags/cards are created only during `commit`. New tags receive an inferred `icon_key`; cards remain name-only.
 
-Response `200`:
+Preview response `200`:
+```json
+{
+  "mode": "preview",
+  "headers": ["Posted Date", "Description", "Amount", "Budget Category", "Tag", "Account"],
+  "sample_rows": [
+    {
+      "Posted Date": "2026-06-01",
+      "Description": "Coffee Shop",
+      "Amount": "6.25",
+      "Budget Category": "wants",
+      "Tag": "Coffee",
+      "Account": "Amex Gold"
+    }
+  ],
+  "suggested_mapping": {
+    "date": "Posted Date",
+    "expense": "Description",
+    "amount": "Amount",
+    "category": "Budget Category",
+    "tag": "Tag",
+    "card": "Account"
+  },
+  "total_rows": 120,
+  "limits": {
+    "max_bytes": 5242880,
+    "max_rows": 5000,
+    "max_returned_errors": 100
+  }
+}
+```
+
+Dry-run/commit response `200`:
 ```json
 {
   "status": "partial",
@@ -1191,6 +1241,12 @@ Response `200`:
       "field": "category",
       "message": "must be one of needs,wants,savings_debts"
     }
+  ],
+  "new_tags": [
+    { "name": "Coffee", "icon_key": "coffee" }
+  ],
+  "new_cards": [
+    { "name": "Amex Gold" }
   ]
 }
 ```

@@ -49,7 +49,7 @@
   - `DELETE /api/v1/me/transactions/{transaction_id}`
 - CSV flows:
   - `GET /api/v1/me/transactions/export.csv`
-  - `POST /api/v1/me/transactions/import.csv` (`mode=dry_run|commit`, multipart with `file`)
+  - `POST /api/v1/me/transactions/import.csv` (`mode=preview|dry_run|commit`, multipart with `file`; `mapping` JSON for validation/commit)
   - `GET /api/v1/me/data-runs?limit=50`
 - Metrics flows:
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
@@ -154,6 +154,7 @@ CSV_IMPORT_MAX_BYTES=5242880
 CSV_IMPORT_MAX_ROWS=5000
 CSV_IMPORT_MAX_ERRORS=100
 ```
+CSV import preview returns headers and sample rows without writing. Dry run and commit use explicit header mapping so users can map arbitrary CSV headers to Budget fields. Missing tags/cards are created only during commit; imported tags receive an inferred icon key.
 
 3. Create local storage paths if missing:
 

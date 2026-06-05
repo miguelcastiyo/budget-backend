@@ -1130,7 +1130,7 @@ paths:
     post:
       tags: [ImportExport]
       summary: Import transactions from CSV
-      description: Validates import size and row limits before writing rows. Row-level errors are capped in the response.
+      description: Preview reads CSV headers and sample rows. Dry run and commit validate an explicit header mapping before importing valid rows. Row-level errors are capped in the response.
       parameters:
         - $ref: '#/components/parameters/XCsrfToken'
       requestBody:
@@ -1145,7 +1145,10 @@ paths:
                   format: binary
                 mode:
                   type: string
-                  enum: [dry_run, commit]
+                  enum: [preview, dry_run, commit]
+                mapping:
+                  type: string
+                  description: JSON object mapping Budget fields to CSV headers. Required for dry_run and commit. Required fields are date, expense, amount, category, and tag; optional fields are card and is_split.
               required: [file, mode]
       responses:
         '200':
@@ -1153,7 +1156,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CsvImportResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/CsvImportPreviewResponse'
+                  - $ref: '#/components/schemas/CsvImportResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -2688,7 +2693,83 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CsvImportErrorItem'
-      required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors_truncated, max_returned_errors, errors]
+        new_tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/CsvImportNewTag'
+        new_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/CsvImportNewCard'
+      required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors_truncated, max_returned_errors, errors, new_tags, new_cards]
+
+    CsvImportPreviewResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [preview]
+        headers:
+          type: array
+          items:
+            type: string
+        sample_rows:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+        suggested_mapping:
+          $ref: '#/components/schemas/CsvImportMapping'
+        total_rows:
+          type: integer
+          minimum: 0
+        limits:
+          type: object
+          properties:
+            max_bytes:
+              type: integer
+            max_rows:
+              type: integer
+            max_returned_errors:
+              type: integer
+          required: [max_bytes, max_rows, max_returned_errors]
+      required: [mode, headers, sample_rows, suggested_mapping, total_rows, limits]
+
+    CsvImportMapping:
+      type: object
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+        expense:
+          type: string
+        amount:
+          type: string
+        category:
+          type: string
+        tag:
+          type: string
+        card:
+          type: string
+        is_split:
+          type: string
+
+    CsvImportNewTag:
+      type: object
+      properties:
+        name:
+          type: string
+        icon_key:
+          type: string
+      required: [name, icon_key]
+
+    CsvImportNewCard:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
 
     DataRunItem:
       type: object

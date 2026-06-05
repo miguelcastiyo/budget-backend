@@ -159,6 +159,61 @@ assertSame('export', $exportRunItem['type'], 'data runs export item keeps type')
 assertSame('2026-01-01', $exportRunItem['date_from'], 'data runs export item keeps date_from');
 assertSame(null, $exportRunItem['valid_rows'], 'data runs export item has null import counters');
 assertSame(240, $exportRunItem['total_rows'], 'data runs export item casts total rows');
+$suggestImportMapping = $importExportReflection->getMethod('suggestImportMapping');
+$suggestedMapping = $suggestImportMapping->invoke($importExportController, ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
+assertSame('Posted Date', $suggestedMapping['date'] ?? null, 'csv import preview suggests date mapping from alias');
+assertSame('Description', $suggestedMapping['expense'] ?? null, 'csv import preview suggests expense mapping from alias');
+assertSame('Account', $suggestedMapping['card'] ?? null, 'csv import preview suggests card mapping from alias');
+$validatedImportMapping = $importExportReflection->getMethod('validatedImportMapping');
+$mapping = $validatedImportMapping->invoke($importExportController, json_encode([
+    'date' => 'Posted Date',
+    'expense' => 'Description',
+    'amount' => 'Amount',
+    'category' => 'Budget Category',
+    'tag' => 'Tag',
+    'card' => 'Account',
+], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
+assertSame(0, $mapping['date'], 'csv import mapping resolves date index');
+assertSame(5, $mapping['card'], 'csv import mapping resolves optional card index');
+expectHttpException(
+    fn() => $validatedImportMapping->invoke($importExportController, '{"date":"Posted Date","expense":"Posted Date","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Posted Date', 'Amount', 'Budget Category', 'Tag']),
+    422,
+    'VALIDATION_ERROR',
+    'csv import mapping rejects reused headers'
+);
+expectHttpException(
+    fn() => $validatedImportMapping->invoke($importExportController, '{"date":"Missing","expense":"Description","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Description', 'Amount', 'Budget Category', 'Tag']),
+    422,
+    'VALIDATION_ERROR',
+    'csv import mapping rejects missing source headers'
+);
+$parseImportRow = $importExportReflection->getMethod('parseImportRow');
+$parsedImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes'], [
+    'date' => 0,
+    'expense' => 1,
+    'amount' => 2,
+    'category' => 3,
+    'tag' => 4,
+    'card' => 5,
+    'is_split' => 6,
+], 2);
+assertSame('2026-06-01', $parsedImportRow['date'], 'csv import row normalizes mapped date');
+assertSame('6.25', $parsedImportRow['amount'], 'csv import row normalizes mapped amount');
+assertSame('wants', $parsedImportRow['category'], 'csv import row normalizes mapped category');
+assertSame(true, $parsedImportRow['is_split'], 'csv import row normalizes mapped split flag');
+$inferredTagIconKey = $importExportReflection->getMethod('inferredTagIconKey');
+assertSame('coffee', $inferredTagIconKey->invoke($importExportController, 'Coffee Shops'), 'csv import infers coffee icon');
+assertSame('tag', $inferredTagIconKey->invoke($importExportController, 'Miscellaneous'), 'csv import falls back to tag icon');
+$readImportCsv = $importExportReflection->getMethod('readImportCsv');
+$csvHandle = fopen('php://temp', 'r+');
+assert($csvHandle !== false);
+fwrite($csvHandle, "Posted Date,Description,Amount\n2026-06-01,Coffee,6.25\n");
+rewind($csvHandle);
+$csvPreview = $readImportCsv->invoke($importExportController, $csvHandle, 10, 100, true);
+fclose($csvHandle);
+assertSame(['Posted Date', 'Description', 'Amount'], $csvPreview['header'], 'csv import preview reads headers');
+assertSame(1, $csvPreview['total_rows'], 'csv import preview counts data rows');
+assertSame('Coffee', $csvPreview['sample_rows'][0]['Description'] ?? null, 'csv import preview returns sample rows by header');
 
 $taxonomyReflection = new ReflectionClass(TaxonomyController::class);
 $taxonomyController = $taxonomyReflection->newInstanceWithoutConstructor();

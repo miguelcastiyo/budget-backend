@@ -17,9 +17,12 @@ use PDO;
 final class ImportExportController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
+    private const IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag', 'card', 'is_split'];
+    private const REQUIRED_IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag'];
     private const DEFAULT_MAX_IMPORT_BYTES = 5242880;
     private const DEFAULT_MAX_IMPORT_ROWS = 5000;
     private const DEFAULT_MAX_IMPORT_ERRORS = 100;
+    private const IMPORT_PREVIEW_SAMPLE_ROWS = 5;
 
     public function __construct(
         private readonly PDO $pdo,
@@ -174,9 +177,9 @@ SQL;
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
 
         $mode = strtolower(trim((string) ($request->input('mode') ?? '')));
-        if (!in_array($mode, ['dry_run', 'commit'], true)) {
+        if (!in_array($mode, ['preview', 'dry_run', 'commit'], true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
-                ['field' => 'mode', 'message' => 'must be dry_run or commit'],
+                ['field' => 'mode', 'message' => 'must be preview, dry_run, or commit'],
             ]);
         }
 
@@ -212,19 +215,6 @@ SQL;
             throw new HttpException(422, 'VALIDATION_ERROR', 'Could not read uploaded file');
         }
 
-        $header = fgetcsv($handle, 0, ',', '"', '\\');
-        if (!is_array($header)) {
-            fclose($handle);
-            throw new HttpException(422, 'VALIDATION_ERROR', 'CSV must include a header row');
-        }
-
-        try {
-            $index = $this->buildColumnIndex($header);
-        } catch (HttpException $e) {
-            fclose($handle);
-            throw $e;
-        }
-
         $totalRows = 0;
         $validRows = 0;
         $importedRows = 0;
@@ -233,20 +223,38 @@ SQL;
         $errors = [];
         $errorsTruncated = false;
         $parsedRows = [];
+        $sampleRows = [];
 
-        while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
-            $totalRows++;
-            $rowNum = $totalRows + 1;
+        try {
+            $read = $this->readImportCsv($handle, $maxImportRows, $maxImportErrors, $mode === 'preview');
+        } finally {
+            fclose($handle);
+        }
 
-            if ($totalRows > $maxImportRows) {
-                fclose($handle);
-                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV contains too many rows', [
-                    ['field' => 'file', 'message' => 'must contain <= ' . $maxImportRows . ' data rows'],
-                ]);
-            }
+        $header = $read['header'];
+        $totalRows = $read['total_rows'];
+        $sampleRows = $read['sample_rows'];
 
+        if ($mode === 'preview') {
+            return Response::json([
+                'mode' => 'preview',
+                'headers' => $header,
+                'sample_rows' => $sampleRows,
+                'suggested_mapping' => $this->suggestImportMapping($header),
+                'total_rows' => $totalRows,
+                'limits' => [
+                    'max_bytes' => $maxImportBytes,
+                    'max_rows' => $maxImportRows,
+                    'max_returned_errors' => $maxImportErrors,
+                ],
+            ]);
+        }
+
+        $mapping = $this->validatedImportMapping($request->input('mapping'), $header);
+
+        foreach ($read['rows'] as $row) {
             try {
-                $parsed = $this->parseImportRow($cols, $index, $rowNum);
+                $parsed = $this->parseImportRow($row['cols'], $mapping, (int) $row['row']);
                 $validRows++;
                 $parsedRows[] = $parsed;
             } catch (HttpException $e) {
@@ -271,8 +279,6 @@ SQL;
                 ) || $errorsTruncated;
             }
         }
-
-        fclose($handle);
 
         if ($mode === 'dry_run') {
             $importedRows = 0;
@@ -331,51 +337,191 @@ SQL;
             'errors_truncated' => $errorsTruncated,
             'max_returned_errors' => $maxImportErrors,
             'errors' => $errors,
+            'new_tags' => $this->plannedNewTags($ctx->userId(), $parsedRows),
+            'new_cards' => $this->plannedNewCards($ctx->userId(), $parsedRows),
         ]);
     }
 
-    /** @param array<int,string> $header */
-    private function buildColumnIndex(array $header): array
+    /** @param resource $handle */
+    private function readImportCsv($handle, int $maxImportRows, int $maxImportErrors, bool $includeSamples): array
     {
-        $map = [];
-        foreach ($header as $i => $col) {
-            $normalized = strtolower(trim((string) $col));
-            $map[$normalized] = $i;
+        $header = fgetcsv($handle, 0, ',', '"', '\\');
+        if (!is_array($header)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'CSV must include a header row');
         }
 
-        // Support common aliases from exported personal budget sheets.
-        // If both "tag" and "tags" exist, prefer "tags" because some tools append
-        // a derived "Tag" summary column that is not row-level source data.
-        if (array_key_exists('tags', $map)) {
-            $map['tag'] = $map['tags'];
-        }
-        if (!array_key_exists('date', $map) && array_key_exists('transaction_date', $map)) {
-            $map['date'] = $map['transaction_date'];
-        }
+        $header = array_map(static fn($col): string => trim((string) $col), $header);
+        $this->assertUsableHeader($header);
 
-        $required = ['date', 'expense', 'amount', 'category', 'tag'];
-        foreach ($required as $col) {
-            if (!array_key_exists($col, $map)) {
-                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV header missing required column: ' . $col);
+        $totalRows = 0;
+        $rows = [];
+        $sampleRows = [];
+
+        while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
+            $totalRows++;
+            if ($totalRows > $maxImportRows) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV contains too many rows', [
+                    ['field' => 'file', 'message' => 'must contain <= ' . $maxImportRows . ' data rows'],
+                ]);
+            }
+
+            $cols = array_map(static fn($col): string => trim((string) $col), $cols);
+            $rowNum = $totalRows + 1;
+            $rows[] = ['row' => $rowNum, 'cols' => $cols];
+
+            if ($includeSamples && count($sampleRows) < self::IMPORT_PREVIEW_SAMPLE_ROWS) {
+                $sampleRows[] = $this->sampleImportRow($header, $cols);
             }
         }
 
-        return $map;
+        return [
+            'header' => $header,
+            'rows' => $rows,
+            'sample_rows' => $sampleRows,
+            'total_rows' => $totalRows,
+        ];
+    }
+
+    /** @param array<int,string> $header */
+    private function assertUsableHeader(array $header): void
+    {
+        $seen = [];
+        foreach ($header as $i => $col) {
+            if ($col === '') {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV header contains an empty column name', [
+                    ['field' => 'header.' . $i, 'message' => 'must not be empty'],
+                ]);
+            }
+            $key = strtolower($col);
+            if (array_key_exists($key, $seen)) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'CSV header contains duplicate column names', [
+                    ['field' => 'header.' . $i, 'message' => 'duplicates "' . $col . '"'],
+                ]);
+            }
+            $seen[$key] = true;
+        }
+    }
+
+    /** @param array<int,string> $header */
+    private function sampleImportRow(array $header, array $cols): array
+    {
+        $row = [];
+        foreach ($header as $i => $name) {
+            $row[$name] = (string) ($cols[$i] ?? '');
+        }
+
+        return $row;
+    }
+
+    /** @param array<int,string> $header */
+    private function suggestImportMapping(array $header): array
+    {
+        $normalizedToHeader = [];
+        foreach ($header as $col) {
+            $normalizedToHeader[$this->normalizedHeader($col)] = $col;
+        }
+
+        $aliases = [
+            'date' => ['date', 'transaction_date', 'posted_date', 'post_date'],
+            'expense' => ['expense', 'description', 'merchant', 'name', 'payee', 'transaction'],
+            'amount' => ['amount', 'transaction_amount', 'debit', 'charge', 'cost'],
+            'category' => ['category', 'budget_category', 'type'],
+            'tag' => ['tag', 'tags', 'label'],
+            'card' => ['card', 'account', 'payment_card', 'payment_method'],
+            'is_split' => ['is_split', 'split', 'split_transaction'],
+        ];
+
+        $mapping = [];
+        foreach ($aliases as $field => $candidates) {
+            foreach ($candidates as $candidate) {
+                if (array_key_exists($candidate, $normalizedToHeader)) {
+                    $mapping[$field] = $normalizedToHeader[$candidate];
+                    break;
+                }
+            }
+        }
+
+        return $mapping;
+    }
+
+    private function normalizedHeader(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        $normalized = (string) preg_replace('/[^a-z0-9]+/', '_', $normalized);
+        return trim($normalized, '_');
+    }
+
+    /** @param array<int,string> $header */
+    private function validatedImportMapping(mixed $raw, array $header): array
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            $mapping = $this->suggestImportMapping($header);
+        } else {
+            $decoded = json_decode((string) $raw, true);
+            if (!is_array($decoded)) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'mapping', 'message' => 'must be valid JSON'],
+                ]);
+            }
+            $mapping = $decoded;
+        }
+
+        $headerLookup = [];
+        foreach ($header as $i => $col) {
+            $headerLookup[$col] = $i;
+        }
+
+        $details = [];
+        foreach (array_keys($mapping) as $field) {
+            if (!in_array($field, self::IMPORT_FIELDS, true)) {
+                $details[] = ['field' => 'mapping.' . $field, 'message' => 'is not a supported import field'];
+            }
+        }
+
+        foreach (self::REQUIRED_IMPORT_FIELDS as $field) {
+            if (!array_key_exists($field, $mapping) || trim((string) $mapping[$field]) === '') {
+                $details[] = ['field' => 'mapping.' . $field, 'message' => 'is required'];
+            }
+        }
+
+        $usedHeaders = [];
+        $resolved = [];
+        foreach (self::IMPORT_FIELDS as $field) {
+            if (!array_key_exists($field, $mapping) || trim((string) $mapping[$field]) === '') {
+                continue;
+            }
+
+            $headerName = trim((string) $mapping[$field]);
+            if (!array_key_exists($headerName, $headerLookup)) {
+                $details[] = ['field' => 'mapping.' . $field, 'message' => 'must reference an existing CSV header'];
+                continue;
+            }
+            if (array_key_exists($headerName, $usedHeaders)) {
+                $details[] = ['field' => 'mapping.' . $field, 'message' => 'must not reuse "' . $headerName . '"'];
+                continue;
+            }
+
+            $usedHeaders[$headerName] = true;
+            $resolved[$field] = $headerLookup[$headerName];
+        }
+
+        if ($details !== []) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', $details);
+        }
+
+        return $resolved;
     }
 
     /** @param array<int,string> $cols */
-    private function parseImportRow(array $cols, array $index, int $rowNum): array
+    private function parseImportRow(array $cols, array $mapping, int $rowNum): array
     {
-        $date = $this->getCsvValue($cols, $index, 'date');
-        $expense = $this->getCsvValue($cols, $index, 'expense');
-        $amount = $this->getCsvValue($cols, $index, 'amount');
-        $category = $this->getCsvValue($cols, $index, 'category');
-        $tag = $this->getCsvValue($cols, $index, 'tag');
-        if ($tag === '' && array_key_exists('tags', $index)) {
-            $tag = $this->getCsvValue($cols, $index, 'tags');
-        }
-        $card = $this->getCsvValue($cols, $index, 'card');
-        $isSplitRaw = $this->getCsvValue($cols, $index, 'is_split');
+        $date = $this->getCsvValue($cols, $mapping, 'date');
+        $expense = $this->getCsvValue($cols, $mapping, 'expense');
+        $amount = $this->getCsvValue($cols, $mapping, 'amount');
+        $category = $this->getCsvValue($cols, $mapping, 'category');
+        $tag = $this->getCsvValue($cols, $mapping, 'tag');
+        $card = $this->getCsvValue($cols, $mapping, 'card');
+        $isSplitRaw = $this->getCsvValue($cols, $mapping, 'is_split');
 
         $date = $this->validatedDate($date, 'date');
         $expense = $this->validatedExpense($expense);
@@ -524,6 +670,57 @@ SQL;
         }
 
         return $count;
+    }
+
+    /** @param array<int,array<string,mixed>> $parsedRows */
+    private function plannedNewTags(int $userId, array $parsedRows): array
+    {
+        $items = [];
+        $seen = [];
+
+        foreach ($parsedRows as $parsed) {
+            $name = trim((string) $parsed['tag_name']);
+            if ($name === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($name);
+            if (array_key_exists($key, $seen) || $this->findTagId($userId, $name) !== null) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $items[] = [
+                'name' => $name,
+                'icon_key' => $this->inferredTagIconKey($name),
+            ];
+        }
+
+        return $items;
+    }
+
+    /** @param array<int,array<string,mixed>> $parsedRows */
+    private function plannedNewCards(int $userId, array $parsedRows): array
+    {
+        $items = [];
+        $seen = [];
+
+        foreach ($parsedRows as $parsed) {
+            $name = trim((string) $parsed['card_name']);
+            if ($name === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($name);
+            if (array_key_exists($key, $seen) || $this->findCardId($userId, $name) !== null) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $items[] = ['name' => $name];
+        }
+
+        return $items;
     }
 
     /** @param array<int,array{row:int,field:string,message:string}> $errors */
@@ -816,7 +1013,7 @@ SQL;
     private function findTagId(int $userId, string $name): ?int
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id FROM tags WHERE user_id = :user_id AND name = :name AND is_active = 1 AND deleted_at IS NULL LIMIT 1'
+            'SELECT id FROM tags WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) AND is_active = 1 AND deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([
             ':user_id' => $userId,
@@ -830,7 +1027,7 @@ SQL;
     private function findCardId(int $userId, string $name): ?int
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id FROM cards WHERE user_id = :user_id AND name = :name AND is_active = 1 AND deleted_at IS NULL LIMIT 1'
+            'SELECT id FROM cards WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) AND is_active = 1 AND deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([
             ':user_id' => $userId,
@@ -843,7 +1040,7 @@ SQL;
 
     private function findOrCreateTag(int $userId, string $name): int
     {
-        $stmt = $this->pdo->prepare('SELECT id, is_active, deleted_at FROM tags WHERE user_id = :user_id AND name = :name LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id, is_active, deleted_at, icon_key FROM tags WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) LIMIT 1');
         $stmt->execute([
             ':user_id' => $userId,
             ':name' => $name,
@@ -853,29 +1050,69 @@ SQL;
         if ($row) {
             if ((int) $row['is_active'] === 0 || $row['deleted_at'] !== null) {
                 $reactivate = $this->pdo->prepare(
-                    'UPDATE tags SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id'
+                    'UPDATE tags SET is_active = 1, deleted_at = NULL, icon_key = COALESCE(icon_key, :icon_key), updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id'
                 );
                 $reactivate->execute([
                     ':id' => $row['id'],
                     ':user_id' => $userId,
+                    ':icon_key' => $this->inferredTagIconKey($name),
                 ]);
             }
 
             return (int) $row['id'];
         }
 
-        $insert = $this->pdo->prepare('INSERT INTO tags (user_id, name, is_active) VALUES (:user_id, :name, 1)');
+        $insert = $this->pdo->prepare('INSERT INTO tags (user_id, name, icon_key, is_active) VALUES (:user_id, :name, :icon_key, 1)');
         $insert->execute([
             ':user_id' => $userId,
             ':name' => $name,
+            ':icon_key' => $this->inferredTagIconKey($name),
         ]);
 
         return (int) $this->pdo->lastInsertId();
     }
 
+    private function inferredTagIconKey(string $name): string
+    {
+        $normalized = mb_strtolower(trim($name));
+        $rules = [
+            'home' => ['housing', 'rent', 'mortgage', 'home', 'utilities'],
+            'shopping_cart' => ['groceries', 'grocery', 'shopping', 'target', 'costco'],
+            'car' => ['transportation', 'gas', 'uber', 'lyft', 'car', 'auto'],
+            'plane' => ['travel', 'trip', 'flight', 'airbnb', 'hotel'],
+            'receipt' => ['eating out', 'restaurant', 'dining', 'food'],
+            'coffee' => ['coffee', 'cafe'],
+            'smartphone' => ['subscriptions', 'subscription', 'netflix', 'spotify', 'icloud'],
+            'credit_card' => ['debt', 'loan', 'credit'],
+            'piggy_bank' => ['savings', 'emergency fund'],
+            'trending_up' => ['investments', 'invest', 'roth', 'ira', 'brokerage'],
+            'briefcase' => ['salary', 'income', 'paycheck', 'work'],
+            'heart' => ['health', 'medical', 'doctor', 'pharmacy'],
+            'dumbbell' => ['gym', 'fitness', 'workout'],
+            'book_open' => ['education', 'book', 'kindle', 'course', 'school'],
+            'film' => ['entertainment', 'movies', 'theater', 'amc'],
+            'gamepad' => ['fun', 'gaming', 'game'],
+            'gift' => ['gift', 'birthday'],
+            'shield' => ['insurance'],
+            'lightbulb' => ['personal', 'self care', 'beauty'],
+            'wrench' => ['maintenance', 'repair', 'tools'],
+            'wallet' => ['cash', 'money', 'wallet'],
+        ];
+
+        foreach ($rules as $iconKey => $keywords) {
+            foreach ($keywords as $keyword) {
+                if (str_contains($normalized, $keyword)) {
+                    return $iconKey;
+                }
+            }
+        }
+
+        return 'tag';
+    }
+
     private function findOrCreateCard(int $userId, string $name): int
     {
-        $stmt = $this->pdo->prepare('SELECT id, is_active, deleted_at FROM cards WHERE user_id = :user_id AND name = :name LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id, is_active, deleted_at FROM cards WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) LIMIT 1');
         $stmt->execute([
             ':user_id' => $userId,
             ':name' => $name,
