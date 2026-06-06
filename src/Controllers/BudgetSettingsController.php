@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Budget\BudgetSettingsResolver;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use PDO;
+use Throwable;
 
 final class BudgetSettingsController
 {
@@ -35,7 +37,8 @@ final class BudgetSettingsController
 
     public function __construct(
         private readonly PDO $pdo,
-        private readonly AuthService $auth
+        private readonly AuthService $auth,
+        private readonly BudgetSettingsResolver $resolver
     ) {
     }
 
@@ -43,32 +46,23 @@ final class BudgetSettingsController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
 
-        $stmt = $this->pdo->prepare(
-            'SELECT ' . implode(', ', self::SETTING_COLUMNS) . ' FROM budget_settings WHERE user_id = :user_id LIMIT 1'
-        );
-        $stmt->execute([':user_id' => $ctx->userId()]);
-        $row = $stmt->fetch();
+        $month = trim((string) ($request->query['month'] ?? ''));
+        if ($month !== '') {
+            $resolved = $this->resolver->getEffectiveSettingsForMonth($ctx->userId(), $month);
 
-        if (!$row) {
             return Response::json([
-                'monthly_income' => '0.00',
-                'income_source_type' => 'monthly',
-                'primary_monthly_income' => '0.00',
-                'primary_hourly_rate' => null,
-                'primary_weekly_hours' => null,
-                'side_income_type' => 'none',
-                'side_income_label' => null,
-                'side_monthly_income' => null,
-                'side_hourly_rate' => null,
-                'side_weekly_hours' => null,
-                'allocation_mode' => 'percent',
-                'needs_percent' => '50.00',
-                'wants_percent' => '30.00',
-                'savings_debts_percent' => '20.00',
-                'needs_amount' => null,
-                'wants_amount' => null,
-                'savings_debts_amount' => null,
+                'requested_month' => $resolved['requested_month'],
+                'resolved_effective_month' => $resolved['resolved_effective_month'],
+                'is_exact_match' => $resolved['is_exact_match'],
+                'settings' => $resolved['settings'] === null
+                    ? $this->defaultSettings()
+                    : $this->normalizeRow($resolved['settings']),
             ]);
+        }
+
+        $row = $this->resolver->getLatestSettings($ctx->userId());
+        if (!$row) {
+            return Response::json($this->defaultSettings());
         }
 
         return Response::json($this->normalizeRow($row));
@@ -79,9 +73,30 @@ final class BudgetSettingsController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $payload = $request->json();
         $settings = $this->settingsFromPayload($payload);
+        $effectiveMonth = $this->effectiveMonthFromPayload($payload);
 
+        $this->pdo->beginTransaction();
+        try {
+            $this->upsertVersionRow($ctx->userId(), $effectiveMonth, $settings);
+            $latest = $this->resolver->getLatestSettings($ctx->userId()) ?? $settings;
+            $this->upsertCompatibilityRow($ctx->userId(), $latest);
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
+
+        return Response::json($settings);
+    }
+
+    /** @param array<string,mixed> $settings */
+    private function upsertCompatibilityRow(int $userId, array $settings): void
+    {
         $exists = $this->pdo->prepare('SELECT id FROM budget_settings WHERE user_id = :user_id LIMIT 1');
-        $exists->execute([':user_id' => $ctx->userId()]);
+        $exists->execute([':user_id' => $userId]);
         $row = $exists->fetch();
 
         if ($row) {
@@ -116,9 +131,41 @@ SQL;
             $stmt = $this->pdo->prepare($sql);
         }
 
-        $stmt->execute($this->statementParams($ctx->userId(), $settings));
+        $stmt->execute($this->statementParams($userId, $settings));
+    }
 
-        return Response::json($settings);
+    /** @param array<string,string|null> $settings */
+    private function upsertVersionRow(int $userId, string $effectiveMonth, array $settings): void
+    {
+        $columns = array_merge(['user_id', 'effective_month'], self::SETTING_COLUMNS);
+        $insertColumns = implode(",\n  ", $columns);
+        $placeholders = implode(",\n  ", array_map(static fn(string $column): string => ':' . $column, $columns));
+        $assignments = implode(",\n  ", array_map(
+            static fn(string $column): string => $column . ' = VALUES(' . $column . ')',
+            self::SETTING_COLUMNS
+        ));
+
+        $sql = sprintf(
+            <<<'SQL'
+INSERT INTO budget_settings_versions (
+  %s
+)
+VALUES (
+  %s
+)
+ON DUPLICATE KEY UPDATE
+  %s,
+  updated_at = CURRENT_TIMESTAMP
+SQL,
+            $insertColumns,
+            $placeholders,
+            $assignments
+        );
+
+        $params = $this->statementParams($userId, $settings);
+        $params[':effective_month'] = $effectiveMonth . '-01';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
     }
 
     /** @param array<string,mixed> $settings
@@ -132,6 +179,22 @@ SQL;
         }
 
         return $params;
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function effectiveMonthFromPayload(array $payload): string
+    {
+        if (!array_key_exists('effective_month', $payload) || $payload['effective_month'] === null || $payload['effective_month'] === '') {
+            return (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m');
+        }
+
+        if (!is_string($payload['effective_month'])) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'effective_month', 'message' => 'must be YYYY-MM'],
+            ]);
+        }
+
+        return BudgetSettingsResolver::normalizeMonth($payload['effective_month'], 'effective_month');
     }
 
     /** @param array<string,mixed> $payload
@@ -219,6 +282,30 @@ SQL;
             'needs_amount' => $row['needs_amount'] === null ? null : $this->fmt((string) $row['needs_amount']),
             'wants_amount' => $row['wants_amount'] === null ? null : $this->fmt((string) $row['wants_amount']),
             'savings_debts_amount' => $row['savings_debts_amount'] === null ? null : $this->fmt((string) $row['savings_debts_amount']),
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function defaultSettings(): array
+    {
+        return [
+            'monthly_income' => '0.00',
+            'income_source_type' => 'monthly',
+            'primary_monthly_income' => '0.00',
+            'primary_hourly_rate' => null,
+            'primary_weekly_hours' => null,
+            'side_income_type' => 'none',
+            'side_income_label' => null,
+            'side_monthly_income' => null,
+            'side_hourly_rate' => null,
+            'side_weekly_hours' => null,
+            'allocation_mode' => 'percent',
+            'needs_percent' => '50.00',
+            'wants_percent' => '30.00',
+            'savings_debts_percent' => '20.00',
+            'needs_amount' => null,
+            'wants_amount' => null,
+            'savings_debts_amount' => null,
         ];
     }
 

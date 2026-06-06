@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Budget\BudgetSettingsResolver;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
@@ -21,7 +22,8 @@ final class MetricsController
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthService $auth,
-        private readonly RecurringExpenseService $recurring
+        private readonly RecurringExpenseService $recurring,
+        private readonly BudgetSettingsResolver $budgetSettingsResolver
     ) {
     }
 
@@ -83,13 +85,14 @@ final class MetricsController
             ];
         }
 
-        $settings = $this->loadBudgetSettings($ctx->userId());
-        $plan = $this->budgetPlanFromSettings($settings);
         $monthsInRange = $this->countMonthsInRange($startDate, $endDate);
+        $budgetPlansByMonth = $this->budgetPlansByMonth($ctx->userId(), $startDate, $endDate);
         $categoryBudgetVsActual = [];
         foreach (self::CATEGORY_ORDER as $category) {
-            $monthlyBudget = (float) ($plan['budget_amounts'][$category] ?? 0.0);
-            $budgetAmount = $monthlyBudget * $monthsInRange;
+            $budgetAmount = 0.0;
+            foreach ($budgetPlansByMonth as $plan) {
+                $budgetAmount += (float) ($plan['budget_amounts'][$category] ?? 0.0);
+            }
             $actualSpend = (float) ($actualByCategory[$category] ?? 0.0);
             $percentUsed = $budgetAmount > 0.0 ? ($actualSpend / $budgetAmount) * 100.0 : 0.0;
 
@@ -208,8 +211,8 @@ final class MetricsController
 
     private function buildMonthlyCategoryMetrics(int $userId, string $month, string $startDate, string $endDate): array
     {
-        $settings = $this->loadBudgetSettings($userId);
-        $plan = $this->budgetPlanFromSettings($settings);
+        $resolved = $this->budgetSettingsResolver->getEffectiveSettingsForMonth($userId, $month);
+        $plan = $this->budgetPlanFromSettings($resolved['settings']);
         $actualByCategory = $this->queryCategoryTotals($userId, $startDate, $endDate);
 
         $categories = [];
@@ -617,16 +620,19 @@ final class MetricsController
         return max($count, 1);
     }
 
-    /** @return array<string,mixed>|null */
-    private function loadBudgetSettings(int $userId): ?array
+    /** @return array<string,array{monthly_income:float,budget_amounts:array{needs:float,wants:float,savings_debts:float}}> */
+    private function budgetPlansByMonth(int $userId, DateTimeImmutable $startDate, DateTimeImmutable $endDate): array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT monthly_income, allocation_mode, needs_percent, wants_percent, savings_debts_percent, needs_amount, wants_amount, savings_debts_amount FROM budget_settings WHERE user_id = :user_id LIMIT 1'
-        );
-        $stmt->execute([':user_id' => $userId]);
+        $startMonth = $startDate->modify('first day of this month')->format('Y-m');
+        $endMonth = $endDate->modify('first day of this month')->format('Y-m');
+        $resolvedByMonth = $this->budgetSettingsResolver->getEffectiveSettingsForRange($userId, $startMonth, $endMonth);
 
-        $row = $stmt->fetch();
-        return is_array($row) ? $row : null;
+        $plans = [];
+        foreach ($resolvedByMonth as $month => $resolved) {
+            $plans[$month] = $this->budgetPlanFromSettings($resolved['settings']);
+        }
+
+        return $plans;
     }
 
     /** @param array<string,mixed>|null $settings

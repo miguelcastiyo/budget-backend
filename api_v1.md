@@ -767,12 +767,46 @@ Rules:
 ### 8.1 Get Budget Settings
 `GET /me/budget-settings`
 
+Optional query params:
+- `month=2026-06`
+
+Without `month`, the endpoint returns the flat latest/current budget settings shape for backward compatibility.
+
+With `month`, the endpoint resolves the budget version effective for that month:
+```json
+{
+  "requested_month": "2026-06",
+  "resolved_effective_month": "2026-04",
+  "is_exact_match": false,
+  "settings": {
+    "monthly_income": "6200.00",
+    "income_source_type": "monthly",
+    "primary_monthly_income": "6200.00",
+    "primary_hourly_rate": null,
+    "primary_weekly_hours": null,
+    "side_income_type": "none",
+    "side_income_label": null,
+    "side_monthly_income": null,
+    "side_hourly_rate": null,
+    "side_weekly_hours": null,
+    "allocation_mode": "percent",
+    "needs_percent": "50.00",
+    "wants_percent": "30.00",
+    "savings_debts_percent": "20.00",
+    "needs_amount": null,
+    "wants_amount": null,
+    "savings_debts_amount": null
+  }
+}
+```
+
 ### 8.2 Upsert Budget Settings
 `PUT /me/budget-settings`
 
 Request (percent mode):
 ```json
 {
+  "effective_month": "2026-06",
   "monthly_income": "6200.00",
   "income_source_type": "monthly",
   "primary_monthly_income": "6200.00",
@@ -811,11 +845,20 @@ Request (amount mode):
 ```
 
 Validation:
+- `effective_month` is optional and uses `YYYY-MM`; when omitted, the backend uses the current UTC month.
 - Income breakdown fields are optional for backward compatibility. If omitted, `monthly_income` is treated as the primary monthly income with no side income.
 - `hourly` income is converted with `hourly_rate * weekly_hours * 52 / 12`.
 - When income breakdown fields are present, they must compute to `monthly_income` after rounding to cents.
 - `percent` mode must total `100.00`.
 - `amount` mode must total `monthly_income`.
+
+Versioning rules:
+- `budget_settings_versions` is the source of truth for month-aware budget resolution.
+- For a requested month, the backend selects the latest budget version where `effective_month <= requested month`.
+- Saving a budget for a selected month creates or replaces that month's version.
+- A saved version applies from its effective month forward until superseded by a later version.
+- Editing an inherited month creates a new version for the selected month; it does not mutate the inherited source version.
+- `budget_settings` remains as a compatibility/current-settings bridge during rollout.
 
 ## 9) Transactions (Expenses)
 
@@ -1075,6 +1118,7 @@ Response:
 
 Rules:
 - Uses the same month input and recurring-generation semantics as the monthly metrics endpoints.
+- Budget targets resolve from the budget version effective for the requested month.
 - Returns the exact data needed by the current homepage in one response.
 
 ### 9.4 Insights Aggregation (Date Range)
@@ -1088,6 +1132,7 @@ Rules:
 - `date_from` and `date_to` are both required.
 - Date format is `YYYY-MM-DD`.
 - Recurring expenses are generated for months in range before aggregation.
+- Budget-vs-actual targets resolve each month independently and then sum the monthly targets across the range.
 
 Response:
 ```json

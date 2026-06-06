@@ -6,6 +6,7 @@ namespace App\Core;
 
 use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
+use App\Budget\BudgetSettingsResolver;
 use App\Controllers\AuditLogController;
 use App\Controllers\AuthController;
 use App\Controllers\BudgetSettingsController;
@@ -48,6 +49,7 @@ final class App
 
         $auth = new AuthService($pdo, $config);
         $recurring = new RecurringExpenseService($pdo);
+        $budgetSettingsResolver = new BudgetSettingsResolver($pdo);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
         $structuredLogger = new StructuredLogger($config);
@@ -56,14 +58,14 @@ final class App
         $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $auditLogController = new AuditLogController($pdo, $auth);
-        $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
+        $budgetSettingsController = new BudgetSettingsController($pdo, $auth, $budgetSettingsResolver);
         $importExportController = new ImportExportController($pdo, $auth, $config, $auditLogger);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
-        $metricsController = new MetricsController($pdo, $auth, $recurring);
+        $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
 
         $router = new Router();

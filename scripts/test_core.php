@@ -6,6 +6,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Budget\BudgetSettingsResolver;
 use App\Controllers\AuthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
@@ -102,6 +103,20 @@ assertMatches('/^[a-f0-9]{16}$/', Str::randomHex(8), 'randomHex emits requested 
 assertSame(hash('sha256', 'budget'), Str::hashSha256('budget'), 'hashSha256 matches PHP hash');
 assertMatches('/^\d{6}$/', Str::randomNumericCode(), 'randomNumericCode defaults to six digits');
 assertMatches('/^\d{8}$/', Str::randomNumericCode(8), 'randomNumericCode supports custom lengths');
+
+assertSame('2026-06', BudgetSettingsResolver::normalizeMonth('2026-06'), 'budget settings resolver accepts valid month');
+expectHttpException(
+    fn() => BudgetSettingsResolver::normalizeMonth('2026-6'),
+    422,
+    'VALIDATION_ERROR',
+    'budget settings resolver rejects malformed month'
+);
+expectHttpException(
+    fn() => BudgetSettingsResolver::normalizeMonth('2026-13'),
+    422,
+    'VALIDATION_ERROR',
+    'budget settings resolver rejects invalid month'
+);
 
 $importExportReflection = new ReflectionClass(ImportExportController::class);
 $importExportController = $importExportReflection->newInstanceWithoutConstructor();
