@@ -1164,6 +1164,10 @@ Request:
 - field `file`: csv file
 - field `mode`: `preview | dry_run | commit`
 - field `mapping`: JSON object required for `dry_run` and `commit`; maps Budget fields to CSV headers.
+- field `date_strategy`: JSON object for `dry_run` and `commit`; applies an explicit year to dates that omit one.
+- field `category_strategy`: JSON object for `dry_run` and `commit`; controls how external category labels become Budget categories.
+- field `tag_strategy`: JSON object for `dry_run` and `commit`; maps imported tag values to existing or new tags.
+- field `amount_strategy`: JSON object for `dry_run` and `commit`; controls blank mapped amount handling.
 
 Mapping shape:
 ```json
@@ -1178,15 +1182,64 @@ Mapping shape:
 }
 ```
 
-Required mapped fields: `date`, `expense`, `amount`, `category`, `tag`. Optional mapped fields: `card`, `is_split`.
+Required mapped fields: `date`, `expense`, `amount`, and `tag`. `category` is required only for `category_strategy.mode=exact_column`. Optional mapped fields are `card` and `is_split`.
+
+When `category_strategy.mode` is `value_map` or `default`, `category` may be omitted from `mapping`. Budget categories stay fixed as `needs`, `wants`, and `savings_debts`; external category labels are translated, not created.
+
+Category strategy examples:
+```json
+{ "mode": "exact_column" }
+```
+
+```json
+{
+  "mode": "value_map",
+  "source_header": "Bank Category Guess",
+  "value_map": {
+    "Utilities": "needs",
+    "Dining": "wants",
+    "Savings": "savings_debts"
+  }
+}
+```
+
+```json
+{ "mode": "default", "default_category": "needs" }
+```
+
+Amount strategy example:
+```json
+{ "blank_mapped_amount": "skip" }
+```
+
+Date strategy example:
+```json
+{ "missing_year": "apply_year", "year": 2026 }
+```
+
+Tag strategy example:
+```json
+{
+  "mode": "value_map",
+  "value_map": {
+    "Dining": { "mode": "existing", "tag_id": "12" },
+    "Utilities": { "mode": "new", "name": "Utilities" }
+  }
+}
+```
 
 Rules:
-- `preview` validates the upload envelope and returns headers, sample rows, inferred mapping, row count, and limits without writing.
+- `preview` validates the upload envelope and returns headers, sample rows, date profiles, column profiles, inferred mapping, row count, and limits without writing.
 - `dry_run` validates rows using the provided mapping and returns planned new tags/cards without writing.
 - `commit` validates the file with the same mapping, then writes valid rows. Oversized files or too many rows are rejected before any transaction rows are inserted.
 - Import limits are configurable with `CSV_IMPORT_MAX_BYTES` (default `5242880`), `CSV_IMPORT_MAX_ROWS` (default `5000`), and `CSV_IMPORT_MAX_ERRORS` (default `100`).
 - Optional mapped `is_split` values support `true|false|1|0|yes|no` and default to `false` when absent.
 - Duplicate detection key (per user): `date + amount + normalized_expense + category + is_split + tag + card`.
+- Full dates support `YYYY-MM-DD`, `M/D/YYYY`, and `MM/DD/YYYY`. Yearless dates such as `03/12` require `date_strategy.missing_year=apply_year`.
+- `tag_strategy` must map every unique nonblank source tag value to either an existing active tag owned by the authenticated user or a new tag name.
+- If `amount_strategy.blank_mapped_amount` is `skip`, rows with a blank mapped amount are counted in `skipped_rows` and `skipped_blank_amount_rows`. They are not imported, duplicates, or validation errors. Nonblank invalid amounts still fail validation.
+- `category_strategy.source_header` may use the same CSV header as another mapped field such as `tag`.
+- Missing value-map entries fail row validation with a clear category error.
 - Row-level errors are capped in the response. `errors_truncated=true` means additional rows failed but were not returned.
 - Missing tags/cards are created only during `commit`. New tags receive an inferred `icon_key`; cards remain name-only.
 
@@ -1203,6 +1256,26 @@ Preview response `200`:
       "Budget Category": "wants",
       "Tag": "Coffee",
       "Account": "Amex Gold"
+    }
+  ],
+  "column_profiles": [
+    {
+      "header": "Bank Category Guess",
+      "blank_count": 0,
+      "unique_values_truncated": false,
+      "unique_values": [
+        { "value": "Utilities", "count": 8 },
+        { "value": "Dining", "count": 6 }
+      ]
+    }
+  ],
+  "date_profiles": [
+    {
+      "header": "Transaction Date",
+      "full_date_count": 84,
+      "yearless_date_count": 11,
+      "yearless_examples": ["03/12", "01/21"],
+      "invalid_examples": []
     }
   ],
   "suggested_mapping": {
@@ -1233,6 +1306,8 @@ Dry-run/commit response `200`:
   "imported_rows": 0,
   "duplicate_rows": 7,
   "invalid_rows": 3,
+  "skipped_rows": 2,
+  "skipped_blank_amount_rows": 2,
   "errors_truncated": false,
   "max_returned_errors": 100,
   "errors": [
@@ -1278,7 +1353,13 @@ Response `200`:
       "imported_rows": 118,
       "duplicate_rows": 2,
       "invalid_rows": 0,
-      "error_summary": null
+      "skipped_rows": 0,
+      "skipped_blank_amount_rows": 0,
+      "error_summary": null,
+      "rollback_available": true,
+      "rolled_back_at": null,
+      "rolled_back_rows": 0,
+      "rollback_unavailable_reason": null
     },
     {
       "id": "export_45",
@@ -1293,9 +1374,35 @@ Response `200`:
       "imported_rows": null,
       "duplicate_rows": null,
       "invalid_rows": null,
-      "error_summary": null
+      "skipped_rows": null,
+      "skipped_blank_amount_rows": null,
+      "error_summary": null,
+      "rollback_available": false,
+      "rolled_back_at": null,
+      "rolled_back_rows": 0,
+      "rollback_unavailable_reason": null
     }
   ]
+}
+```
+
+### 13.2 Roll Back Imported Transactions
+`DELETE /me/imports/{import_run_id}/transactions`
+
+Soft-deletes the non-deleted transactions created by a committed CSV import. Tags and cards are not deleted.
+
+Rules:
+- Available only for imports committed after transaction rows started storing `csv_import_run_id`.
+- Old imports return `409 ROLLBACK_UNAVAILABLE` with message `Rollback unavailable for imports before this feature.`
+- Already rolled-back imports return the existing rolled-back result.
+- Users can only roll back their own import runs.
+
+Response `200`:
+```json
+{
+  "status": "rolled_back",
+  "import_run_id": "123",
+  "deleted_rows": 118
 }
 ```
 
@@ -1340,6 +1447,7 @@ Sensitive authenticated flows are limited by credential/session identity plus a 
 - `POST /me/master-api-keys`
 - `DELETE /me/master-api-keys/{api_key_id}`
 - `POST /me/transactions/import.csv`
+- `DELETE /me/imports/{import_run_id}/transactions`
 - `GET /me/transactions/export.csv`
 - `GET /me/metrics/tags`
 - `GET /me/metrics/categories`

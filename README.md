@@ -49,7 +49,8 @@
   - `DELETE /api/v1/me/transactions/{transaction_id}`
 - CSV flows:
   - `GET /api/v1/me/transactions/export.csv`
-  - `POST /api/v1/me/transactions/import.csv` (`mode=preview|dry_run|commit`, multipart with `file`; `mapping` JSON for validation/commit)
+  - `POST /api/v1/me/transactions/import.csv` (`mode=preview|dry_run|commit`, multipart with `file`; `mapping`, `date_strategy`, `category_strategy`, `tag_strategy`, and `amount_strategy` JSON for validation/commit)
+  - `DELETE /api/v1/me/imports/{import_run_id}/transactions`
   - `GET /api/v1/me/data-runs?limit=50`
 - Metrics flows:
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
@@ -154,7 +155,7 @@ CSV_IMPORT_MAX_BYTES=5242880
 CSV_IMPORT_MAX_ROWS=5000
 CSV_IMPORT_MAX_ERRORS=100
 ```
-CSV import preview returns headers and sample rows without writing. Dry run and commit use explicit header mapping so users can map arbitrary CSV headers to Budget fields. Missing tags/cards are created only during commit; imported tags receive an inferred icon key.
+CSV import preview returns headers, sample rows, date profiles, and capped column value profiles without writing. Dry run and commit use explicit header mapping so users can map arbitrary CSV headers to Budget fields, apply one selected year to yearless dates with `date_strategy`, translate external category labels into fixed Budget categories with `category_strategy`, and map source tag values to existing or new user tags with `tag_strategy`. Spending-only bank CSVs can use `amount_strategy.blank_mapped_amount=skip`; skipped blank-amount rows are counted but do not create transactions, duplicates, or validation errors. Missing selected tags/cards are created only during commit; imported tags receive an inferred icon key. Rollback soft-deletes transactions for imports committed after per-row import-run tracking was added; tags/cards stay in place.
 
 3. Create local storage paths if missing:
 

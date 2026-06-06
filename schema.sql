@@ -348,6 +348,7 @@ CREATE TABLE transactions (
   is_split TINYINT(1) NOT NULL DEFAULT 0,
   source ENUM('manual', 'import') NOT NULL DEFAULT 'manual',
   import_fingerprint CHAR(64) NULL COMMENT 'sha256(date|amount|lower(trim(expense))|category|is_split|tag|card)',
+  csv_import_run_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at DATETIME NULL,
@@ -360,6 +361,7 @@ CREATE TABLE transactions (
   KEY idx_transactions_user_tag (user_id, tag_id),
   KEY idx_transactions_user_card (user_id, card_id),
   KEY idx_transactions_user_split (user_id, is_split),
+  KEY idx_transactions_user_import_run (user_id, csv_import_run_id),
   CONSTRAINT fk_transactions_user
     FOREIGN KEY (user_id) REFERENCES users (id),
   CONSTRAINT fk_transactions_tag
@@ -403,13 +405,22 @@ CREATE TABLE csv_import_runs (
   imported_rows INT UNSIGNED NOT NULL DEFAULT 0,
   duplicate_rows INT UNSIGNED NOT NULL DEFAULT 0,
   invalid_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  skipped_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  skipped_blank_amount_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  rolled_back_at DATETIME NULL,
+  rolled_back_rows INT UNSIGNED NOT NULL DEFAULT 0,
   error_summary VARCHAR(1000) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_csv_import_runs_user_id_id (user_id, id),
   KEY idx_csv_import_runs_user_created (user_id, created_at),
   CONSTRAINT fk_csv_import_runs_user
     FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT fk_transactions_csv_import_run
+    FOREIGN KEY (user_id, csv_import_run_id) REFERENCES csv_import_runs (user_id, id);
 
 CREATE TABLE csv_export_runs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

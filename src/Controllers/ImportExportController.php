@@ -9,6 +9,7 @@ use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
+use App\Security\AuditLogger;
 use App\Support\Str;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -19,6 +20,7 @@ final class ImportExportController
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
     private const IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag', 'card', 'is_split'];
     private const REQUIRED_IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag'];
+    private const CATEGORY_PROFILE_MAX_VALUES = 100;
     private const DEFAULT_MAX_IMPORT_BYTES = 5242880;
     private const DEFAULT_MAX_IMPORT_ROWS = 5000;
     private const DEFAULT_MAX_IMPORT_ERRORS = 100;
@@ -27,7 +29,8 @@ final class ImportExportController
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthService $auth,
-        private readonly Config $config
+        private readonly Config $config,
+        private readonly AuditLogger $audit
     ) {
     }
 
@@ -129,8 +132,25 @@ FROM (
     ci.imported_rows,
     ci.duplicate_rows,
     ci.invalid_rows,
-    CAST(ci.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary
+    ci.skipped_rows,
+    ci.skipped_blank_amount_rows,
+    CAST(ci.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary,
+    ci.rolled_back_at,
+    ci.rolled_back_rows,
+    COALESCE(ir.linked_rows, 0) AS rollback_linked_rows,
+    COALESCE(ir.active_rows, 0) AS rollback_active_rows
   FROM csv_import_runs ci
+  LEFT JOIN (
+    SELECT
+      user_id,
+      csv_import_run_id,
+      COUNT(*) AS linked_rows,
+      SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS active_rows
+    FROM transactions
+    WHERE source = 'import'
+      AND csv_import_run_id IS NOT NULL
+    GROUP BY user_id, csv_import_run_id
+  ) ir ON ir.user_id = ci.user_id AND ir.csv_import_run_id = ci.id
   WHERE ci.user_id = :import_user_id
     AND ci.mode = 'commit'
 
@@ -150,7 +170,13 @@ FROM (
     NULL AS imported_rows,
     NULL AS duplicate_rows,
     NULL AS invalid_rows,
-    CAST(ce.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary
+    NULL AS skipped_rows,
+    NULL AS skipped_blank_amount_rows,
+    CAST(ce.error_summary AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS error_summary,
+    NULL AS rolled_back_at,
+    0 AS rolled_back_rows,
+    0 AS rollback_linked_rows,
+    0 AS rollback_active_rows
   FROM csv_export_runs ce
   WHERE ce.user_id = :export_user_id
 ) runs
@@ -170,6 +196,91 @@ SQL;
         }
 
         return Response::json(['items' => $items]);
+    }
+
+    /** @param array{import_run_id:string} $params */
+    public function rollbackImport(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $importRunId = $this->parseEntityId((string) ($params['import_run_id'] ?? ''), 'import_run_id');
+
+        $ownsTransaction = !$this->pdo->inTransaction();
+        if ($ownsTransaction) {
+            $this->pdo->beginTransaction();
+        }
+
+        try {
+            $run = $this->fetchImportRunForRollback($ctx->userId(), $importRunId);
+            if ($run['rolled_back_at'] !== null) {
+                if ($ownsTransaction) {
+                    $this->pdo->commit();
+                }
+
+                return Response::json([
+                    'status' => 'rolled_back',
+                    'import_run_id' => (string) $importRunId,
+                    'deleted_rows' => (int) $run['rolled_back_rows'],
+                ]);
+            }
+
+            $linkedRows = $this->countLinkedImportRows($ctx->userId(), $importRunId, includeDeleted: true);
+            if ($linkedRows === 0) {
+                if ($ownsTransaction) {
+                    $this->pdo->rollBack();
+                }
+                throw new HttpException(409, 'ROLLBACK_UNAVAILABLE', 'Rollback unavailable for imports before this feature.');
+            }
+
+            $delete = $this->pdo->prepare(
+                "UPDATE transactions
+                 SET deleted_at = UTC_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = :user_id
+                   AND source = 'import'
+                   AND csv_import_run_id = :import_run_id
+                   AND deleted_at IS NULL"
+            );
+            $delete->execute([
+                ':user_id' => $ctx->userId(),
+                ':import_run_id' => $importRunId,
+            ]);
+            $deletedRows = $delete->rowCount();
+
+            $mark = $this->pdo->prepare(
+                'UPDATE csv_import_runs
+                 SET rolled_back_at = UTC_TIMESTAMP(), rolled_back_rows = :rolled_back_rows
+                 WHERE id = :id AND user_id = :user_id AND rolled_back_at IS NULL'
+            );
+            $mark->execute([
+                ':id' => $importRunId,
+                ':user_id' => $ctx->userId(),
+                ':rolled_back_rows' => $deletedRows,
+            ]);
+
+            if ($ownsTransaction) {
+                $this->pdo->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            'csv_import.rollback',
+            'csv_import_run',
+            (string) $importRunId,
+            ['deleted_rows' => $deletedRows]
+        );
+
+        return Response::json([
+            'status' => 'rolled_back',
+            'import_run_id' => (string) $importRunId,
+            'deleted_rows' => $deletedRows,
+        ]);
     }
 
     public function importCsv(Request $request): Response
@@ -220,6 +331,8 @@ SQL;
         $importedRows = 0;
         $duplicateRows = 0;
         $invalidRows = 0;
+        $skippedRows = 0;
+        $skippedBlankAmountRows = 0;
         $errors = [];
         $errorsTruncated = false;
         $parsedRows = [];
@@ -240,6 +353,8 @@ SQL;
                 'mode' => 'preview',
                 'headers' => $header,
                 'sample_rows' => $sampleRows,
+                'column_profiles' => $read['column_profiles'],
+                'date_profiles' => $read['date_profiles'],
                 'suggested_mapping' => $this->suggestImportMapping($header),
                 'total_rows' => $totalRows,
                 'limits' => [
@@ -250,11 +365,21 @@ SQL;
             ]);
         }
 
-        $mapping = $this->validatedImportMapping($request->input('mapping'), $header);
+        $categoryStrategy = $this->validatedCategoryStrategy($request->input('category_strategy'), $header, $read['column_profiles']);
+        $amountStrategy = $this->validatedAmountStrategy($request->input('amount_strategy'));
+        $mapping = $this->validatedImportMapping($request->input('mapping'), $header, $categoryStrategy);
+        $dateStrategy = $this->validatedDateStrategy($request->input('date_strategy'));
+        $tagStrategy = $this->validatedTagStrategy($request->input('tag_strategy'), $ctx->userId());
 
         foreach ($read['rows'] as $row) {
+            $rowNum = (int) $row['row'];
             try {
-                $parsed = $this->parseImportRow($row['cols'], $mapping, (int) $row['row']);
+                $parsed = $this->parseImportRow($row['cols'], $mapping, $categoryStrategy, $amountStrategy, $dateStrategy, $tagStrategy, $rowNum);
+                if ($parsed === null) {
+                    $skippedRows++;
+                    $skippedBlankAmountRows++;
+                    continue;
+                }
                 $validRows++;
                 $parsedRows[] = $parsed;
             } catch (HttpException $e) {
@@ -290,14 +415,44 @@ SQL;
             }
 
             try {
+                $status = $this->importStatus($validRows, $invalidRows);
+                $message = $this->importMessage($mode, $status, $validRows, $importedRows, $duplicateRows, $invalidRows, $skippedRows, $errorsTruncated, $maxImportErrors);
+                $importRunId = $this->recordImportRun(
+                    userId: $ctx->userId(),
+                    mode: $mode,
+                    status: $status === 'completed' ? 'completed' : 'failed',
+                    sourceFilename: (string) ($file['name'] ?? 'upload.csv'),
+                    totalRows: $totalRows,
+                    validRows: $validRows,
+                    importedRows: 0,
+                    duplicateRows: 0,
+                    invalidRows: $invalidRows,
+                    skippedRows: $skippedRows,
+                    skippedBlankAmountRows: $skippedBlankAmountRows,
+                    errorSummary: $invalidRows > 0 ? $message : null
+                );
+
                 foreach ($parsedRows as $parsed) {
-                    $inserted = $this->commitImportedRow($ctx->userId(), $parsed);
+                    $inserted = $this->commitImportedRow($ctx->userId(), $parsed, $importRunId);
                     if ($inserted) {
                         $importedRows++;
                     } else {
                         $duplicateRows++;
                     }
                 }
+
+                $status = $this->importStatus($validRows, $invalidRows);
+                $message = $this->importMessage($mode, $status, $validRows, $importedRows, $duplicateRows, $invalidRows, $skippedRows, $errorsTruncated, $maxImportErrors);
+                $this->completeImportRun(
+                    importRunId: $importRunId,
+                    userId: $ctx->userId(),
+                    status: $status === 'completed' ? 'completed' : 'failed',
+                    importedRows: $importedRows,
+                    duplicateRows: $duplicateRows,
+                    skippedRows: $skippedRows,
+                    skippedBlankAmountRows: $skippedBlankAmountRows,
+                    errorSummary: $invalidRows > 0 ? $message : null
+                );
 
                 if ($ownsTransaction) {
                     $this->pdo->commit();
@@ -311,19 +466,23 @@ SQL;
         }
 
         $status = $this->importStatus($validRows, $invalidRows);
-        $message = $this->importMessage($mode, $status, $validRows, $importedRows, $duplicateRows, $invalidRows, $errorsTruncated, $maxImportErrors);
-        $this->recordImportRun(
-            userId: $ctx->userId(),
-            mode: $mode,
-            status: $status === 'completed' ? 'completed' : 'failed',
-            sourceFilename: (string) ($file['name'] ?? 'upload.csv'),
-            totalRows: $totalRows,
-            validRows: $validRows,
-            importedRows: $importedRows,
-            duplicateRows: $duplicateRows,
-            invalidRows: $invalidRows,
-            errorSummary: $invalidRows > 0 ? $message : null
-        );
+        $message = $this->importMessage($mode, $status, $validRows, $importedRows, $duplicateRows, $invalidRows, $skippedRows, $errorsTruncated, $maxImportErrors);
+        if ($mode === 'dry_run') {
+            $this->recordImportRun(
+                userId: $ctx->userId(),
+                mode: $mode,
+                status: $status === 'completed' ? 'completed' : 'failed',
+                sourceFilename: (string) ($file['name'] ?? 'upload.csv'),
+                totalRows: $totalRows,
+                validRows: $validRows,
+                importedRows: $importedRows,
+                duplicateRows: $duplicateRows,
+                invalidRows: $invalidRows,
+                skippedRows: $skippedRows,
+                skippedBlankAmountRows: $skippedBlankAmountRows,
+                errorSummary: $invalidRows > 0 ? $message : null
+            );
+        }
 
         return Response::json([
             'status' => $status,
@@ -334,6 +493,8 @@ SQL;
             'imported_rows' => $importedRows,
             'duplicate_rows' => $duplicateRows,
             'invalid_rows' => $invalidRows,
+            'skipped_rows' => $skippedRows,
+            'skipped_blank_amount_rows' => $skippedBlankAmountRows,
             'errors_truncated' => $errorsTruncated,
             'max_returned_errors' => $maxImportErrors,
             'errors' => $errors,
@@ -356,6 +517,16 @@ SQL;
         $totalRows = 0;
         $rows = [];
         $sampleRows = [];
+        $profileCounts = [];
+        $blankCounts = [];
+        $profileTruncated = [];
+        $dateValues = [];
+        foreach ($header as $name) {
+            $profileCounts[$name] = [];
+            $blankCounts[$name] = 0;
+            $profileTruncated[$name] = false;
+            $dateValues[$name] = [];
+        }
 
         while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
             $totalRows++;
@@ -369,6 +540,26 @@ SQL;
             $rowNum = $totalRows + 1;
             $rows[] = ['row' => $rowNum, 'cols' => $cols];
 
+            foreach ($header as $i => $name) {
+                $value = trim((string) ($cols[$i] ?? ''));
+                if ($value === '') {
+                    $blankCounts[$name]++;
+                    continue;
+                }
+                $dateValues[$name][] = $value;
+
+                if (array_key_exists($value, $profileCounts[$name])) {
+                    $profileCounts[$name][$value]++;
+                    continue;
+                }
+
+                if (count($profileCounts[$name]) < self::CATEGORY_PROFILE_MAX_VALUES) {
+                    $profileCounts[$name][$value] = 1;
+                } else {
+                    $profileTruncated[$name] = true;
+                }
+            }
+
             if ($includeSamples && count($sampleRows) < self::IMPORT_PREVIEW_SAMPLE_ROWS) {
                 $sampleRows[] = $this->sampleImportRow($header, $cols);
             }
@@ -378,8 +569,72 @@ SQL;
             'header' => $header,
             'rows' => $rows,
             'sample_rows' => $sampleRows,
+            'column_profiles' => $this->columnProfiles($header, $profileCounts, $blankCounts, $profileTruncated),
+            'date_profiles' => $this->dateProfiles($header, $dateValues),
             'total_rows' => $totalRows,
         ];
+    }
+
+    private function dateProfiles(array $header, array $dateValues): array
+    {
+        $profiles = [];
+        foreach ($header as $name) {
+            $fullDateCount = 0;
+            $yearlessDateCount = 0;
+            $invalidExamples = [];
+            $yearlessExamples = [];
+
+            foreach ($dateValues[$name] as $value) {
+                if ($this->parseFullImportDate($value) !== null) {
+                    $fullDateCount++;
+                    continue;
+                }
+                if ($this->parseYearlessImportDate($value, 2026) !== null) {
+                    $yearlessDateCount++;
+                    if (count($yearlessExamples) < 5 && !in_array($value, $yearlessExamples, true)) {
+                        $yearlessExamples[] = $value;
+                    }
+                    continue;
+                }
+                if (count($invalidExamples) < 5 && !in_array($value, $invalidExamples, true)) {
+                    $invalidExamples[] = $value;
+                }
+            }
+
+            $profiles[] = [
+                'header' => $name,
+                'full_date_count' => $fullDateCount,
+                'yearless_date_count' => $yearlessDateCount,
+                'yearless_examples' => $yearlessExamples,
+                'invalid_examples' => $invalidExamples,
+            ];
+        }
+
+        return $profiles;
+    }
+
+    private function columnProfiles(array $header, array $profileCounts, array $blankCounts, array $profileTruncated): array
+    {
+        $profiles = [];
+        foreach ($header as $name) {
+            $values = [];
+            foreach ($profileCounts[$name] as $value => $count) {
+                $values[] = [
+                    'value' => (string) $value,
+                    'count' => (int) $count,
+                ];
+            }
+            usort($values, static fn(array $a, array $b): int => ($b['count'] <=> $a['count']) ?: strcmp((string) $a['value'], (string) $b['value']));
+
+            $profiles[] = [
+                'header' => $name,
+                'blank_count' => (int) $blankCounts[$name],
+                'unique_values_truncated' => (bool) $profileTruncated[$name],
+                'unique_values' => $values,
+            ];
+        }
+
+        return $profiles;
     }
 
     /** @param array<int,string> $header */
@@ -423,11 +678,11 @@ SQL;
 
         $aliases = [
             'date' => ['date', 'transaction_date', 'posted_date', 'post_date'],
-            'expense' => ['expense', 'description', 'merchant', 'name', 'payee', 'transaction'],
-            'amount' => ['amount', 'transaction_amount', 'debit', 'charge', 'cost'],
-            'category' => ['category', 'budget_category', 'type'],
-            'tag' => ['tag', 'tags', 'label'],
-            'card' => ['card', 'account', 'payment_card', 'payment_method'],
+            'expense' => ['expense', 'description', 'merchant', 'vendor_payee', 'vendor', 'payee', 'raw_statement_text', 'transaction'],
+            'amount' => ['amount', 'transaction_amount', 'money_out', 'debit', 'charge', 'cost'],
+            'category' => ['category', 'budget_category', 'bank_category_guess', 'type'],
+            'tag' => ['tag', 'tags', 'bank_category_guess', 'label'],
+            'card' => ['card', 'account', 'payment_source', 'payment_card', 'payment_method'],
             'is_split' => ['is_split', 'split', 'split_transaction'],
         ];
 
@@ -452,7 +707,7 @@ SQL;
     }
 
     /** @param array<int,string> $header */
-    private function validatedImportMapping(mixed $raw, array $header): array
+    private function validatedImportMapping(mixed $raw, array $header, array $categoryStrategy = ['mode' => 'exact_column']): array
     {
         if ($raw === null || trim((string) $raw) === '') {
             $mapping = $this->suggestImportMapping($header);
@@ -478,7 +733,12 @@ SQL;
             }
         }
 
-        foreach (self::REQUIRED_IMPORT_FIELDS as $field) {
+        $requiredFields = self::REQUIRED_IMPORT_FIELDS;
+        if (($categoryStrategy['mode'] ?? 'exact_column') !== 'exact_column') {
+            $requiredFields = array_values(array_filter($requiredFields, static fn(string $field): bool => $field !== 'category'));
+        }
+
+        foreach ($requiredFields as $field) {
             if (!array_key_exists($field, $mapping) || trim((string) $mapping[$field]) === '') {
                 $details[] = ['field' => 'mapping.' . $field, 'message' => 'is required'];
             }
@@ -512,25 +772,230 @@ SQL;
         return $resolved;
     }
 
+    /** @param array<int,string> $header */
+    private function validatedCategoryStrategy(mixed $raw, array $header, array $columnProfiles = []): array
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            return ['mode' => 'exact_column'];
+        }
+
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'category_strategy', 'message' => 'must be valid JSON'],
+            ]);
+        }
+
+        $mode = trim((string) ($decoded['mode'] ?? ''));
+        if (!in_array($mode, ['exact_column', 'value_map', 'default'], true)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'category_strategy.mode', 'message' => 'must be exact_column, value_map, or default'],
+            ]);
+        }
+
+        if ($mode === 'default') {
+            return [
+                'mode' => 'default',
+                'default_category' => $this->validatedCategory((string) ($decoded['default_category'] ?? '')),
+            ];
+        }
+
+        if ($mode === 'exact_column') {
+            return ['mode' => 'exact_column'];
+        }
+
+        $sourceHeader = trim((string) ($decoded['source_header'] ?? ''));
+        $headerLookup = array_flip($header);
+        if ($sourceHeader === '' || !array_key_exists($sourceHeader, $headerLookup)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'category_strategy.source_header', 'message' => 'must reference an existing CSV header'],
+            ]);
+        }
+        foreach ($columnProfiles as $profile) {
+            if (($profile['header'] ?? null) === $sourceHeader && ($profile['unique_values_truncated'] ?? false)) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'category_strategy.source_header', 'message' => 'has too many unique values; choose another source or use a default category'],
+                ]);
+            }
+        }
+
+        $valueMap = $decoded['value_map'] ?? null;
+        if (!is_array($valueMap)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'category_strategy.value_map', 'message' => 'must be an object'],
+            ]);
+        }
+
+        $normalizedMap = [];
+        foreach ($valueMap as $sourceValue => $category) {
+            $source = trim((string) $sourceValue);
+            if ($source === '') {
+                continue;
+            }
+            $normalizedMap[$source] = $this->validatedCategory((string) $category);
+        }
+
+        return [
+            'mode' => 'value_map',
+            'source_header' => $sourceHeader,
+            'source_index' => (int) $headerLookup[$sourceHeader],
+            'value_map' => $normalizedMap,
+        ];
+    }
+
+    private function validatedAmountStrategy(mixed $raw): array
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            return ['blank_mapped_amount' => 'error'];
+        }
+
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'amount_strategy', 'message' => 'must be valid JSON'],
+            ]);
+        }
+
+        $blankMappedAmount = trim((string) ($decoded['blank_mapped_amount'] ?? 'error'));
+        if (!in_array($blankMappedAmount, ['error', 'skip'], true)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'amount_strategy.blank_mapped_amount', 'message' => 'must be error or skip'],
+            ]);
+        }
+
+        return ['blank_mapped_amount' => $blankMappedAmount];
+    }
+
+    private function validatedDateStrategy(mixed $raw): array
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            return ['missing_year' => 'reject'];
+        }
+
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'date_strategy', 'message' => 'must be valid JSON'],
+            ]);
+        }
+
+        $missingYear = trim((string) ($decoded['missing_year'] ?? 'reject'));
+        if ($missingYear === 'reject') {
+            return ['missing_year' => 'reject'];
+        }
+        if ($missingYear !== 'apply_year') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'date_strategy.missing_year', 'message' => 'must be reject or apply_year'],
+            ]);
+        }
+
+        $yearRaw = $decoded['year'] ?? null;
+        if (!is_int($yearRaw) && !(is_string($yearRaw) && ctype_digit($yearRaw))) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'date_strategy.year', 'message' => 'must be a four-digit year'],
+            ]);
+        }
+        $year = (int) $yearRaw;
+        if ($year < 1900 || $year > 2100) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'date_strategy.year', 'message' => 'must be between 1900 and 2100'],
+            ]);
+        }
+
+        return ['missing_year' => 'apply_year', 'year' => $year];
+    }
+
+    private function validatedTagStrategy(mixed $raw, int $userId): array
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'tag_strategy', 'message' => 'is required'],
+            ]);
+        }
+
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'tag_strategy', 'message' => 'must be valid JSON'],
+            ]);
+        }
+        if (($decoded['mode'] ?? null) !== 'value_map' || !is_array($decoded['value_map'] ?? null)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'tag_strategy.value_map', 'message' => 'must map source values to existing or new tags'],
+            ]);
+        }
+
+        $valueMap = [];
+        foreach ($decoded['value_map'] as $sourceValue => $entry) {
+            $source = trim((string) $sourceValue);
+            if ($source === '') {
+                continue;
+            }
+            if (!is_array($entry)) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'tag_strategy.value_map.' . $source, 'message' => 'must be an object'],
+                ]);
+            }
+            $mode = trim((string) ($entry['mode'] ?? ''));
+            if ($mode === 'existing') {
+                $tagIdRaw = (string) ($entry['tag_id'] ?? '');
+                $tagId = $this->parseEntityId($tagIdRaw, 'tag_strategy.value_map.' . $source . '.tag_id');
+                $tagName = $this->tagNameById($userId, $tagId);
+                if ($tagName === null) {
+                    throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                        ['field' => 'tag_strategy.value_map.' . $source . '.tag_id', 'message' => 'must reference one of your active tags'],
+                    ]);
+                }
+                $valueMap[$source] = ['mode' => 'existing', 'tag_id' => $tagId, 'tag_name' => $tagName];
+                continue;
+            }
+            if ($mode === 'new') {
+                $name = trim((string) ($entry['name'] ?? ''));
+                if ($name === '') {
+                    throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                        ['field' => 'tag_strategy.value_map.' . $source . '.name', 'message' => 'is required'],
+                    ]);
+                }
+                if (mb_strlen($name) > 80) {
+                    throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                        ['field' => 'tag_strategy.value_map.' . $source . '.name', 'message' => 'must be <= 80 characters'],
+                    ]);
+                }
+                $valueMap[$source] = ['mode' => 'new', 'tag_id' => null, 'tag_name' => $name];
+                continue;
+            }
+
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'tag_strategy.value_map.' . $source . '.mode', 'message' => 'must be existing or new'],
+            ]);
+        }
+
+        return ['mode' => 'value_map', 'value_map' => $valueMap];
+    }
+
     /** @param array<int,string> $cols */
-    private function parseImportRow(array $cols, array $mapping, int $rowNum): array
+    private function parseImportRow(array $cols, array $mapping, array $categoryStrategy, array $amountStrategy, array $dateStrategy, array $tagStrategy, int $rowNum): ?array
     {
         $date = $this->getCsvValue($cols, $mapping, 'date');
         $expense = $this->getCsvValue($cols, $mapping, 'expense');
         $amount = $this->getCsvValue($cols, $mapping, 'amount');
-        $category = $this->getCsvValue($cols, $mapping, 'category');
+        if ($amount === '' && ($amountStrategy['blank_mapped_amount'] ?? 'error') === 'skip') {
+            return null;
+        }
+
+        $category = $this->resolvedImportCategory($cols, $mapping, $categoryStrategy);
         $tag = $this->getCsvValue($cols, $mapping, 'tag');
         $card = $this->getCsvValue($cols, $mapping, 'card');
         $isSplitRaw = $this->getCsvValue($cols, $mapping, 'is_split');
 
-        $date = $this->validatedDate($date, 'date');
+        $date = $this->validatedImportDate($date, $dateStrategy);
         $expense = $this->validatedExpense($expense);
         $amount = $this->validatedMoney($amount, 'amount');
         $category = $this->validatedCategory($category);
         $isSplit = $this->validatedOptionalBoolean($isSplitRaw, 'is_split');
 
-        $tagName = trim($tag);
-        if ($tagName === '') {
+        $tag = $this->resolvedImportTag($tag, $tagStrategy);
+        if ($tag === null) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
                 ['field' => 'tag', 'message' => 'is required'],
             ]);
@@ -544,10 +1009,56 @@ SQL;
             'amount' => $amount,
             'category' => $category,
             'is_split' => $isSplit,
-            'tag_name' => $tagName,
+            'tag_name' => $tag['tag_name'],
+            'tag_id' => $tag['tag_id'],
             'card_name' => $cardName,
             'row' => $rowNum,
         ];
+    }
+
+    private function resolvedImportTag(string $raw, array $tagStrategy): ?array
+    {
+        $source = trim($raw);
+        if ($source === '') {
+            return null;
+        }
+        $valueMap = $tagStrategy['value_map'] ?? [];
+        if (!array_key_exists($source, $valueMap)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+                ['field' => 'tag', 'message' => 'source value "' . $source . '" is not mapped'],
+            ]);
+        }
+
+        return [
+            'tag_id' => $valueMap[$source]['tag_id'],
+            'tag_name' => (string) $valueMap[$source]['tag_name'],
+        ];
+    }
+
+    private function resolvedImportCategory(array $cols, array $mapping, array $categoryStrategy): string
+    {
+        $mode = (string) ($categoryStrategy['mode'] ?? 'exact_column');
+        if ($mode === 'default') {
+            return (string) $categoryStrategy['default_category'];
+        }
+        if ($mode === 'value_map') {
+            $source = trim((string) ($cols[(int) $categoryStrategy['source_index']] ?? ''));
+            if ($source === '') {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+                    ['field' => 'category', 'message' => 'source value is required for category mapping'],
+                ]);
+            }
+            $valueMap = $categoryStrategy['value_map'];
+            if (!array_key_exists($source, $valueMap)) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+                    ['field' => 'category', 'message' => 'source value "' . $source . '" is not mapped'],
+                ]);
+            }
+
+            return (string) $valueMap[$source];
+        }
+
+        return $this->getCsvValue($cols, $mapping, 'category');
     }
 
     private function getCsvValue(array $cols, array $index, string $column): string
@@ -561,9 +1072,9 @@ SQL;
     }
 
     /** @param array<string,mixed> $row */
-    private function commitImportedRow(int $userId, array $row): bool
+    private function commitImportedRow(int $userId, array $row, int $importRunId): bool
     {
-        $tagId = $this->findOrCreateTag($userId, (string) $row['tag_name']);
+        $tagId = $row['tag_id'] !== null ? (int) $row['tag_id'] : $this->findOrCreateTag($userId, (string) $row['tag_name']);
         $cardId = trim((string) $row['card_name']) === '' ? null : $this->findOrCreateCard($userId, (string) $row['card_name']);
 
         if ($this->hasDuplicateTransaction(
@@ -600,7 +1111,8 @@ INSERT INTO transactions (
   tag_id,
   card_id,
   source,
-  import_fingerprint
+  import_fingerprint,
+  csv_import_run_id
 )
 VALUES (
   :user_id,
@@ -612,7 +1124,8 @@ VALUES (
   :tag_id,
   :card_id,
   'import',
-  :import_fingerprint
+  :import_fingerprint,
+  :csv_import_run_id
 )
 SQL;
 
@@ -629,6 +1142,7 @@ SQL;
                 ':tag_id' => $tagId,
                 ':card_id' => $cardId,
                 ':import_fingerprint' => $fingerprint,
+                ':csv_import_run_id' => $importRunId,
             ]);
 
             return true;
@@ -647,7 +1161,7 @@ SQL;
 
         foreach ($parsedRows as $parsed) {
             try {
-                $tagId = $this->findTagId($userId, (string) $parsed['tag_name']);
+                $tagId = $parsed['tag_id'] !== null ? (int) $parsed['tag_id'] : $this->findTagId($userId, (string) $parsed['tag_name']);
                 $cardId = trim((string) $parsed['card_name']) === '' ? null : $this->findCardId($userId, (string) $parsed['card_name']);
                 if ($tagId === null) {
                     continue;
@@ -681,6 +1195,9 @@ SQL;
         foreach ($parsedRows as $parsed) {
             $name = trim((string) $parsed['tag_name']);
             if ($name === '') {
+                continue;
+            }
+            if (($parsed['tag_id'] ?? null) !== null) {
                 continue;
             }
 
@@ -755,6 +1272,7 @@ SQL;
         int $importedRows,
         int $duplicateRows,
         int $invalidRows,
+        int $skippedRows,
         bool $errorsTruncated,
         int $maxImportErrors
     ): string {
@@ -772,6 +1290,9 @@ SQL;
 
         if ($errorsTruncated) {
             $message .= ' Only the first ' . $maxImportErrors . ' row error(s) were returned.';
+        }
+        if ($skippedRows > 0) {
+            $message .= ' Skipped ' . $skippedRows . ' row(s).';
         }
 
         return $message;
@@ -811,8 +1332,10 @@ SQL;
         int $importedRows,
         int $duplicateRows,
         int $invalidRows,
+        int $skippedRows,
+        int $skippedBlankAmountRows,
         ?string $errorSummary
-    ): void {
+    ): int {
         $sql = <<<'SQL'
 INSERT INTO csv_import_runs (
   user_id,
@@ -824,6 +1347,8 @@ INSERT INTO csv_import_runs (
   imported_rows,
   duplicate_rows,
   invalid_rows,
+  skipped_rows,
+  skipped_blank_amount_rows,
   error_summary
 )
 VALUES (
@@ -836,6 +1361,8 @@ VALUES (
   :imported_rows,
   :duplicate_rows,
   :invalid_rows,
+  :skipped_rows,
+  :skipped_blank_amount_rows,
   :error_summary
 )
 SQL;
@@ -850,6 +1377,44 @@ SQL;
             ':imported_rows' => $importedRows,
             ':duplicate_rows' => $duplicateRows,
             ':invalid_rows' => $invalidRows,
+            ':skipped_rows' => $skippedRows,
+            ':skipped_blank_amount_rows' => $skippedBlankAmountRows,
+            ':error_summary' => $errorSummary,
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function completeImportRun(
+        int $importRunId,
+        int $userId,
+        string $status,
+        int $importedRows,
+        int $duplicateRows,
+        int $skippedRows,
+        int $skippedBlankAmountRows,
+        ?string $errorSummary
+    ): void {
+        $sql = <<<'SQL'
+UPDATE csv_import_runs
+SET
+  status = :status,
+  imported_rows = :imported_rows,
+  duplicate_rows = :duplicate_rows,
+  skipped_rows = :skipped_rows,
+  skipped_blank_amount_rows = :skipped_blank_amount_rows,
+  error_summary = :error_summary
+WHERE id = :id AND user_id = :user_id
+SQL;
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':id' => $importRunId,
+            ':user_id' => $userId,
+            ':status' => $status,
+            ':imported_rows' => $importedRows,
+            ':duplicate_rows' => $duplicateRows,
+            ':skipped_rows' => $skippedRows,
+            ':skipped_blank_amount_rows' => $skippedBlankAmountRows,
             ':error_summary' => $errorSummary,
         ]);
     }
@@ -917,12 +1482,72 @@ SQL;
         return min(100, max(1, (int) $value));
     }
 
+    /** @return array<string,mixed> */
+    private function fetchImportRunForRollback(int $userId, int $importRunId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT id, imported_rows, rolled_back_at, rolled_back_rows
+             FROM csv_import_runs
+             WHERE id = :id AND user_id = :user_id AND mode = 'commit'
+             LIMIT 1"
+        );
+        $stmt->execute([
+            ':id' => $importRunId,
+            ':user_id' => $userId,
+        ]);
+
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new HttpException(404, 'NOT_FOUND', 'Import run not found');
+        }
+
+        return $row;
+    }
+
+    private function countLinkedImportRows(int $userId, int $importRunId, bool $includeDeleted): int
+    {
+        $sql = "SELECT COUNT(*) AS total
+                FROM transactions
+                WHERE user_id = :user_id
+                  AND source = 'import'
+                  AND csv_import_run_id = :import_run_id";
+        if (!$includeDeleted) {
+            $sql .= ' AND deleted_at IS NULL';
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':import_run_id' => $importRunId,
+        ]);
+
+        return (int) ($stmt->fetch()['total'] ?? 0);
+    }
+
+    private function parseEntityId(string $raw, string $field): int
+    {
+        if ($raw === '' || !ctype_digit($raw)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => $field, 'message' => 'must be a numeric id'],
+            ]);
+        }
+
+        return (int) $raw;
+    }
+
     /** @param array<string,mixed> $row */
     private function dataRunItem(array $row): array
     {
+        $type = (string) $row['type'];
+        $importedRows = $row['imported_rows'] !== null ? (int) $row['imported_rows'] : null;
+        $rolledBackAtRaw = $row['rolled_back_at'] ?? null;
+        $rolledBackAt = $rolledBackAtRaw !== null ? (string) $rolledBackAtRaw : null;
+        $rollbackLinkedRows = (int) ($row['rollback_linked_rows'] ?? 0);
+        $rollbackActiveRows = (int) ($row['rollback_active_rows'] ?? 0);
+
         return [
             'id' => (string) $row['id'],
-            'type' => (string) $row['type'],
+            'type' => $type,
             'status' => (string) $row['status'],
             'created_at' => (string) $row['created_at'],
             'source_filename' => $row['source_filename'] !== null ? (string) $row['source_filename'] : null,
@@ -930,10 +1555,24 @@ SQL;
             'date_to' => $row['date_to'] !== null ? (string) $row['date_to'] : null,
             'total_rows' => (int) $row['total_rows'],
             'valid_rows' => $row['valid_rows'] !== null ? (int) $row['valid_rows'] : null,
-            'imported_rows' => $row['imported_rows'] !== null ? (int) $row['imported_rows'] : null,
+            'imported_rows' => $importedRows,
             'duplicate_rows' => $row['duplicate_rows'] !== null ? (int) $row['duplicate_rows'] : null,
             'invalid_rows' => $row['invalid_rows'] !== null ? (int) $row['invalid_rows'] : null,
+            'skipped_rows' => $row['skipped_rows'] !== null ? (int) $row['skipped_rows'] : null,
+            'skipped_blank_amount_rows' => $row['skipped_blank_amount_rows'] !== null ? (int) $row['skipped_blank_amount_rows'] : null,
             'error_summary' => $row['error_summary'] !== null ? (string) $row['error_summary'] : null,
+            'rollback_available' => $type === 'import'
+                && $rolledBackAt === null
+                && ($importedRows ?? 0) > 0
+                && $rollbackActiveRows > 0,
+            'rolled_back_at' => $rolledBackAt,
+            'rolled_back_rows' => (int) ($row['rolled_back_rows'] ?? 0),
+            'rollback_unavailable_reason' => $type === 'import'
+                && $rolledBackAt === null
+                && ($importedRows ?? 0) > 0
+                && $rollbackLinkedRows === 0
+                    ? 'pre_rollback_feature'
+                    : null,
         ];
     }
 
@@ -1022,6 +1661,20 @@ SQL;
 
         $row = $stmt->fetch();
         return $row ? (int) $row['id'] : null;
+    }
+
+    private function tagNameById(int $userId, int $tagId): ?string
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT name FROM tags WHERE id = :id AND user_id = :user_id AND is_active = 1 AND deleted_at IS NULL LIMIT 1'
+        );
+        $stmt->execute([
+            ':id' => $tagId,
+            ':user_id' => $userId,
+        ]);
+
+        $row = $stmt->fetch();
+        return $row ? (string) $row['name'] : null;
     }
 
     private function findCardId(int $userId, string $name): ?int
@@ -1286,6 +1939,72 @@ SQL;
         throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
             ['field' => $field, 'message' => 'must be a valid date (YYYY-MM-DD or MM/DD/YYYY)'],
         ]);
+    }
+
+    private function validatedImportDate(mixed $value, array $dateStrategy): string
+    {
+        if (!is_string($value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+                ['field' => 'date', 'message' => 'must be a valid date'],
+            ]);
+        }
+
+        $raw = trim($value);
+        $full = $this->parseFullImportDate($raw);
+        if ($full !== null) {
+            return $full;
+        }
+
+        if (($dateStrategy['missing_year'] ?? 'reject') === 'apply_year') {
+            $yearless = $this->parseYearlessImportDate($raw, (int) $dateStrategy['year']);
+            if ($yearless !== null) {
+                return $yearless;
+            }
+        }
+
+        if ($this->looksYearlessDate($raw)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+                ['field' => 'date', 'message' => 'missing year; choose a year in date setup'],
+            ]);
+        }
+
+        throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
+            ['field' => 'date', 'message' => 'must be a valid date'],
+        ]);
+    }
+
+    private function parseFullImportDate(string $raw): ?string
+    {
+        $formats = ['Y-m-d', 'n/j/Y', 'm/d/Y'];
+        foreach ($formats as $format) {
+            $dt = DateTimeImmutable::createFromFormat($format, $raw, new DateTimeZone('UTC'));
+            if ($dt && $dt->format($format) === $raw) {
+                return $dt->format('Y-m-d');
+            }
+        }
+
+        return null;
+    }
+
+    private function parseYearlessImportDate(string $raw, int $year): ?string
+    {
+        if (!$this->looksYearlessDate($raw)) {
+            return null;
+        }
+
+        [$monthRaw, $dayRaw] = explode('/', $raw);
+        $month = (int) $monthRaw;
+        $day = (int) $dayRaw;
+        if (!checkdate($month, $day, $year)) {
+            return null;
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    private function looksYearlessDate(string $raw): bool
+    {
+        return preg_match('/^\d{1,2}\/\d{1,2}$/', $raw) === 1;
     }
 
     private function validatedExpense(mixed $value): string

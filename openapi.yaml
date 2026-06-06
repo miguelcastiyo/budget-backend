@@ -1130,7 +1130,7 @@ paths:
     post:
       tags: [ImportExport]
       summary: Import transactions from CSV
-      description: Preview reads CSV headers and sample rows. Dry run and commit validate an explicit header mapping before importing valid rows. Row-level errors are capped in the response.
+      description: Preview reads CSV headers, sample rows, and column value profiles. Dry run and commit validate an explicit header mapping, category strategy, and amount strategy before importing valid rows. Row-level errors are capped in the response.
       parameters:
         - $ref: '#/components/parameters/XCsrfToken'
       requestBody:
@@ -1148,7 +1148,19 @@ paths:
                   enum: [preview, dry_run, commit]
                 mapping:
                   type: string
-                  description: JSON object mapping Budget fields to CSV headers. Required for dry_run and commit. Required fields are date, expense, amount, category, and tag; optional fields are card and is_split.
+                  description: JSON object mapping Budget fields to CSV headers. Required for dry_run and commit. Required fields are date, expense, amount, and tag. Category is required only when category_strategy.mode is exact_column; optional fields are card and is_split.
+                date_strategy:
+                  type: string
+                  description: JSON object matching CsvImportDateStrategy. Applies an explicit year to yearless dates.
+                category_strategy:
+                  type: string
+                  description: JSON object matching CsvImportCategoryStrategy. Supports exact_column, value_map, and default.
+                tag_strategy:
+                  type: string
+                  description: JSON object matching CsvImportTagStrategy. Maps source tag values to existing or new tags.
+                amount_strategy:
+                  type: string
+                  description: JSON object matching CsvImportAmountStrategy. Supports blank_mapped_amount=error or skip.
               required: [file, mode]
       responses:
         '200':
@@ -1190,6 +1202,33 @@ paths:
                 $ref: '#/components/schemas/DataRunsResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /me/imports/{import_run_id}/transactions:
+    delete:
+      tags: [ImportExport]
+      summary: Roll back transactions from a CSV import
+      description: Soft-deletes transactions created by a committed CSV import. Tags and cards are left in place. Imports committed before transaction rows stored import-run linkage return ROLLBACK_UNAVAILABLE.
+      parameters:
+        - name: import_run_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '200':
+          description: Import rollback result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportRollbackResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
 
 components:
   securitySchemes:
@@ -2684,6 +2723,12 @@ components:
         invalid_rows:
           type: integer
           minimum: 0
+        skipped_rows:
+          type: integer
+          minimum: 0
+        skipped_blank_amount_rows:
+          type: integer
+          minimum: 0
         errors_truncated:
           type: boolean
         max_returned_errors:
@@ -2701,7 +2746,55 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CsvImportNewCard'
-      required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, errors_truncated, max_returned_errors, errors, new_tags, new_cards]
+      required: [status, message, mode, total_rows, valid_rows, imported_rows, duplicate_rows, invalid_rows, skipped_rows, skipped_blank_amount_rows, errors_truncated, max_returned_errors, errors, new_tags, new_cards]
+
+    CsvImportColumnProfileValue:
+      type: object
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+          minimum: 1
+      required: [value, count]
+
+    CsvImportColumnProfile:
+      type: object
+      properties:
+        header:
+          type: string
+        blank_count:
+          type: integer
+          minimum: 0
+        unique_values_truncated:
+          type: boolean
+        unique_values:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CsvImportColumnProfileValue'
+      required: [header, blank_count, unique_values_truncated, unique_values]
+
+    CsvImportDateProfile:
+      type: object
+      properties:
+        header:
+          type: string
+        full_date_count:
+          type: integer
+          minimum: 0
+        yearless_date_count:
+          type: integer
+          minimum: 0
+        yearless_examples:
+          type: array
+          items:
+            type: string
+        invalid_examples:
+          type: array
+          items:
+            type: string
+      required: [header, full_date_count, yearless_date_count, yearless_examples, invalid_examples]
 
     CsvImportPreviewResponse:
       type: object
@@ -2719,6 +2812,14 @@ components:
             type: object
             additionalProperties:
               type: string
+        column_profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/CsvImportColumnProfile'
+        date_profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/CsvImportDateProfile'
         suggested_mapping:
           $ref: '#/components/schemas/CsvImportMapping'
         total_rows:
@@ -2734,7 +2835,7 @@ components:
             max_returned_errors:
               type: integer
           required: [max_bytes, max_rows, max_returned_errors]
-      required: [mode, headers, sample_rows, suggested_mapping, total_rows, limits]
+      required: [mode, headers, sample_rows, column_profiles, date_profiles, suggested_mapping, total_rows, limits]
 
     CsvImportMapping:
       type: object
@@ -2754,6 +2855,95 @@ components:
           type: string
         is_split:
           type: string
+
+    CsvImportCategoryStrategy:
+      oneOf:
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: exact_column
+          required: [mode]
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: value_map
+            source_header:
+              type: string
+            value_map:
+              type: object
+              additionalProperties:
+                type: string
+                enum: [needs, wants, savings_debts]
+          required: [mode, source_header, value_map]
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: default
+            default_category:
+              type: string
+              enum: [needs, wants, savings_debts]
+          required: [mode, default_category]
+
+    CsvImportAmountStrategy:
+      type: object
+      properties:
+        blank_mapped_amount:
+          type: string
+          enum: [error, skip]
+      required: [blank_mapped_amount]
+
+    CsvImportDateStrategy:
+      oneOf:
+        - type: object
+          properties:
+            missing_year:
+              type: string
+              const: reject
+          required: [missing_year]
+        - type: object
+          properties:
+            missing_year:
+              type: string
+              const: apply_year
+            year:
+              type: integer
+              minimum: 1900
+              maximum: 2100
+          required: [missing_year, year]
+
+    CsvImportTagStrategyEntry:
+      oneOf:
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: existing
+            tag_id:
+              type: string
+          required: [mode, tag_id]
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: new
+            name:
+              type: string
+          required: [mode, name]
+
+    CsvImportTagStrategy:
+      type: object
+      properties:
+        mode:
+          type: string
+          const: value_map
+        value_map:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CsvImportTagStrategyEntry'
+      required: [mode, value_map]
 
     CsvImportNewTag:
       type: object
@@ -2809,8 +2999,25 @@ components:
         invalid_rows:
           type: [integer, 'null']
           minimum: 0
+        skipped_rows:
+          type: [integer, 'null']
+          minimum: 0
+        skipped_blank_amount_rows:
+          type: [integer, 'null']
+          minimum: 0
         error_summary:
           type: [string, 'null']
+        rollback_available:
+          type: boolean
+        rolled_back_at:
+          type: [string, 'null']
+          format: date-time
+        rolled_back_rows:
+          type: integer
+          minimum: 0
+        rollback_unavailable_reason:
+          type: [string, 'null']
+          enum: [pre_rollback_feature, null]
       required:
         - id
         - type
@@ -2824,7 +3031,13 @@ components:
         - imported_rows
         - duplicate_rows
         - invalid_rows
+        - skipped_rows
+        - skipped_blank_amount_rows
         - error_summary
+        - rollback_available
+        - rolled_back_at
+        - rolled_back_rows
+        - rollback_unavailable_reason
 
     DataRunsResponse:
       type: object
@@ -2834,6 +3047,19 @@ components:
           items:
             $ref: '#/components/schemas/DataRunItem'
       required: [items]
+
+    ImportRollbackResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [rolled_back]
+        import_run_id:
+          type: string
+        deleted_rows:
+          type: integer
+          minimum: 0
+      required: [status, import_run_id, deleted_rows]
 
     ErrorDetail:
       type: object

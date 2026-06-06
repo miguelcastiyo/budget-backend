@@ -57,7 +57,7 @@ final class App
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $auditLogController = new AuditLogController($pdo, $auth);
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth);
-        $importExportController = new ImportExportController($pdo, $auth, $config);
+        $importExportController = new ImportExportController($pdo, $auth, $config, $auditLogger);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
@@ -126,6 +126,7 @@ final class App
 
         $add('GET', '/me/transactions/export.csv', fn(Request $request) => $importExportController->exportCsv($request));
         $add('POST', '/me/transactions/import.csv', fn(Request $request) => $importExportController->importCsv($request));
+        $add('DELETE', '/me/imports/{import_run_id}/transactions', fn(Request $request, array $params) => $importExportController->rollbackImport($request, $params));
         $add('GET', '/me/data-runs', fn(Request $request) => $importExportController->listDataRuns($request));
 
         $add('GET', '/me/metrics/tags', fn(Request $request) => $metricsController->tags($request));
@@ -248,6 +249,16 @@ final class App
                 'csv-import',
                 $this->config->getInt('RATE_LIMIT_CSV_IMPORT_MAX', 10),
                 $this->config->getInt('RATE_LIMIT_CSV_IMPORT_WINDOW_SECONDS', 3600)
+            );
+            return;
+        }
+
+        if ($method === 'DELETE' && preg_match('#^/me/imports/[0-9]+/transactions$#', $path) === 1) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'csv-import-rollback',
+                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_ROLLBACK_MAX', 20),
+                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_ROLLBACK_WINDOW_SECONDS', 3600)
             );
             return;
         }
