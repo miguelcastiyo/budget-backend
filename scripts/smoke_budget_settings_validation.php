@@ -14,7 +14,7 @@ $settings = $validator->validate([
     'allocation_mode' => 'percent',
     'needs_percent' => '50.00',
     'wants_percent' => '30.00',
-    'savings_debts_percent' => '20.00',
+    'savings_percent' => '20.00',
 ]);
 assertField($settings, 'income_source_type', 'monthly', 'old payload defaults to monthly income');
 assertField($settings, 'primary_monthly_income', '6200.00', 'old payload backfills primary monthly income');
@@ -35,7 +35,7 @@ $settings = $validator->validate([
     'allocation_mode' => 'percent',
     'needs_percent' => '50.00',
     'wants_percent' => '30.00',
-    'savings_debts_percent' => '20.00',
+    'savings_percent' => '20.00',
 ]);
 assertField($settings, 'primary_monthly_income', null, 'hourly primary income leaves monthly field null');
 assertField($settings, 'primary_hourly_rate', '20.00', 'hourly primary income stores rate');
@@ -56,7 +56,7 @@ $settings = $validator->validate([
     'allocation_mode' => 'amount',
     'needs_amount' => '385.00',
     'wants_amount' => '231.00',
-    'savings_debts_amount' => '154.00',
+    'savings_amount' => '154.00',
 ]);
 assertField($settings, 'monthly_income', '770.00', 'hourly primary plus monthly side income computes monthly total');
 assertField($settings, 'side_income_label', 'Tutoring', 'active side income preserves label');
@@ -76,7 +76,7 @@ $settings = $validator->validate([
     'allocation_mode' => 'percent',
     'needs_percent' => '50.00',
     'wants_percent' => '30.00',
-    'savings_debts_percent' => '20.00',
+    'savings_percent' => '20.00',
 ]);
 assertField($settings, 'side_hourly_rate', '25.00', 'hourly side income stores rate');
 assertField($settings, 'side_weekly_hours', '1.00', 'hourly side income stores hours');
@@ -92,7 +92,7 @@ $validator->expectValidationError(
         'allocation_mode' => 'percent',
         'needs_percent' => '50.00',
         'wants_percent' => '30.00',
-        'savings_debts_percent' => '20.00',
+        'savings_percent' => '20.00',
     ],
     'monthly_income',
     'mismatched income breakdown is rejected'
@@ -104,7 +104,7 @@ $validator->expectValidationError(
         'allocation_mode' => 'percent',
         'needs_percent' => '50.00',
         'wants_percent' => '30.00',
-        'savings_debts_percent' => '19.99',
+        'savings_percent' => '19.99',
     ],
     'allocation_mode',
     'percent allocation must total 100.00'
@@ -116,7 +116,7 @@ $validator->expectValidationError(
         'allocation_mode' => 'amount',
         'needs_amount' => '3100.00',
         'wants_amount' => '1860.00',
-        'savings_debts_amount' => '1239.99',
+        'savings_amount' => '1239.99',
     ],
     'allocation_mode',
     'amount allocation must total monthly income'
@@ -132,7 +132,7 @@ $validator->expectValidationError(
         'allocation_mode' => 'percent',
         'needs_percent' => '50.00',
         'wants_percent' => '30.00',
-        'savings_debts_percent' => '20.00',
+        'savings_percent' => '20.00',
     ],
     'primary_hourly_rate',
     'hourly rate must be positive'

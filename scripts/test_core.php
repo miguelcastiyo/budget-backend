@@ -280,6 +280,7 @@ $tagStrategy = ['mode' => 'value_map', 'value_map' => [
     'Coffee' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Coffee'],
     'Utilities' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Utilities'],
     'Refund' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Refund'],
+    'Debt' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Debt'],
 ]];
 $parsedImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes'], [
     'date' => 0,
@@ -294,6 +295,22 @@ assertSame('2026-06-01', $parsedImportRow['date'], 'csv import row normalizes ma
 assertSame('6.25', $parsedImportRow['amount'], 'csv import row normalizes mapped amount');
 assertSame('wants', $parsedImportRow['category'], 'csv import row normalizes mapped category');
 assertSame(true, $parsedImportRow['is_split'], 'csv import row normalizes mapped split flag');
+$savingsImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Brokerage Transfer', '$100.00', 'Savings', 'Utilities'], [
+    'date' => 0,
+    'expense' => 1,
+    'amount' => 2,
+    'category' => 3,
+    'tag' => 4,
+], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
+assertSame('savings', $savingsImportRow['category'], 'csv import row accepts savings category');
+$debtImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Loan Payment', '$100.00', 'Credit Card Payment', 'Debt'], [
+    'date' => 0,
+    'expense' => 1,
+    'amount' => 2,
+    'category' => 3,
+    'tag' => 4,
+], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
+assertSame('needs', $debtImportRow['category'], 'csv import row maps debt-like categories to needs');
 $yearlessImportRow = $parseImportRow->invoke($importExportController, ['3/12', 'Coffee Shop', '$6.25', 'Wants', 'Coffee'], [
     'date' => 0,
     'expense' => 1,
@@ -400,6 +417,14 @@ expectHttpException(
     422,
     'VALIDATION_ERROR',
     'suggestions reject short query'
+);
+$validatedTransactionCategory = $transactionReflection->getMethod('validatedCategory');
+assertSame('savings', $validatedTransactionCategory->invoke($transactionController, 'savings'), 'transaction validation accepts savings category');
+expectHttpException(
+    fn() => $validatedTransactionCategory->invoke($transactionController, 'savings_debts'),
+    422,
+    'VALIDATION_ERROR',
+    'transaction validation rejects legacy savings_debts category'
 );
 $buildTransactionSuggestions = $transactionReflection->getMethod('buildTransactionSuggestions');
 $suggestions = $buildTransactionSuggestions->invoke($transactionController, [

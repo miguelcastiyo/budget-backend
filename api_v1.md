@@ -66,9 +66,9 @@ The frontend also proxies these as `/api/v1/health` and `/api/v1/ready` from the
 ### Fixed Category Enum
 - `needs`
 - `wants`
-- `savings_debts`
+- `savings`
 
-Categories are fixed in v1 (not user-editable).
+Categories are fixed in v1 (not user-editable). Debt payments use `needs` plus a normal user-managed `Debt` tag.
 
 ## 2) Authentication & Session Model
 
@@ -792,10 +792,10 @@ With `month`, the endpoint resolves the budget version effective for that month:
     "allocation_mode": "percent",
     "needs_percent": "50.00",
     "wants_percent": "30.00",
-    "savings_debts_percent": "20.00",
+    "savings_percent": "20.00",
     "needs_amount": null,
     "wants_amount": null,
-    "savings_debts_amount": null
+    "savings_amount": null
   }
 }
 ```
@@ -820,7 +820,7 @@ Request (percent mode):
   "allocation_mode": "percent",
   "needs_percent": "50.00",
   "wants_percent": "30.00",
-  "savings_debts_percent": "20.00"
+  "savings_percent": "20.00"
 }
 ```
 
@@ -840,7 +840,7 @@ Request (amount mode):
   "allocation_mode": "amount",
   "needs_amount": "3100.00",
   "wants_amount": "1860.00",
-  "savings_debts_amount": "1240.00"
+  "savings_amount": "1240.00"
 }
 ```
 
@@ -1055,7 +1055,7 @@ Response:
       "percent_used": "112.90"
     },
     {
-      "category": "savings_debts",
+      "category": "savings",
       "budget_amount": "1240.00",
       "actual_spend": "900.00",
       "percent_used": "72.58"
@@ -1149,7 +1149,7 @@ Response:
   "category_breakdown": [
     { "category": "needs", "spend": "14872.18", "percent_of_total_spend": "52.00" },
     { "category": "wants", "spend": "8580.11", "percent_of_total_spend": "30.00" },
-    { "category": "savings_debts", "spend": "5148.06", "percent_of_total_spend": "18.00" }
+    { "category": "savings", "spend": "5148.06", "percent_of_total_spend": "18.00" }
   ],
   "category_budget_vs_actual": [
     { "category": "needs", "budget_amount": "18600.00", "actual_spend": "14872.18", "percent_used": "79.96" }
@@ -1229,7 +1229,7 @@ Mapping shape:
 
 Required mapped fields: `date`, `expense`, `amount`, and `tag`. `category` is required only for `category_strategy.mode=exact_column`. Optional mapped fields are `card` and `is_split`.
 
-When `category_strategy.mode` is `value_map` or `default`, `category` may be omitted from `mapping`. Budget categories stay fixed as `needs`, `wants`, and `savings_debts`; external category labels are translated, not created.
+When `category_strategy.mode` is `value_map` or `default`, `category` may be omitted from `mapping`. Budget categories stay fixed as `needs`, `wants`, and `savings`; external category labels are translated, not created. Debt-like labels such as `Debt`, `Loan`, or `Credit Card Payment` should map to `needs`, with the tag mapped to `Debt`.
 
 Category strategy examples:
 ```json
@@ -1242,8 +1242,9 @@ Category strategy examples:
   "source_header": "Bank Category Guess",
   "value_map": {
     "Utilities": "needs",
+    "Credit Card Payment": "needs",
     "Dining": "wants",
-    "Savings": "savings_debts"
+    "Savings": "savings"
   }
 }
 ```
@@ -1359,7 +1360,7 @@ Dry-run/commit response `200`:
     {
       "row": 14,
       "field": "category",
-      "message": "must be one of needs,wants,savings_debts"
+      "message": "must be one of needs,wants,savings"
     }
   ],
   "new_tags": [

@@ -1166,7 +1166,7 @@ paths:
                   description: JSON object matching CsvImportDateStrategy. Applies an explicit year to yearless dates.
                 category_strategy:
                   type: string
-                  description: JSON object matching CsvImportCategoryStrategy. Supports exact_column, value_map, and default.
+                  description: JSON object matching CsvImportCategoryStrategy. Supports exact_column, value_map, and default. Debt-like labels should map to needs and use Debt as the tag.
                 tag_strategy:
                   type: string
                   description: JSON object matching CsvImportTagStrategy. Maps source tag values to existing or new tags.
@@ -2180,13 +2180,13 @@ components:
               $ref: '#/components/schemas/Percent'
             wants_percent:
               $ref: '#/components/schemas/Percent'
-            savings_debts_percent:
+            savings_percent:
               $ref: '#/components/schemas/Percent'
             needs_amount:
               $ref: '#/components/schemas/Money'
             wants_amount:
               $ref: '#/components/schemas/Money'
-            savings_debts_amount:
+            savings_amount:
               $ref: '#/components/schemas/Money'
           required: [allocation_mode]
 
@@ -2257,9 +2257,9 @@ components:
           $ref: '#/components/schemas/Percent'
         wants_percent:
           $ref: '#/components/schemas/Percent'
-        savings_debts_percent:
+        savings_percent:
           $ref: '#/components/schemas/Percent'
-      required: [allocation_mode, needs_percent, wants_percent, savings_debts_percent]
+      required: [allocation_mode, needs_percent, wants_percent, savings_percent]
 
     BudgetSettingsAmountAllocation:
       type: object
@@ -2271,9 +2271,9 @@ components:
           $ref: '#/components/schemas/Money'
         wants_amount:
           $ref: '#/components/schemas/Money'
-        savings_debts_amount:
+        savings_amount:
           $ref: '#/components/schemas/Money'
-      required: [allocation_mode, needs_amount, wants_amount, savings_debts_amount]
+      required: [allocation_mode, needs_amount, wants_amount, savings_amount]
 
     TransactionRefTag:
       oneOf:
@@ -2907,7 +2907,7 @@ components:
               type: object
               additionalProperties:
                 type: string
-                enum: [needs, wants, savings_debts]
+                enum: [needs, wants, savings]
           required: [mode, source_header, value_map]
         - type: object
           properties:
@@ -2916,7 +2916,7 @@ components:
               const: default
             default_category:
               type: string
-              enum: [needs, wants, savings_debts]
+              enum: [needs, wants, savings]
           required: [mode, default_category]
 
     CsvImportAmountStrategy:
@@ -3132,7 +3132,7 @@ components:
 
     CategoryEnum:
       type: string
-      enum: [needs, wants, savings_debts]
+      enum: [needs, wants, savings]
 
     Money:
       type: string

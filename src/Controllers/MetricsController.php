@@ -16,7 +16,7 @@ use PDO;
 
 final class MetricsController
 {
-    private const CATEGORY_ORDER = ['needs', 'wants', 'savings_debts'];
+    private const CATEGORY_ORDER = ['needs', 'wants', 'savings'];
     private const WEEKDAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     public function __construct(
@@ -620,7 +620,7 @@ final class MetricsController
         return max($count, 1);
     }
 
-    /** @return array<string,array{monthly_income:float,budget_amounts:array{needs:float,wants:float,savings_debts:float}}> */
+    /** @return array<string,array{monthly_income:float,budget_amounts:array{needs:float,wants:float,savings:float}}> */
     private function budgetPlansByMonth(int $userId, DateTimeImmutable $startDate, DateTimeImmutable $endDate): array
     {
         $startMonth = $startDate->modify('first day of this month')->format('Y-m');
@@ -636,7 +636,7 @@ final class MetricsController
     }
 
     /** @param array<string,mixed>|null $settings
-     *  @return array{monthly_income:float,budget_amounts:array{needs:float,wants:float,savings_debts:float}}
+     *  @return array{monthly_income:float,budget_amounts:array{needs:float,wants:float,savings:float}}
      */
     private function budgetPlanFromSettings(?array $settings): array
     {
@@ -649,21 +649,21 @@ final class MetricsController
                 'budget_amounts' => [
                     'needs' => (float) ($settings['needs_amount'] ?? 0.0),
                     'wants' => (float) ($settings['wants_amount'] ?? 0.0),
-                    'savings_debts' => (float) ($settings['savings_debts_amount'] ?? 0.0),
+                    'savings' => (float) ($settings['savings_amount'] ?? 0.0),
                 ],
             ];
         }
 
         $needsPercent = (float) ($settings['needs_percent'] ?? 50.0);
         $wantsPercent = (float) ($settings['wants_percent'] ?? 30.0);
-        $savingsDebtsPercent = (float) ($settings['savings_debts_percent'] ?? 20.0);
+        $savingsPercent = (float) ($settings['savings_percent'] ?? 20.0);
 
         return [
             'monthly_income' => $income,
             'budget_amounts' => [
                 'needs' => ($income * $needsPercent) / 100.0,
                 'wants' => ($income * $wantsPercent) / 100.0,
-                'savings_debts' => ($income * $savingsDebtsPercent) / 100.0,
+                'savings' => ($income * $savingsPercent) / 100.0,
             ],
         ];
     }

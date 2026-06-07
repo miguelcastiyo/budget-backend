@@ -14,7 +14,7 @@ use PDOException;
 
 final class TransactionController
 {
-    private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
+    private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
     private const SUGGESTION_CANDIDATE_LIMIT = 300;
 
     public function __construct(
@@ -942,7 +942,7 @@ SQL;
     {
         if (!is_string($value) || !in_array($value, self::ALLOWED_CATEGORIES, true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
-                ['field' => 'category', 'message' => 'must be one of needs,wants,savings_debts'],
+                ['field' => 'category', 'message' => 'must be one of needs,wants,savings'],
             ]);
         }
 

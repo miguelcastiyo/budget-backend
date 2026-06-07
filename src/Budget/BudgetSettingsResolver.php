@@ -25,10 +25,10 @@ final class BudgetSettingsResolver
         'allocation_mode',
         'needs_percent',
         'wants_percent',
-        'savings_debts_percent',
+        'savings_percent',
         'needs_amount',
         'wants_amount',
-        'savings_debts_amount',
+        'savings_amount',
     ];
 
     public function __construct(private readonly PDO $pdo)

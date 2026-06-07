@@ -17,7 +17,7 @@ use PDO;
 
 final class ImportExportController
 {
-    private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings_debts'];
+    private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
     private const IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag', 'card', 'is_split'];
     private const REQUIRED_IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag'];
     private const CATEGORY_PROFILE_MAX_VALUES = 100;
@@ -2055,7 +2055,7 @@ SQL;
     {
         if (!is_string($value)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
-                ['field' => 'category', 'message' => 'must be one of needs,wants,savings_debts'],
+                ['field' => 'category', 'message' => 'must be one of needs,wants,savings'],
             ]);
         }
 
@@ -2073,12 +2073,17 @@ SQL;
             'need' => 'needs',
             'wants' => 'wants',
             'want' => 'wants',
-            'savings_debts' => 'savings_debts',
-            'savings_and_debts' => 'savings_debts',
-            'savings_debt' => 'savings_debts',
-            'savings' => 'savings_debts',
-            'debt' => 'savings_debts',
-            'debts' => 'savings_debts',
+            'savings' => 'savings',
+            'savings_and_debts' => 'savings',
+            'savings_debt' => 'savings',
+            'debt' => 'needs',
+            'debts' => 'needs',
+            'loan' => 'needs',
+            'loans' => 'needs',
+            'credit_card_payment' => 'needs',
+            'credit_card_payments' => 'needs',
+            'debt_payment' => 'needs',
+            'debt_payments' => 'needs',
         ];
 
         if (array_key_exists($normalized, $aliases)) {
@@ -2086,7 +2091,7 @@ SQL;
         }
 
         throw new HttpException(422, 'VALIDATION_ERROR', 'Row validation failed', [
-            ['field' => 'category', 'message' => 'must be one of needs,wants,savings_debts'],
+            ['field' => 'category', 'message' => 'must be one of needs,wants,savings'],
         ]);
     }
 

@@ -217,7 +217,7 @@ CREATE TABLE recurring_expenses (
   user_id BIGINT UNSIGNED NOT NULL,
   expense VARCHAR(160) NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
-  category ENUM('needs', 'wants', 'savings_debts') NOT NULL,
+  category ENUM('needs', 'wants', 'savings') NOT NULL,
   tag_id BIGINT UNSIGNED NOT NULL,
   card_id BIGINT UNSIGNED NULL,
   billing_type ENUM('day_of_month', 'last_day') NOT NULL DEFAULT 'day_of_month',
@@ -264,10 +264,10 @@ CREATE TABLE budget_settings (
   allocation_mode ENUM('percent', 'amount') NOT NULL DEFAULT 'percent',
   needs_percent DECIMAL(5,2) NULL,
   wants_percent DECIMAL(5,2) NULL,
-  savings_debts_percent DECIMAL(5,2) NULL,
+  savings_percent DECIMAL(5,2) NULL,
   needs_amount DECIMAL(12,2) NULL,
   wants_amount DECIMAL(12,2) NULL,
-  savings_debts_amount DECIMAL(12,2) NULL,
+  savings_amount DECIMAL(12,2) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -315,11 +315,11 @@ CREATE TABLE budget_settings (
     OR (
       needs_percent IS NOT NULL
       AND wants_percent IS NOT NULL
-      AND savings_debts_percent IS NOT NULL
+      AND savings_percent IS NOT NULL
       AND needs_amount IS NULL
       AND wants_amount IS NULL
-      AND savings_debts_amount IS NULL
-      AND (needs_percent + wants_percent + savings_debts_percent = 100.00)
+      AND savings_amount IS NULL
+      AND (needs_percent + wants_percent + savings_percent = 100.00)
     )
   ),
   CONSTRAINT chk_budget_settings_amount_mode CHECK (
@@ -327,11 +327,11 @@ CREATE TABLE budget_settings (
     OR (
       needs_amount IS NOT NULL
       AND wants_amount IS NOT NULL
-      AND savings_debts_amount IS NOT NULL
+      AND savings_amount IS NOT NULL
       AND needs_percent IS NULL
       AND wants_percent IS NULL
-      AND savings_debts_percent IS NULL
-      AND (needs_amount + wants_amount + savings_debts_amount = monthly_income)
+      AND savings_percent IS NULL
+      AND (needs_amount + wants_amount + savings_amount = monthly_income)
     )
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -353,10 +353,10 @@ CREATE TABLE budget_settings_versions (
   allocation_mode ENUM('percent', 'amount') NOT NULL DEFAULT 'percent',
   needs_percent DECIMAL(5,2) NULL,
   wants_percent DECIMAL(5,2) NULL,
-  savings_debts_percent DECIMAL(5,2) NULL,
+  savings_percent DECIMAL(5,2) NULL,
   needs_amount DECIMAL(12,2) NULL,
   wants_amount DECIMAL(12,2) NULL,
-  savings_debts_amount DECIMAL(12,2) NULL,
+  savings_amount DECIMAL(12,2) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -404,11 +404,11 @@ CREATE TABLE budget_settings_versions (
     OR (
       needs_percent IS NOT NULL
       AND wants_percent IS NOT NULL
-      AND savings_debts_percent IS NOT NULL
+      AND savings_percent IS NOT NULL
       AND needs_amount IS NULL
       AND wants_amount IS NULL
-      AND savings_debts_amount IS NULL
-      AND (needs_percent + wants_percent + savings_debts_percent = 100.00)
+      AND savings_amount IS NULL
+      AND (needs_percent + wants_percent + savings_percent = 100.00)
     )
   ),
   CONSTRAINT chk_budget_settings_versions_amount_mode CHECK (
@@ -416,11 +416,11 @@ CREATE TABLE budget_settings_versions (
     OR (
       needs_amount IS NOT NULL
       AND wants_amount IS NOT NULL
-      AND savings_debts_amount IS NOT NULL
+      AND savings_amount IS NOT NULL
       AND needs_percent IS NULL
       AND wants_percent IS NULL
-      AND savings_debts_percent IS NULL
-      AND (needs_amount + wants_amount + savings_debts_amount = monthly_income)
+      AND savings_percent IS NULL
+      AND (needs_amount + wants_amount + savings_amount = monthly_income)
     )
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -431,7 +431,7 @@ CREATE TABLE transactions (
   transaction_date DATE NOT NULL,
   expense VARCHAR(160) NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
-  category ENUM('needs', 'wants', 'savings_debts') NOT NULL,
+  category ENUM('needs', 'wants', 'savings') NOT NULL,
   tag_id BIGINT UNSIGNED NOT NULL,
   card_id BIGINT UNSIGNED NULL,
   is_split TINYINT(1) NOT NULL DEFAULT 0,
