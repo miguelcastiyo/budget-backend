@@ -8,12 +8,17 @@ use App\Http\Response;
 use App\Http\Router;
 use App\Budget\BudgetSettingsResolver;
 use App\Controllers\AuthController;
-use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
 use App\Controllers\TaxonomyController;
 use App\Controllers\TransactionController;
 use App\Core\App;
 use App\Core\Config;
+use App\ImportExport\CsvExportService;
+use App\ImportExport\CsvImportCommitter;
+use App\ImportExport\CsvImportMapper;
+use App\ImportExport\CsvImportReader;
+use App\ImportExport\DataRunRepository;
+use App\ImportExport\TaxonomyImportRepository;
 use App\Monitoring\StructuredLogger;
 use App\Support\Str;
 use App\Security\AuditLogger;
@@ -118,22 +123,25 @@ expectHttpException(
     'budget settings resolver rejects invalid month'
 );
 
-$importExportReflection = new ReflectionClass(ImportExportController::class);
-$importExportController = $importExportReflection->newInstanceWithoutConstructor();
-$csvCell = $importExportReflection->getMethod('csvCell');
-assertSame("'=SUM(A1:A2)", $csvCell->invoke($importExportController, '=SUM(A1:A2)'), 'csv export escapes equals formulas');
-assertSame("'+cmd", $csvCell->invoke($importExportController, '+cmd'), 'csv export escapes plus formulas');
-assertSame("'-cmd", $csvCell->invoke($importExportController, '-cmd'), 'csv export escapes minus formulas');
-assertSame("'@cmd", $csvCell->invoke($importExportController, '@cmd'), 'csv export escapes at formulas');
-assertSame("' =cmd", $csvCell->invoke($importExportController, ' =cmd'), 'csv export escapes formulas after leading whitespace');
-assertSame('Groceries', $csvCell->invoke($importExportController, 'Groceries'), 'csv export leaves normal cells unchanged');
-$clampedDataRunsLimit = $importExportReflection->getMethod('clampedDataRunsLimit');
-assertSame(50, $clampedDataRunsLimit->invoke($importExportController, null), 'data runs limit defaults to 50');
-assertSame(1, $clampedDataRunsLimit->invoke($importExportController, '0'), 'data runs limit clamps minimum');
-assertSame(100, $clampedDataRunsLimit->invoke($importExportController, '500'), 'data runs limit clamps maximum');
-assertSame(25, $clampedDataRunsLimit->invoke($importExportController, '25'), 'data runs limit accepts in-range values');
-$dataRunItem = $importExportReflection->getMethod('dataRunItem');
-$importRunItem = $dataRunItem->invoke($importExportController, [
+$csvImportMapper = new CsvImportMapper();
+$csvExportReflection = new ReflectionClass(CsvExportService::class);
+$csvExportService = $csvExportReflection->newInstanceWithoutConstructor();
+$csvCell = $csvExportReflection->getMethod('csvCell');
+assertSame("'=SUM(A1:A2)", $csvCell->invoke($csvExportService, '=SUM(A1:A2)'), 'csv export escapes equals formulas');
+assertSame("'+cmd", $csvCell->invoke($csvExportService, '+cmd'), 'csv export escapes plus formulas');
+assertSame("'-cmd", $csvCell->invoke($csvExportService, '-cmd'), 'csv export escapes minus formulas');
+assertSame("'@cmd", $csvCell->invoke($csvExportService, '@cmd'), 'csv export escapes at formulas');
+assertSame("' =cmd", $csvCell->invoke($csvExportService, ' =cmd'), 'csv export escapes formulas after leading whitespace');
+assertSame('Groceries', $csvCell->invoke($csvExportService, 'Groceries'), 'csv export leaves normal cells unchanged');
+$dataRunReflection = new ReflectionClass(DataRunRepository::class);
+$dataRunRepository = $dataRunReflection->newInstanceWithoutConstructor();
+$clampedDataRunsLimit = $dataRunReflection->getMethod('clampedDataRunsLimit');
+assertSame(50, $clampedDataRunsLimit->invoke($dataRunRepository, null), 'data runs limit defaults to 50');
+assertSame(1, $clampedDataRunsLimit->invoke($dataRunRepository, '0'), 'data runs limit clamps minimum');
+assertSame(100, $clampedDataRunsLimit->invoke($dataRunRepository, '500'), 'data runs limit clamps maximum');
+assertSame(25, $clampedDataRunsLimit->invoke($dataRunRepository, '25'), 'data runs limit accepts in-range values');
+$dataRunItem = $dataRunReflection->getMethod('dataRunItem');
+$importRunItem = $dataRunItem->invoke($dataRunRepository, [
     'id' => 'import_123',
     'type' => 'import',
     'status' => 'partial',
@@ -164,7 +172,7 @@ assertSame(true, $importRunItem['rollback_available'], 'data runs import item ex
 assertSame(null, $importRunItem['rolled_back_at'], 'data runs import item keeps null rollback timestamp');
 assertSame(0, $importRunItem['rolled_back_rows'], 'data runs import item casts rollback row count');
 assertSame(null, $importRunItem['rollback_unavailable_reason'], 'data runs import item has no unavailable reason when rollback is available');
-$oldImportRunItem = $dataRunItem->invoke($importExportController, [
+$oldImportRunItem = $dataRunItem->invoke($dataRunRepository, [
     'id' => 'import_124',
     'type' => 'import',
     'status' => 'completed',
@@ -187,7 +195,7 @@ $oldImportRunItem = $dataRunItem->invoke($importExportController, [
 ]);
 assertSame(false, $oldImportRunItem['rollback_available'], 'old import run without linked rows cannot roll back');
 assertSame('pre_rollback_feature', $oldImportRunItem['rollback_unavailable_reason'], 'old import run reports rollback unavailable reason');
-$rolledBackImportRunItem = $dataRunItem->invoke($importExportController, [
+$rolledBackImportRunItem = $dataRunItem->invoke($dataRunRepository, [
     'id' => 'import_125',
     'type' => 'import',
     'status' => 'completed',
@@ -211,7 +219,7 @@ $rolledBackImportRunItem = $dataRunItem->invoke($importExportController, [
 assertSame(false, $rolledBackImportRunItem['rollback_available'], 'rolled back import cannot roll back again');
 assertSame('2026-05-29 12:04:00', $rolledBackImportRunItem['rolled_back_at'], 'rolled back import keeps timestamp');
 assertSame(5, $rolledBackImportRunItem['rolled_back_rows'], 'rolled back import casts rolled back count');
-$exportRunItem = $dataRunItem->invoke($importExportController, [
+$exportRunItem = $dataRunItem->invoke($dataRunRepository, [
     'id' => 'export_45',
     'type' => 'export',
     'status' => 'completed',
@@ -233,18 +241,19 @@ assertSame('export', $exportRunItem['type'], 'data runs export item keeps type')
 assertSame('2026-01-01', $exportRunItem['date_from'], 'data runs export item keeps date_from');
 assertSame(null, $exportRunItem['valid_rows'], 'data runs export item has null import counters');
 assertSame(240, $exportRunItem['total_rows'], 'data runs export item casts total rows');
-$suggestImportMapping = $importExportReflection->getMethod('suggestImportMapping');
-$suggestedMapping = $suggestImportMapping->invoke($importExportController, ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
+$mapperReflection = new ReflectionClass(CsvImportMapper::class);
+$suggestImportMapping = $mapperReflection->getMethod('suggestImportMapping');
+$suggestedMapping = $suggestImportMapping->invoke($csvImportMapper, ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
 assertSame('Posted Date', $suggestedMapping['date'] ?? null, 'csv import preview suggests date mapping from alias');
 assertSame('Description', $suggestedMapping['expense'] ?? null, 'csv import preview suggests expense mapping from alias');
 assertSame('Account', $suggestedMapping['card'] ?? null, 'csv import preview suggests card mapping from alias');
-$bankSuggestedMapping = $suggestImportMapping->invoke($importExportController, ['Transaction Date', 'Vendor / Payee', 'Money Out', 'Money In', 'Bank Category Guess', 'Payment Source']);
+$bankSuggestedMapping = $suggestImportMapping->invoke($csvImportMapper, ['Transaction Date', 'Vendor / Payee', 'Money Out', 'Money In', 'Bank Category Guess', 'Payment Source']);
 assertSame('Vendor / Payee', $bankSuggestedMapping['expense'] ?? null, 'csv import preview suggests bank vendor/payee mapping');
 assertSame('Money Out', $bankSuggestedMapping['amount'] ?? null, 'csv import preview suggests bank money out mapping');
 assertSame('Bank Category Guess', $bankSuggestedMapping['tag'] ?? null, 'csv import preview suggests bank category guess tag mapping');
 assertSame('Payment Source', $bankSuggestedMapping['card'] ?? null, 'csv import preview suggests bank payment source card mapping');
-$validatedImportMapping = $importExportReflection->getMethod('validatedImportMapping');
-$mapping = $validatedImportMapping->invoke($importExportController, json_encode([
+$validatedImportMapping = $mapperReflection->getMethod('validatedImportMapping');
+$mapping = $validatedImportMapping->invoke($csvImportMapper, json_encode([
     'date' => 'Posted Date',
     'expense' => 'Description',
     'amount' => 'Amount',
@@ -254,7 +263,7 @@ $mapping = $validatedImportMapping->invoke($importExportController, json_encode(
 ], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
 assertSame(0, $mapping['date'], 'csv import mapping resolves date index');
 assertSame(5, $mapping['card'], 'csv import mapping resolves optional card index');
-$valueMapMapping = $validatedImportMapping->invoke($importExportController, json_encode([
+$valueMapMapping = $validatedImportMapping->invoke($csvImportMapper, json_encode([
     'date' => 'Posted Date',
     'expense' => 'Description',
     'amount' => 'Amount',
@@ -262,18 +271,18 @@ $valueMapMapping = $validatedImportMapping->invoke($importExportController, json
 ], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Bank Category Guess'], ['mode' => 'value_map']);
 assertSame(3, $valueMapMapping['tag'], 'csv import mapping allows category to be omitted for value map strategy');
 expectHttpException(
-    fn() => $validatedImportMapping->invoke($importExportController, '{"date":"Posted Date","expense":"Posted Date","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Posted Date', 'Amount', 'Budget Category', 'Tag']),
+    fn() => $validatedImportMapping->invoke($csvImportMapper, '{"date":"Posted Date","expense":"Posted Date","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Posted Date', 'Amount', 'Budget Category', 'Tag']),
     422,
     'VALIDATION_ERROR',
     'csv import mapping rejects reused headers'
 );
 expectHttpException(
-    fn() => $validatedImportMapping->invoke($importExportController, '{"date":"Missing","expense":"Description","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Description', 'Amount', 'Budget Category', 'Tag']),
+    fn() => $validatedImportMapping->invoke($csvImportMapper, '{"date":"Missing","expense":"Description","amount":"Amount","category":"Budget Category","tag":"Tag"}', ['Description', 'Amount', 'Budget Category', 'Tag']),
     422,
     'VALIDATION_ERROR',
     'csv import mapping rejects missing source headers'
 );
-$parseImportRow = $importExportReflection->getMethod('parseImportRow');
+$parseImportRow = $mapperReflection->getMethod('parseImportRow');
 $dateStrategyReject = ['missing_year' => 'reject'];
 $dateStrategyApplyYear = ['missing_year' => 'apply_year', 'year' => 2026];
 $tagStrategy = ['mode' => 'value_map', 'value_map' => [
@@ -282,7 +291,7 @@ $tagStrategy = ['mode' => 'value_map', 'value_map' => [
     'Refund' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Refund'],
     'Debt' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Debt'],
 ]];
-$parsedImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes'], [
+$parsedImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -295,7 +304,7 @@ assertSame('2026-06-01', $parsedImportRow['date'], 'csv import row normalizes ma
 assertSame('6.25', $parsedImportRow['amount'], 'csv import row normalizes mapped amount');
 assertSame('wants', $parsedImportRow['category'], 'csv import row normalizes mapped category');
 assertSame(true, $parsedImportRow['is_split'], 'csv import row normalizes mapped split flag');
-$savingsImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Brokerage Transfer', '$100.00', 'Savings', 'Utilities'], [
+$savingsImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Brokerage Transfer', '$100.00', 'Savings', 'Utilities'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -303,7 +312,7 @@ $savingsImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026'
     'tag' => 4,
 ], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
 assertSame('savings', $savingsImportRow['category'], 'csv import row accepts savings category');
-$debtImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Loan Payment', '$100.00', 'Credit Card Payment', 'Debt'], [
+$debtImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Loan Payment', '$100.00', 'Credit Card Payment', 'Debt'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -311,7 +320,7 @@ $debtImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', '
     'tag' => 4,
 ], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
 assertSame('needs', $debtImportRow['category'], 'csv import row maps debt-like categories to needs');
-$yearlessImportRow = $parseImportRow->invoke($importExportController, ['3/12', 'Coffee Shop', '$6.25', 'Wants', 'Coffee'], [
+$yearlessImportRow = $parseImportRow->invoke($csvImportMapper, ['3/12', 'Coffee Shop', '$6.25', 'Wants', 'Coffee'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -320,7 +329,7 @@ $yearlessImportRow = $parseImportRow->invoke($importExportController, ['3/12', '
 ], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyApplyYear, $tagStrategy, 2);
 assertSame('2026-03-12', $yearlessImportRow['date'], 'csv import row applies selected year to yearless dates');
 expectHttpException(
-    fn() => $parseImportRow->invoke($importExportController, ['3/12', 'Coffee Shop', '$6.25', 'Wants', 'Coffee'], [
+    fn() => $parseImportRow->invoke($csvImportMapper, ['3/12', 'Coffee Shop', '$6.25', 'Wants', 'Coffee'], [
         'date' => 0,
         'expense' => 1,
         'amount' => 2,
@@ -331,7 +340,7 @@ expectHttpException(
     'VALIDATION_ERROR',
     'csv import row rejects yearless dates without date strategy'
 );
-$valueMapImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'LADWP', '49.61', 'Utilities'], [
+$valueMapImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'LADWP', '49.61', 'Utilities'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -339,28 +348,69 @@ $valueMapImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026
 ], ['mode' => 'value_map', 'source_index' => 3, 'value_map' => ['Utilities' => 'needs']], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
 assertSame('needs', $valueMapImportRow['category'], 'csv import row resolves category from value map strategy');
 assertSame('Utilities', $valueMapImportRow['tag_name'], 'csv import row allows the category source to also feed tag');
-$blankAmountImportRow = $parseImportRow->invoke($importExportController, ['6/1/2026', 'Refund', '', 'Refund'], [
+$blankAmountImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Refund', '', 'Refund'], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
     'tag' => 3,
 ], ['mode' => 'default', 'default_category' => 'needs'], ['blank_mapped_amount' => 'skip'], $dateStrategyReject, $tagStrategy, 2);
 assertSame(null, $blankAmountImportRow, 'csv import row skips blank mapped amount rows when configured');
-$inferredTagIconKey = $importExportReflection->getMethod('inferredTagIconKey');
-assertSame('coffee', $inferredTagIconKey->invoke($importExportController, 'Coffee Shops'), 'csv import infers coffee icon');
-assertSame('tag', $inferredTagIconKey->invoke($importExportController, 'Miscellaneous'), 'csv import falls back to tag icon');
-$readImportCsv = $importExportReflection->getMethod('readImportCsv');
+$inferredTagIconKey = $mapperReflection->getMethod('inferredTagIconKey');
+assertSame('coffee', $inferredTagIconKey->invoke($csvImportMapper, 'Coffee Shops'), 'csv import infers coffee icon');
+assertSame('tag', $inferredTagIconKey->invoke($csvImportMapper, 'Miscellaneous'), 'csv import falls back to tag icon');
+$csvImportReader = new CsvImportReader(Config::load(dirname(__DIR__)), $csvImportMapper);
+$readerReflection = new ReflectionClass(CsvImportReader::class);
+$readImportCsv = $readerReflection->getMethod('readImportCsv');
 $csvHandle = fopen('php://temp', 'r+');
 assert($csvHandle !== false);
 fwrite($csvHandle, "Posted Date,Description,Amount,Bank Category Guess\n2026-06-01,Coffee,6.25,Coffee\n2026-06-02,Refund,,Refund\n");
 rewind($csvHandle);
-$csvPreview = $readImportCsv->invoke($importExportController, $csvHandle, 10, 100, true);
+$csvPreview = $readImportCsv->invoke($csvImportReader, $csvHandle, 10, true);
 fclose($csvHandle);
 assertSame(['Posted Date', 'Description', 'Amount', 'Bank Category Guess'], $csvPreview['header'], 'csv import preview reads headers');
 assertSame(2, $csvPreview['total_rows'], 'csv import preview counts data rows');
 assertSame('Coffee', $csvPreview['sample_rows'][0]['Description'] ?? null, 'csv import preview returns sample rows by header');
 assertSame(1, $csvPreview['column_profiles'][2]['blank_count'], 'csv import preview profiles blank counts');
 assertSame('Coffee', $csvPreview['column_profiles'][3]['unique_values'][0]['value'] ?? null, 'csv import preview profiles unique source values');
+
+$importPdo = new PDO('sqlite::memory:');
+$importPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$importPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$importPdo->exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, icon_key TEXT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", import_fingerprint TEXT NULL, csv_import_run_id INTEGER NULL, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec("INSERT INTO tags (user_id, name, icon_key, is_active) VALUES (1, 'Coffee', 'coffee', 1)");
+$importPdo->exec("INSERT INTO cards (user_id, name, is_active) VALUES (1, 'Amex Gold', 1)");
+$importPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source) VALUES (1, '2026-06-01', 'Coffee Shop', '6.25', 'wants', 1, 1, 1, 'manual')");
+$taxonomyImportRepository = new TaxonomyImportRepository($importPdo, $csvImportMapper);
+$csvImportCommitter = new CsvImportCommitter($importPdo, $taxonomyImportRepository, $csvImportMapper);
+$parsedRowsForBatch = [
+    [
+        'date' => '2026-06-01',
+        'expense' => 'Coffee Shop',
+        'amount' => '6.25',
+        'category' => 'wants',
+        'is_split' => true,
+        'tag_name' => 'Coffee',
+        'tag_id' => null,
+        'card_name' => 'Amex Gold',
+        'row' => 2,
+    ],
+    [
+        'date' => '2026-06-02',
+        'expense' => 'LADWP',
+        'amount' => '49.61',
+        'category' => 'needs',
+        'is_split' => false,
+        'tag_name' => 'Utilities',
+        'tag_id' => null,
+        'card_name' => 'Visa',
+        'row' => 3,
+    ],
+];
+assertSame(1, $csvImportCommitter->estimateDryRunDuplicates(1, $parsedRowsForBatch), 'csv import committer batches duplicate estimation with existing tag/card names');
+assertSame([['name' => 'Utilities', 'icon_key' => 'home']], $csvImportCommitter->plannedNewTags(1, $parsedRowsForBatch), 'csv import committer plans only missing new tags');
+assertSame([['name' => 'Visa']], $csvImportCommitter->plannedNewCards(1, $parsedRowsForBatch), 'csv import committer plans only missing new cards');
 
 $taxonomyReflection = new ReflectionClass(TaxonomyController::class);
 $taxonomyController = $taxonomyReflection->newInstanceWithoutConstructor();
