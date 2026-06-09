@@ -379,6 +379,7 @@ $importPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $importPdo->exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, icon_key TEXT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", import_fingerprint TEXT NULL, csv_import_run_id INTEGER NULL, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec('CREATE UNIQUE INDEX uq_transactions_import_dedupe ON transactions (user_id, import_fingerprint)');
 $importPdo->exec("INSERT INTO tags (user_id, name, icon_key, is_active) VALUES (1, 'Coffee', 'coffee', 1)");
 $importPdo->exec("INSERT INTO cards (user_id, name, is_active) VALUES (1, 'Amex Gold', 1)");
 $importPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source) VALUES (1, '2026-06-01', 'Coffee Shop', '6.25', 'wants', 1, 1, 1, 'manual')");
@@ -411,6 +412,21 @@ $parsedRowsForBatch = [
 assertSame(1, $csvImportCommitter->estimateDryRunDuplicates(1, $parsedRowsForBatch), 'csv import committer batches duplicate estimation with existing tag/card names');
 assertSame([['name' => 'Utilities', 'icon_key' => 'home']], $csvImportCommitter->plannedNewTags(1, $parsedRowsForBatch), 'csv import committer plans only missing new tags');
 assertSame([['name' => 'Visa']], $csvImportCommitter->plannedNewCards(1, $parsedRowsForBatch), 'csv import committer plans only missing new cards');
+$commitRowsForBatch = [
+    $parsedRowsForBatch[0],
+    $parsedRowsForBatch[1],
+    $parsedRowsForBatch[1],
+];
+$commitResult = $csvImportCommitter->commitRows(1, $commitRowsForBatch, 99);
+assertSame(1, $commitResult['imported_rows'], 'csv import committer imports one new row after batch duplicate checks');
+assertSame(2, $commitResult['duplicate_rows'], 'csv import committer skips existing DB duplicates and in-file duplicates');
+assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM tags WHERE user_id = 1 AND LOWER(name) = 'utilities'")->fetch()['total'], 'csv import committer creates a missing tag once per import');
+assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM cards WHERE user_id = 1 AND LOWER(name) = 'visa'")->fetch()['total'], 'csv import committer creates a missing card once per import');
+assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM transactions WHERE user_id = 1 AND expense = 'LADWP' AND source = 'import'")->fetch()['total'], 'csv import committer reuses created taxonomy for duplicate in-file rows');
+$importPdo->exec("UPDATE transactions SET deleted_at = '2026-06-03' WHERE user_id = 1 AND expense = 'LADWP' AND source = 'import'");
+$uniqueConflictResult = $csvImportCommitter->commitRows(1, [$parsedRowsForBatch[1]], 100);
+assertSame(0, $uniqueConflictResult['imported_rows'], 'csv import committer treats unique fingerprint conflicts as duplicates');
+assertSame(1, $uniqueConflictResult['duplicate_rows'], 'csv import committer keeps unique constraint as the final duplicate guard');
 
 $taxonomyReflection = new ReflectionClass(TaxonomyController::class);
 $taxonomyController = $taxonomyReflection->newInstanceWithoutConstructor();
