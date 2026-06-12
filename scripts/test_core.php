@@ -123,6 +123,168 @@ expectHttpException(
     'budget settings resolver rejects invalid month'
 );
 
+$budgetPdo = new PDO('sqlite::memory:');
+$budgetPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$budgetPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$budgetPdo->exec('CREATE TABLE budget_settings_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    effective_month TEXT NOT NULL,
+    monthly_income TEXT NOT NULL,
+    income_source_type TEXT NOT NULL,
+    primary_monthly_income TEXT NULL,
+    primary_hourly_rate TEXT NULL,
+    primary_weekly_hours TEXT NULL,
+    side_income_type TEXT NOT NULL,
+    side_income_label TEXT NULL,
+    side_monthly_income TEXT NULL,
+    side_hourly_rate TEXT NULL,
+    side_weekly_hours TEXT NULL,
+    allocation_mode TEXT NOT NULL,
+    needs_percent TEXT NULL,
+    wants_percent TEXT NULL,
+    savings_percent TEXT NULL,
+    needs_amount TEXT NULL,
+    wants_amount TEXT NULL,
+    savings_amount TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)');
+$budgetResolver = new BudgetSettingsResolver($budgetPdo);
+$insertVersion = static function (
+    int $userId,
+    string $effectiveMonth,
+    string $monthlyIncome,
+    string $allocationMode,
+    ?string $needsPercent,
+    ?string $wantsPercent,
+    ?string $savingsPercent,
+    ?string $needsAmount,
+    ?string $wantsAmount,
+    ?string $savingsAmount,
+    string $createdAt,
+    string $updatedAt
+) use ($budgetPdo): void {
+    $stmt = $budgetPdo->prepare('
+        INSERT INTO budget_settings_versions (
+            user_id, effective_month, monthly_income, income_source_type,
+            primary_monthly_income, primary_hourly_rate, primary_weekly_hours,
+            side_income_type, side_income_label, side_monthly_income, side_hourly_rate, side_weekly_hours,
+            allocation_mode, needs_percent, wants_percent, savings_percent, needs_amount, wants_amount, savings_amount,
+            created_at, updated_at
+        ) VALUES (
+            :user_id, :effective_month, :monthly_income, :income_source_type,
+            :primary_monthly_income, :primary_hourly_rate, :primary_weekly_hours,
+            :side_income_type, :side_income_label, :side_monthly_income, :side_hourly_rate, :side_weekly_hours,
+            :allocation_mode, :needs_percent, :wants_percent, :savings_percent, :needs_amount, :wants_amount, :savings_amount,
+            :created_at, :updated_at
+        )
+    ');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':effective_month' => $effectiveMonth,
+        ':monthly_income' => $monthlyIncome,
+        ':income_source_type' => 'monthly',
+        ':primary_monthly_income' => $monthlyIncome,
+        ':primary_hourly_rate' => null,
+        ':primary_weekly_hours' => null,
+        ':side_income_type' => 'none',
+        ':side_income_label' => null,
+        ':side_monthly_income' => null,
+        ':side_hourly_rate' => null,
+        ':side_weekly_hours' => null,
+        ':allocation_mode' => $allocationMode,
+        ':needs_percent' => $needsPercent,
+        ':wants_percent' => $wantsPercent,
+        ':savings_percent' => $savingsPercent,
+        ':needs_amount' => $needsAmount,
+        ':wants_amount' => $wantsAmount,
+        ':savings_amount' => $savingsAmount,
+        ':created_at' => $createdAt,
+        ':updated_at' => $updatedAt,
+    ]);
+};
+
+assertSame([], $budgetResolver->getBudgetSettingsVersions(1), 'budget settings versions returns an empty list for new users');
+
+$insertVersion(
+    1,
+    '2025-11-01',
+    '6200.00',
+    'percent',
+    '50.00',
+    '30.00',
+    '20.00',
+    null,
+    null,
+    null,
+    '2026-06-01T10:00:00Z',
+    '2026-06-01T10:00:00Z'
+);
+$versions = $budgetResolver->getBudgetSettingsVersions(1);
+assertSame(1, count($versions), 'budget settings versions returns one version');
+assertSame('2025-11', $versions[0]['effective_month'], 'budget settings versions formats effective month as YYYY-MM');
+assertSame(null, $versions[0]['applies_until_month'], 'single budget settings version has no applies_until_month');
+assertSame('3100.00', $versions[0]['resolved_amounts']['needs'], 'percent mode resolves needs amount');
+assertSame('1860.00', $versions[0]['resolved_amounts']['wants'], 'percent mode resolves wants amount');
+assertSame('1240.00', $versions[0]['resolved_amounts']['savings'], 'percent mode resolves savings amount');
+assertSame('2026-06-01T10:00:00Z', $versions[0]['created_at'], 'budget settings versions keeps created_at');
+
+$insertVersion(
+    1,
+    '2025-10-01',
+    '6200.00',
+    'percent',
+    '50.00',
+    '30.00',
+    '20.00',
+    null,
+    null,
+    null,
+    '2026-06-01T09:00:00Z',
+    '2026-06-01T09:00:00Z'
+);
+$insertVersion(
+    1,
+    '2025-12-01',
+    '6200.00',
+    'amount',
+    null,
+    null,
+    null,
+    '3100.00',
+    '1860.00',
+    '1240.00',
+    '2026-06-01T11:00:00Z',
+    '2026-06-01T11:00:00Z'
+);
+$insertVersion(
+    2,
+    '2025-09-01',
+    '5000.00',
+    'percent',
+    '60.00',
+    '20.00',
+    '20.00',
+    null,
+    null,
+    null,
+    '2026-06-01T08:00:00Z',
+    '2026-06-01T08:00:00Z'
+);
+$versions = $budgetResolver->getBudgetSettingsVersions(1);
+assertSame(3, count($versions), 'budget settings versions keeps user scope');
+assertSame('2025-10', $versions[0]['effective_month'], 'historical insert sorts before later versions');
+assertSame('2025-10', $versions[0]['applies_until_month'], 'historical insert ends the earlier version the month before the next one starts');
+assertSame('2025-11', $versions[1]['effective_month'], 'second version remains the next month');
+assertSame('2025-11', $versions[1]['applies_until_month'], 'next version ends before the following version');
+assertSame('2025-12', $versions[2]['effective_month'], 'last version sorts last');
+assertSame(null, $versions[2]['applies_until_month'], 'last version keeps null applies_until_month');
+assertSame('3100.00', $versions[2]['resolved_amounts']['needs'], 'amount mode resolves stored needs amount');
+assertSame('1860.00', $versions[2]['resolved_amounts']['wants'], 'amount mode resolves stored wants amount');
+assertSame('1240.00', $versions[2]['resolved_amounts']['savings'], 'amount mode resolves stored savings amount');
+assertSame('2025-09', $budgetResolver->getBudgetSettingsVersions(2)[0]['effective_month'], 'budget settings versions isolates other users');
+
 $csvImportMapper = new CsvImportMapper();
 $csvExportReflection = new ReflectionClass(CsvExportService::class);
 $csvExportService = $csvExportReflection->newInstanceWithoutConstructor();

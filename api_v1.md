@@ -860,6 +860,53 @@ Versioning rules:
 - Editing an inherited month creates a new version for the selected month; it does not mutate the inherited source version.
 - `budget_settings` remains as a compatibility/current-settings bridge during rollout.
 
+### 8.3 List Budget Settings Versions
+`GET /me/budget-settings/versions`
+
+Returns the authenticated user's budget version timeline in ascending effective-month order.
+
+Response:
+```json
+{
+  "items": [
+    {
+      "effective_month": "2026-04",
+      "applies_from_month": "2026-04",
+      "applies_until_month": "2026-05",
+      "monthly_income": "6200.00",
+      "income_source_type": "monthly",
+      "primary_monthly_income": "6200.00",
+      "primary_hourly_rate": null,
+      "primary_weekly_hours": null,
+      "side_income_type": "none",
+      "side_income_label": null,
+      "side_monthly_income": null,
+      "side_hourly_rate": null,
+      "side_weekly_hours": null,
+      "allocation_mode": "percent",
+      "needs_percent": "50.00",
+      "wants_percent": "30.00",
+      "savings_percent": "20.00",
+      "needs_amount": null,
+      "wants_amount": null,
+      "savings_amount": null,
+      "resolved_amounts": {
+        "needs": "3100.00",
+        "wants": "1860.00",
+        "savings": "1240.00"
+      },
+      "created_at": "2026-06-01T10:00:00Z",
+      "updated_at": "2026-06-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+Notes:
+- `applies_until_month` is inclusive and is derived from the next version's effective month.
+- The last version in the timeline uses `null` for `applies_until_month`.
+- `resolved_amounts` is always present for frontend convenience.
+
 ## 9) Transactions (Expenses)
 
 `transaction` fields:

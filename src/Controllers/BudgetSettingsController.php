@@ -68,6 +68,15 @@ final class BudgetSettingsController
         return Response::json($this->normalizeRow($row));
     }
 
+    public function versions(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+
+        return Response::json([
+            'items' => $this->resolver->getBudgetSettingsVersions($ctx->userId()),
+        ]);
+    }
+
     public function upsert(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);

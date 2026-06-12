@@ -117,6 +117,7 @@ final class App
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
         $add('GET', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->get($request));
+        $add('GET', '/me/budget-settings/versions', fn(Request $request) => $budgetSettingsController->versions($request));
         $add('PUT', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->upsert($request));
 
         $add('GET', '/me/tags', fn(Request $request) => $taxonomyController->listTags($request));

@@ -904,6 +904,20 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/budget-settings/versions:
+    get:
+      tags: [BudgetSettings]
+      summary: List budget settings versions
+      responses:
+        '200':
+          description: Budget version timeline for the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetSettingsVersionsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /me/transactions:
     get:
       tags: [Transactions]
@@ -2205,6 +2219,54 @@ components:
         settings:
           $ref: '#/components/schemas/BudgetSettings'
       required: [requested_month, resolved_effective_month, is_exact_match, settings]
+
+    BudgetSettingsVersionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetSettingsVersionItem'
+      required: [items]
+
+    BudgetSettingsVersionItem:
+      allOf:
+        - $ref: '#/components/schemas/BudgetSettings'
+        - type: object
+          properties:
+            effective_month:
+              type: string
+              pattern: '^\\d{4}-\\d{2}$'
+            applies_from_month:
+              type: string
+              pattern: '^\\d{4}-\\d{2}$'
+            applies_until_month:
+              type: string
+              nullable: true
+              pattern: '^\\d{4}-\\d{2}$'
+            resolved_amounts:
+              type: object
+              properties:
+                needs:
+                  $ref: '#/components/schemas/Money'
+                wants:
+                  $ref: '#/components/schemas/Money'
+                savings:
+                  $ref: '#/components/schemas/Money'
+              required: [needs, wants, savings]
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+          required:
+            - effective_month
+            - applies_from_month
+            - applies_until_month
+            - resolved_amounts
+            - created_at
+            - updated_at
 
     BudgetSettingsPercentInput:
       allOf:
