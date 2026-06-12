@@ -1054,6 +1054,9 @@ Response `200`:
 
 ## 10) Metrics
 
+`GET /me/months/{month}/overview` is the primary endpoint for the homepage/month overview UI.
+The older monthly metrics endpoints below remain available for compatibility but are deprecated for new frontend work.
+
 ### 9.1 Tag Spend Metrics (Monthly)
 `GET /me/metrics/tags`
 
@@ -1113,6 +1116,9 @@ Response:
 
 ### 9.3 Dashboard Summary (Monthly)
 `GET /me/dashboard`
+
+Deprecated:
+- Prefer `GET /me/months/{month}/overview` for homepage and month-level reads.
 
 Query params:
 - `month=2026-03`

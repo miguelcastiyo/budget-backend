@@ -53,9 +53,10 @@
   - `DELETE /api/v1/me/imports/{import_run_id}/transactions`
   - `GET /api/v1/me/data-runs?limit=50`
 - Metrics flows:
+  - `GET /api/v1/me/months/{month}/overview` (primary homepage/month endpoint)
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
   - `GET /api/v1/me/metrics/categories?month=YYYY-MM`
-  - `GET /api/v1/me/dashboard?month=YYYY-MM`
+  - `GET /api/v1/me/dashboard?month=YYYY-MM` (deprecated)
   - `GET /api/v1/me/metrics/insights?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
 
 ## Auth modes
