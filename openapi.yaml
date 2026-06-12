@@ -2649,59 +2649,50 @@ components:
     MonthOverviewBudget:
       type: object
       properties:
-        requested_month:
-          type: string
-          pattern: '^\\d{4}-\\d{2}$'
-        resolved_effective_month:
-          type: string
-          nullable: true
-          pattern: '^\\d{4}-\\d{2}$'
-        is_exact_match:
-          type: boolean
         monthly_income:
           oneOf:
             - $ref: '#/components/schemas/Money'
             - type: 'null'
-        allocation_mode:
-          type: string
-          nullable: true
-          enum: [percent, amount]
-        resolved_amounts:
-          type: object
-          properties:
-            needs:
-              $ref: '#/components/schemas/Money'
-            wants:
-              $ref: '#/components/schemas/Money'
-            savings:
-              $ref: '#/components/schemas/Money'
-          required: [needs, wants, savings]
-      required: [requested_month, resolved_effective_month, is_exact_match, monthly_income, allocation_mode, resolved_amounts]
+        resolved_effective_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        is_exact_match:
+          type: boolean
+        has_budget:
+          type: boolean
+      required: [monthly_income, resolved_effective_month, is_exact_match, has_budget]
 
     MonthOverviewSummary:
       type: object
       properties:
-        total_budgeted:
-          $ref: '#/components/schemas/Money'
         total_spent:
           $ref: '#/components/schemas/Money'
-        total_remaining:
-          $ref: '#/components/schemas/Money'
-        percent_used:
-          $ref: '#/components/schemas/Percent'
-        transaction_count:
-          type: integer
-          minimum: 0
-        avg_transaction:
-          $ref: '#/components/schemas/Money'
-      required: [total_budgeted, total_spent, total_remaining, percent_used, transaction_count, avg_transaction]
+        total_budget:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        left_this_month:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        percent_spent:
+          oneOf:
+            - $ref: '#/components/schemas/Percent'
+            - type: 'null'
+      required: [total_spent, total_budget, left_this_month, percent_spent]
 
     MonthOverviewMonthProgress:
       type: object
       properties:
+        status:
+          type: string
+          enum: [past, current, future]
         days_in_month:
           type: integer
           minimum: 28
+        day_of_month:
+          type: integer
+          minimum: 0
         days_elapsed:
           type: integer
           minimum: 0
@@ -2710,9 +2701,15 @@ components:
           minimum: 0
         percent_elapsed:
           $ref: '#/components/schemas/Percent'
-        daily_safe_to_spend:
-          $ref: '#/components/schemas/Money'
-      required: [days_in_month, days_elapsed, days_remaining, percent_elapsed, daily_safe_to_spend]
+        daily_available_remaining:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        projected_month_end_spend:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+      required: [status, days_in_month, day_of_month, days_elapsed, days_remaining, percent_elapsed, daily_available_remaining, projected_month_end_spend]
 
     MonthOverviewCategoryItem:
       type: object
@@ -2723,14 +2720,31 @@ components:
           $ref: '#/components/schemas/Money'
         actual_spend:
           $ref: '#/components/schemas/Money'
-        remaining:
+        remaining_amount:
           $ref: '#/components/schemas/Money'
         percent_used:
           $ref: '#/components/schemas/Percent'
         status:
           type: string
           enum: [under, near, over]
-      required: [category, budget_amount, actual_spend, remaining, percent_used, status]
+      required: [category, budget_amount, actual_spend, remaining_amount, percent_used, status]
+
+    MonthOverviewTag:
+      type: object
+      properties:
+        tag_id:
+          type: string
+        tag_name:
+          type: string
+        icon_key:
+          oneOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+        spend:
+          $ref: '#/components/schemas/Money'
+        percent_of_monthly_spend:
+          $ref: '#/components/schemas/Percent'
+      required: [tag_id, tag_name, icon_key, spend, percent_of_monthly_spend]
 
     MonthOverviewRecurringSummary:
       type: object
@@ -2739,30 +2753,34 @@ components:
           $ref: '#/components/schemas/Money'
         generated_total:
           $ref: '#/components/schemas/Money'
-        ungenerated_total:
+        upcoming_total:
           $ref: '#/components/schemas/Money'
         generated_count:
           type: integer
           minimum: 0
-        ungenerated_count:
+        upcoming_count:
           type: integer
           minimum: 0
         items_count:
           type: integer
           minimum: 0
-      required: [committed_total, generated_total, ungenerated_total, generated_count, ungenerated_count, items_count]
+      required: [committed_total, generated_total, upcoming_total, generated_count, upcoming_count, items_count]
 
     MonthOverviewStatusCard:
       type: object
       properties:
-        type:
+        id:
           type: string
-          enum: [positive, warning, neutral]
+        tone:
+          type: string
+          enum: [good, neutral, warning, danger]
         title:
           type: string
-        body:
+        value:
           type: string
-      required: [type, title, body]
+        detail:
+          type: string
+      required: [id, tone, title, value, detail]
 
     MonthOverviewResponse:
       type: object
@@ -2780,6 +2798,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MonthOverviewCategoryItem'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthOverviewTag'
         recurring:
           $ref: '#/components/schemas/MonthOverviewRecurringSummary'
         recent_transactions:
@@ -2790,7 +2812,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MonthOverviewStatusCard'
-      required: [month, budget, summary, month_progress, categories, recurring, recent_transactions, status_cards]
+      required: [month, budget, summary, month_progress, categories, tags, recurring, recent_transactions, status_cards]
 
     InsightsMonthlySpendPoint:
       type: object

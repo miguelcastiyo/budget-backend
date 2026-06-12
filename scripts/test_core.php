@@ -22,6 +22,7 @@ use App\ImportExport\CsvImportReader;
 use App\ImportExport\DataRunRepository;
 use App\ImportExport\TaxonomyImportRepository;
 use App\Monitoring\StructuredLogger;
+use App\Overview\MonthOverviewService;
 use App\Support\Str;
 use App\Security\AuditLogger;
 
@@ -375,6 +376,7 @@ $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 $currentMonth = $nowUtc->format('Y-m');
 $pastMonth = $nowUtc->modify('-1 month')->format('Y-m');
 $futureMonth = $nowUtc->modify('+1 month')->format('Y-m');
+$pastInheritedMonth = $nowUtc->modify('-5 month')->format('Y-m');
 $noBudgetMonth = '2025-09';
 
 $overviewPdo->prepare('INSERT INTO users (id, email, display_name, avatar_url, user_preferences, auth_provider, email_verified, role, is_active, created_at) VALUES (1, :email, :display_name, NULL, :prefs, "password", 1, "member", 1, :created_at)')
@@ -472,6 +474,7 @@ $insertRecurringExpense = static function (
 $needsTag = $insertTag(1, 'Needs', 'home');
 $wantsTag = $insertTag(1, 'Wants', 'shopping_cart');
 $savingsTag = $insertTag(1, 'Savings', 'savings');
+$unusedTag = $insertTag(1, 'Unused', 'tag');
 $otherUserTag = $insertTag(2, 'Needs', 'home');
 
 $insertVersion(1, $pastMonth . '-01', '1000.00', 'amount', null, null, null, '400.00', '300.00', '300.00', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
@@ -483,6 +486,13 @@ $currentTx3 = $insertTransaction(1, $currentMonth . '-03', 'Dining Out', '250.00
 $currentTx4 = $insertTransaction(1, $currentMonth . '-04', 'Shopping', '100.00', 'wants', $wantsTag);
 $currentTx5 = $insertTransaction(1, $currentMonth . '-05', 'Emergency Fund', '50.00', 'savings', $savingsTag);
 $currentTx6 = $insertTransaction(1, $currentMonth . '-06', 'Rainy Day', '10.00', 'savings', $savingsTag);
+$deletedTx = $insertTransaction(1, $currentMonth . '-07', 'Deleted Coffee', '999.00', 'wants', $wantsTag);
+$overviewPdo->prepare('UPDATE transactions SET deleted_at = :deleted_at WHERE id = :id AND user_id = :user_id')
+    ->execute([
+        ':deleted_at' => '2026-06-01T00:00:00Z',
+        ':id' => $deletedTx,
+        ':user_id' => 1,
+    ]);
 $insertTransaction(2, $currentMonth . '-06', 'Other User Spend', '9999.00', 'needs', $otherUserTag);
 
 $recurringGenerated = $insertRecurringExpense(1, 'Rent', '25.00', 'needs', $needsTag, null, 'day_of_month', 1, $currentMonth, null);
@@ -497,7 +507,8 @@ $overviewPdo->prepare('INSERT INTO recurring_expense_occurrences (user_id, recur
 
 $overviewConfig = Config::load(dirname(__DIR__));
 $overviewAuth = new AuthService($overviewPdo, $overviewConfig);
-$monthOverviewController = new MonthOverviewController($overviewPdo, $overviewAuth, $budgetResolver);
+$monthOverviewService = new MonthOverviewService($overviewPdo, $budgetResolver);
+$monthOverviewController = new MonthOverviewController($overviewAuth, $monthOverviewService);
 
 $currentOverviewRequest = new Request(
     method: 'GET',
@@ -510,31 +521,31 @@ $currentOverviewRequest = new Request(
     headers: ['X-API-Key' => $apiKey]
 );
 $currentOverview = json_decode($monthOverviewController->overview($currentOverviewRequest, ['month' => $currentMonth])->body, true);
+assertSame($currentMonth, $currentOverview['month'], 'month overview returns the requested month');
+assertSame($currentMonth, $currentOverview['budget']['resolved_effective_month'], 'month overview resolves exact budget month');
+assertSame(true, $currentOverview['budget']['is_exact_match'], 'month overview reports exact budget month');
+assertSame(true, $currentOverview['budget']['has_budget'], 'month overview reports that a budget exists');
+assertSame('1000.00', $currentOverview['budget']['monthly_income'], 'month overview reports monthly income');
+assertSame('1000.00', $currentOverview['summary']['total_budget'], 'month overview totals budget');
+assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview totals spend');
+assertSame('90.00', $currentOverview['summary']['left_this_month'], 'month overview totals remaining');
+assertSame('91.00', $currentOverview['summary']['percent_spent'], 'month overview totals percent spent');
+assertSame('current', $currentOverview['month_progress']['status'], 'month overview current month status');
 $currentMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $currentMonth . '-01', new DateTimeZone('UTC'));
 assert($currentMonthStart !== false);
 $currentMonthDays = (int) $currentMonthStart->modify('last day of this month')->format('d');
-$currentDaysElapsed = (int) $nowUtc->format('d');
+$currentDaysElapsed = (int) $nowUtc->format('j');
 $currentDaysRemaining = $currentMonthDays - $currentDaysElapsed;
+$currentPercentElapsed = number_format(($currentDaysElapsed / $currentMonthDays) * 100.0, 2, '.', '');
+$currentDailyAvailable = number_format(90.0 / max($currentDaysRemaining, 1), 2, '.', '');
+$currentProjected = number_format(910.0 / (max((float) $currentPercentElapsed, 0.01) / 100.0), 2, '.', '');
 assertSame($currentMonthDays, $currentOverview['month_progress']['days_in_month'], 'month overview current month days in month');
+assertSame($currentDaysElapsed, $currentOverview['month_progress']['day_of_month'], 'month overview current month day of month');
 assertSame($currentDaysElapsed, $currentOverview['month_progress']['days_elapsed'], 'month overview current month days elapsed');
 assertSame($currentDaysRemaining, $currentOverview['month_progress']['days_remaining'], 'month overview current month days remaining');
-assertSame(number_format(($currentDaysElapsed / $currentMonthDays) * 100.0, 2, '.', ''), $currentOverview['month_progress']['percent_elapsed'], 'month overview current month percent elapsed');
-assertSame(number_format(max(90.0, 0.0) / max($currentDaysRemaining, 1), 2, '.', ''), $currentOverview['month_progress']['daily_safe_to_spend'], 'month overview current month daily safe to spend');
-assertSame($currentMonth, $currentOverview['month'], 'month overview returns the requested month');
-assertSame($currentMonth, $currentOverview['budget']['requested_month'], 'month overview keeps requested month in budget response');
-assertSame($currentMonth, $currentOverview['budget']['resolved_effective_month'], 'month overview resolves exact budget month');
-assertSame(true, $currentOverview['budget']['is_exact_match'], 'month overview reports exact budget month');
-assertSame('1000.00', $currentOverview['budget']['monthly_income'], 'month overview reports monthly income');
-assertSame('amount', $currentOverview['budget']['allocation_mode'], 'month overview reports allocation mode');
-assertSame('500.00', $currentOverview['budget']['resolved_amounts']['needs'], 'month overview resolves needs budget');
-assertSame('300.00', $currentOverview['budget']['resolved_amounts']['wants'], 'month overview resolves wants budget');
-assertSame('200.00', $currentOverview['budget']['resolved_amounts']['savings'], 'month overview resolves savings budget');
-assertSame('1000.00', $currentOverview['summary']['total_budgeted'], 'month overview totals budgeted amount');
-assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview totals spend');
-assertSame('90.00', $currentOverview['summary']['total_remaining'], 'month overview totals remaining');
-assertSame('91.00', $currentOverview['summary']['percent_used'], 'month overview totals percent used');
-assertSame(6, $currentOverview['summary']['transaction_count'], 'month overview counts transactions');
-assertSame('151.67', $currentOverview['summary']['avg_transaction'], 'month overview averages transactions');
+assertSame($currentPercentElapsed, $currentOverview['month_progress']['percent_elapsed'], 'month overview current month percent elapsed');
+assertSame($currentDailyAvailable, $currentOverview['month_progress']['daily_available_remaining'], 'month overview current month daily available remaining');
+assertSame($currentProjected, $currentOverview['month_progress']['projected_month_end_spend'], 'month overview current month projected month end spend');
 assertSame('needs', $currentOverview['categories'][0]['category'], 'month overview returns needs category first');
 assertSame('near', $currentOverview['categories'][0]['status'], 'month overview marks needs as near');
 assertSame('wants', $currentOverview['categories'][1]['category'], 'month overview returns wants category second');
@@ -546,15 +557,41 @@ assertSame('116.67', $currentOverview['categories'][1]['percent_used'], 'month o
 assertSame('30.00', $currentOverview['categories'][2]['percent_used'], 'month overview calculates savings percent');
 assertSame('100.00', $currentOverview['recurring']['committed_total'], 'month overview recurring committed total');
 assertSame('25.00', $currentOverview['recurring']['generated_total'], 'month overview recurring generated total');
-assertSame('75.00', $currentOverview['recurring']['ungenerated_total'], 'month overview recurring ungenerated total');
-assertSame(1, $currentOverview['recurring']['generated_count'], 'month overview recurring generated count');
-assertSame(1, $currentOverview['recurring']['ungenerated_count'], 'month overview recurring ungenerated count');
+assertSame('75.00', $currentOverview['recurring']['upcoming_total'], 'month overview recurring upcoming total');
 assertSame(2, $currentOverview['recurring']['items_count'], 'month overview recurring items count');
+assertSame(1, $currentOverview['recurring']['generated_count'], 'month overview recurring generated count');
+assertSame(1, $currentOverview['recurring']['upcoming_count'], 'month overview recurring upcoming count');
+assertSame(3, count($currentOverview['tags']), 'month overview returns top spending tags');
+assertSame('needs', $currentOverview['tags'][0]['tag_name'] !== '' ? 'needs' : 'needs', 'month overview tags include needs');
+assertSame('Needs', $currentOverview['tags'][0]['tag_name'], 'month overview tags sort by spend descending');
+assertSame('Wants', $currentOverview['tags'][1]['tag_name'], 'month overview tags include wants second');
+assertSame('Savings', $currentOverview['tags'][2]['tag_name'], 'month overview tags include savings third');
+assertSame('54.95', $currentOverview['tags'][0]['percent_of_monthly_spend'], 'month overview tag percent uses monthly spend');
+assertSame('38.46', $currentOverview['tags'][1]['percent_of_monthly_spend'], 'month overview tag percent uses monthly spend');
+assertSame('6.59', $currentOverview['tags'][2]['percent_of_monthly_spend'], 'month overview tag percent uses monthly spend');
 assertSame(5, count($currentOverview['recent_transactions']), 'month overview limits recent transactions');
 assertSame($currentMonth . '-06', $currentOverview['recent_transactions'][0]['date'], 'month overview sorts recent transactions descending');
 assertSame($currentMonth . '-02', $currentOverview['recent_transactions'][4]['date'], 'month overview keeps the fifth most recent transaction');
 assertSame((string) $recurringGenerated, $currentOverview['recent_transactions'][2]['recurring_expense_id'], 'month overview exposes recurring transaction linkage');
-assertSame('warning', $currentOverview['status_cards'][0]['type'], 'month overview surfaces over-budget warning first');
+assertSame('month_pace', $currentOverview['status_cards'][0]['id'], 'month overview returns month pace first');
+assertSame('largest_category', $currentOverview['status_cards'][1]['id'], 'month overview returns largest category second');
+assertSame('recurring', $currentOverview['status_cards'][2]['id'], 'month overview returns recurring third');
+assertSame('budget_source', $currentOverview['status_cards'][3]['id'], 'month overview returns budget source fourth');
+
+$percentSpent = 91.00;
+$percentElapsed = (float) $currentPercentElapsed;
+$paceDiff = $percentSpent - $percentElapsed;
+$expectedPaceTone = $paceDiff <= 5.0 ? 'good' : ($paceDiff <= 15.0 ? 'neutral' : ($paceDiff <= 30.0 ? 'warning' : 'danger'));
+$expectedPaceTitle = match ($expectedPaceTone) {
+    'good' => 'On pace',
+    'neutral' => 'Slightly ahead',
+    'warning' => 'Behind pace',
+    default => 'Off pace',
+};
+assertSame($expectedPaceTone, $currentOverview['status_cards'][0]['tone'], 'month overview month pace tone is deterministic');
+assertSame($expectedPaceTitle, $currentOverview['status_cards'][0]['title'], 'month overview month pace title is deterministic');
+assertSame('Exact budget', $currentOverview['status_cards'][3]['title'], 'month overview exact budget source title');
+assertSame('Exact budget', $currentOverview['status_cards'][3]['value'], 'month overview exact budget source value');
 
 $noBudgetRequest = new Request(
     method: 'GET',
@@ -567,15 +604,23 @@ $noBudgetRequest = new Request(
     headers: ['X-API-Key' => $apiKey]
 );
 $noBudgetOverview = json_decode($monthOverviewController->overview($noBudgetRequest, ['month' => $noBudgetMonth])->body, true);
+assertSame(false, $noBudgetOverview['budget']['has_budget'], 'month overview reports no budget exists');
 assertSame(null, $noBudgetOverview['budget']['resolved_effective_month'], 'month overview keeps no budget resolved month null');
 assertSame(false, $noBudgetOverview['budget']['is_exact_match'], 'month overview reports no exact match when no budget exists');
 assertSame(null, $noBudgetOverview['budget']['monthly_income'], 'month overview returns null monthly income when no budget exists');
-assertSame('0.00', $noBudgetOverview['budget']['resolved_amounts']['needs'], 'month overview zeroes needs when no budget exists');
-assertSame('0.00', $noBudgetOverview['summary']['total_budgeted'], 'month overview zeroes total budgeted when no budget exists');
+assertSame(null, $noBudgetOverview['summary']['total_budget'], 'month overview returns null total budget when no budget exists');
+assertSame(null, $noBudgetOverview['summary']['left_this_month'], 'month overview returns null left this month when no budget exists');
+assertSame(null, $noBudgetOverview['summary']['percent_spent'], 'month overview returns null percent spent when no budget exists');
 assertSame('0.00', $noBudgetOverview['summary']['total_spent'], 'month overview zeroes total spent when no budget exists');
-assertSame('0.00', $noBudgetOverview['summary']['total_remaining'], 'month overview zeroes total remaining when no budget exists');
-assertSame('0.00', $noBudgetOverview['summary']['percent_used'], 'month overview zeroes percent used when no budget exists');
-assertSame('No budget for this month', $noBudgetOverview['status_cards'][0]['title'], 'month overview explains missing budget');
+assertSame('past', $noBudgetOverview['month_progress']['status'], 'month overview marks prior no-budget month as past');
+assertSame(0, $noBudgetOverview['month_progress']['days_remaining'], 'month overview past no-budget month days remaining are zero');
+assertSame(null, $noBudgetOverview['month_progress']['daily_available_remaining'], 'month overview past no-budget month has no daily availability');
+assertSame(null, $noBudgetOverview['month_progress']['projected_month_end_spend'], 'month overview past no-budget month has no projection');
+assertSame('No budget set', $noBudgetOverview['status_cards'][0]['title'], 'month overview explains missing budget');
+assertSame('no_budget', $noBudgetOverview['status_cards'][0]['id'], 'month overview explains missing budget');
+assertSame(0, count($noBudgetOverview['tags']), 'month overview excludes zero-spend tags');
+assertSame(3, count($noBudgetOverview['categories']), 'month overview always returns three categories');
+assertSame('under', $noBudgetOverview['categories'][0]['status'], 'month overview no-budget categories default to under');
 
 $futureOverviewRequest = new Request(
     method: 'GET',
@@ -588,14 +633,22 @@ $futureOverviewRequest = new Request(
     headers: ['X-API-Key' => $apiKey]
 );
 $futureOverview = json_decode($monthOverviewController->overview($futureOverviewRequest, ['month' => $futureMonth])->body, true);
+assertSame(true, $futureOverview['budget']['has_budget'], 'month overview reports inherited budget month has budget');
 assertSame(false, $futureOverview['budget']['is_exact_match'], 'month overview reports inherited budget month');
 assertSame($currentMonth, $futureOverview['budget']['resolved_effective_month'], 'month overview resolves inherited budget month');
-assertSame(0, $futureOverview['summary']['transaction_count'], 'month overview has no transactions for future month');
+assertSame('1000.00', $futureOverview['summary']['total_budget'], 'month overview inherited future month budget');
+assertSame('0.00', $futureOverview['summary']['total_spent'], 'month overview has no transactions for future month');
+assertSame('1000.00', $futureOverview['summary']['left_this_month'], 'month overview future month left this month equals total budget');
+assertSame('0.00', $futureOverview['summary']['percent_spent'], 'month overview future month percent spent is zero');
+assertSame('future', $futureOverview['month_progress']['status'], 'month overview future month status is future');
+assertSame(0, $futureOverview['month_progress']['day_of_month'], 'month overview future month day of month is zero');
 assertSame(0, $futureOverview['month_progress']['days_elapsed'], 'month overview future month days elapsed is zero');
 assertSame((int) DateTimeImmutable::createFromFormat('Y-m-d', $futureMonth . '-01', new DateTimeZone('UTC'))->modify('last day of this month')->format('d'), $futureOverview['month_progress']['days_remaining'], 'month overview future month days remaining equals days in month');
 assertSame('0.00', $futureOverview['month_progress']['percent_elapsed'], 'month overview future month percent elapsed is zero');
-assertSame('No transactions yet', $futureOverview['status_cards'][0]['title'], 'month overview explains empty future month');
-assertSame('Month is on track', $futureOverview['status_cards'][1]['title'], 'month overview reports under-budget future month');
+assertSame(null, $futureOverview['month_progress']['daily_available_remaining'], 'month overview future month has no daily availability');
+assertSame(null, $futureOverview['month_progress']['projected_month_end_spend'], 'month overview future month has no projection');
+assertSame('Using budget from ' . (DateTimeImmutable::createFromFormat('Y-m', $currentMonth, new DateTimeZone('UTC'))->format('F Y')), $futureOverview['status_cards'][2]['value'], 'month overview future month budget source value');
+assertSame('Inherited budget', $futureOverview['status_cards'][2]['title'], 'month overview future month budget source is inherited');
 
 $pastOverviewRequest = new Request(
     method: 'GET',
@@ -611,10 +664,36 @@ $pastOverview = json_decode($monthOverviewController->overview($pastOverviewRequ
 $pastMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $pastMonth . '-01', new DateTimeZone('UTC'));
 assert($pastMonthStart !== false);
 $pastMonthDays = (int) $pastMonthStart->modify('last day of this month')->format('d');
+assertSame(true, $pastOverview['budget']['has_budget'], 'month overview past month has budget');
+assertSame(true, $pastOverview['budget']['is_exact_match'], 'month overview past month exact budget');
+assertSame($pastMonth, $pastOverview['budget']['resolved_effective_month'], 'month overview past month resolved exact month');
+assertSame('past', $pastOverview['month_progress']['status'], 'month overview past month status is past');
 assertSame($pastMonthDays, $pastOverview['month_progress']['days_in_month'], 'month overview past month days in month');
 assertSame($pastMonthDays, $pastOverview['month_progress']['days_elapsed'], 'month overview past month days elapsed');
 assertSame(0, $pastOverview['month_progress']['days_remaining'], 'month overview past month days remaining');
 assertSame('100.00', $pastOverview['month_progress']['percent_elapsed'], 'month overview past month percent elapsed');
+assertSame('Exact budget', $pastOverview['status_cards'][2]['title'], 'month overview past month budget source title');
+assertSame('Exact budget', $pastOverview['status_cards'][2]['value'], 'month overview past month budget source value');
+
+$pastInheritedOverviewRequest = new Request(
+    method: 'GET',
+    path: '/api/v1/me/months/' . $pastInheritedMonth . '/overview',
+    rawBody: '',
+    query: [],
+    cookies: [],
+    files: [],
+    post: [],
+    headers: ['X-API-Key' => $apiKey]
+);
+$pastInheritedOverview = json_decode($monthOverviewController->overview($pastInheritedOverviewRequest, ['month' => $pastInheritedMonth])->body, true);
+assertSame(true, $pastInheritedOverview['budget']['has_budget'], 'month overview inherited past month has budget');
+assertSame(false, $pastInheritedOverview['budget']['is_exact_match'], 'month overview inherited past month is inherited');
+assertSame('2025-12', $pastInheritedOverview['budget']['resolved_effective_month'], 'month overview inherited past month resolves to most recent budget');
+assertSame('past', $pastInheritedOverview['month_progress']['status'], 'month overview inherited past month is past');
+assertSame('6200.00', $pastInheritedOverview['summary']['total_budget'], 'month overview inherited past month total budget');
+assertSame('6200.00', $pastInheritedOverview['summary']['left_this_month'], 'month overview inherited past month left this month');
+assertSame('0.00', $pastInheritedOverview['summary']['percent_spent'], 'month overview inherited past month percent spent');
+assertSame('Inherited budget', $pastInheritedOverview['status_cards'][2]['title'], 'month overview inherited past month budget source title');
 
 $csvImportMapper = new CsvImportMapper();
 $csvExportReflection = new ReflectionClass(CsvExportService::class);

@@ -34,6 +34,7 @@ use App\ImportExport\TaxonomyImportRepository;
 use App\Mail\Mailer;
 use App\Monitoring\ErrorReporter;
 use App\Monitoring\StructuredLogger;
+use App\Overview\MonthOverviewService;
 use App\Security\AuditLogger;
 use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
@@ -58,6 +59,7 @@ final class App
         $auth = new AuthService($pdo, $config);
         $recurring = new RecurringExpenseService($pdo);
         $budgetSettingsResolver = new BudgetSettingsResolver($pdo);
+        $monthOverviewService = new MonthOverviewService($pdo, $budgetSettingsResolver);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
         $structuredLogger = new StructuredLogger($config);
@@ -81,7 +83,7 @@ final class App
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
-        $monthOverviewController = new MonthOverviewController($pdo, $auth, $budgetSettingsResolver);
+        $monthOverviewController = new MonthOverviewController($auth, $monthOverviewService);
         $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
 

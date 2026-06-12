@@ -1178,63 +1178,69 @@ Rules:
 - `month` must be a valid `YYYY-MM` month.
 - Authentication required.
 - Read-only only; the endpoint does not generate recurring transactions.
-- The response includes budget resolution, summary totals, month progress, category budget-vs-actual data, recurring summary, recent transactions, and deterministic status cards.
+- The response includes budget resolution, summary totals, month progress, category budget-vs-actual data, tag spend, recurring summary, recent transactions, and deterministic status cards.
 
 Response:
 ```json
 {
   "month": "2026-06",
   "budget": {
-    "requested_month": "2026-06",
+    "monthly_income": "6200.00",
     "resolved_effective_month": "2026-06",
     "is_exact_match": true,
-    "monthly_income": "6200.00",
-    "allocation_mode": "amount",
-    "resolved_amounts": {
-      "needs": "3100.00",
-      "wants": "1860.00",
-      "savings": "1240.00"
-    }
+    "has_budget": true
   },
   "summary": {
-    "total_budgeted": "6200.00",
     "total_spent": "2400.00",
-    "total_remaining": "3800.00",
-    "percent_used": "38.71",
-    "transaction_count": 18,
-    "avg_transaction": "133.33"
+    "total_budget": "6200.00",
+    "left_this_month": "3800.00",
+    "percent_spent": "38.71"
   },
   "month_progress": {
+    "status": "current",
     "days_in_month": 30,
+    "day_of_month": 11,
     "days_elapsed": 11,
     "days_remaining": 19,
     "percent_elapsed": "36.67",
-    "daily_safe_to_spend": "200.00"
+    "daily_available_remaining": "200.00",
+    "projected_month_end_spend": "6545.45"
   },
   "categories": [
     {
       "category": "needs",
       "budget_amount": "3100.00",
       "actual_spend": "2800.00",
-      "remaining": "300.00",
+      "remaining_amount": "300.00",
       "percent_used": "90.32",
       "status": "near"
+    }
+  ],
+  "tags": [
+    {
+      "tag_id": "tag_123",
+      "tag_name": "Groceries",
+      "icon_key": "cart",
+      "spend": "420.00",
+      "percent_of_monthly_spend": "17.50"
     }
   ],
   "recurring": {
     "committed_total": "120.00",
     "generated_total": "80.00",
-    "ungenerated_total": "40.00",
+    "upcoming_total": "40.00",
     "generated_count": 2,
-    "ungenerated_count": 1,
+    "upcoming_count": 1,
     "items_count": 3
   },
   "recent_transactions": [],
   "status_cards": [
     {
-      "type": "warning",
-      "title": "Needs is near its limit",
-      "body": "Needs spending is 90.32% of its monthly target."
+      "id": "month_pace",
+      "tone": "warning",
+      "title": "Behind pace",
+      "value": "38.71% spent",
+      "detail": "36.67% through the month."
     }
   ]
 }
