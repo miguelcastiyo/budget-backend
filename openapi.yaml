@@ -22,6 +22,7 @@ tags:
   - name: BudgetSettings
   - name: Transactions
   - name: Metrics
+  - name: MonthOverview
   - name: ImportExport
   - name: DataRuns
 paths:
@@ -1105,6 +1106,25 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/months/{month}/overview:
+    get:
+      tags: [MonthOverview]
+      summary: Read the full budget overview for a month
+      description: Returns a read-only aggregation for the requested month. The endpoint does not generate recurring transactions or mutate data.
+      parameters:
+        - $ref: '#/components/parameters/MonthPath'
+      responses:
+        '200':
+          description: Month overview data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthOverviewResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/metrics/insights:
     get:
       tags: [Metrics]
@@ -1314,6 +1334,13 @@ components:
     Month:
       name: month
       in: query
+      required: true
+      schema:
+        type: string
+        pattern: '^\\d{4}-\\d{2}$'
+    MonthPath:
+      name: month
+      in: path
       required: true
       schema:
         type: string
@@ -2618,6 +2645,152 @@ components:
           items:
             $ref: '#/components/schemas/Transaction'
       required: [month, category_metrics, tag_metrics, recent_transactions]
+
+    MonthOverviewBudget:
+      type: object
+      properties:
+        requested_month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        resolved_effective_month:
+          type: string
+          nullable: true
+          pattern: '^\\d{4}-\\d{2}$'
+        is_exact_match:
+          type: boolean
+        monthly_income:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        allocation_mode:
+          type: string
+          nullable: true
+          enum: [percent, amount]
+        resolved_amounts:
+          type: object
+          properties:
+            needs:
+              $ref: '#/components/schemas/Money'
+            wants:
+              $ref: '#/components/schemas/Money'
+            savings:
+              $ref: '#/components/schemas/Money'
+          required: [needs, wants, savings]
+      required: [requested_month, resolved_effective_month, is_exact_match, monthly_income, allocation_mode, resolved_amounts]
+
+    MonthOverviewSummary:
+      type: object
+      properties:
+        total_budgeted:
+          $ref: '#/components/schemas/Money'
+        total_spent:
+          $ref: '#/components/schemas/Money'
+        total_remaining:
+          $ref: '#/components/schemas/Money'
+        percent_used:
+          $ref: '#/components/schemas/Percent'
+        transaction_count:
+          type: integer
+          minimum: 0
+        avg_transaction:
+          $ref: '#/components/schemas/Money'
+      required: [total_budgeted, total_spent, total_remaining, percent_used, transaction_count, avg_transaction]
+
+    MonthOverviewMonthProgress:
+      type: object
+      properties:
+        days_in_month:
+          type: integer
+          minimum: 28
+        days_elapsed:
+          type: integer
+          minimum: 0
+        days_remaining:
+          type: integer
+          minimum: 0
+        percent_elapsed:
+          $ref: '#/components/schemas/Percent'
+        daily_safe_to_spend:
+          $ref: '#/components/schemas/Money'
+      required: [days_in_month, days_elapsed, days_remaining, percent_elapsed, daily_safe_to_spend]
+
+    MonthOverviewCategoryItem:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        budget_amount:
+          $ref: '#/components/schemas/Money'
+        actual_spend:
+          $ref: '#/components/schemas/Money'
+        remaining:
+          $ref: '#/components/schemas/Money'
+        percent_used:
+          $ref: '#/components/schemas/Percent'
+        status:
+          type: string
+          enum: [under, near, over]
+      required: [category, budget_amount, actual_spend, remaining, percent_used, status]
+
+    MonthOverviewRecurringSummary:
+      type: object
+      properties:
+        committed_total:
+          $ref: '#/components/schemas/Money'
+        generated_total:
+          $ref: '#/components/schemas/Money'
+        ungenerated_total:
+          $ref: '#/components/schemas/Money'
+        generated_count:
+          type: integer
+          minimum: 0
+        ungenerated_count:
+          type: integer
+          minimum: 0
+        items_count:
+          type: integer
+          minimum: 0
+      required: [committed_total, generated_total, ungenerated_total, generated_count, ungenerated_count, items_count]
+
+    MonthOverviewStatusCard:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [positive, warning, neutral]
+        title:
+          type: string
+        body:
+          type: string
+      required: [type, title, body]
+
+    MonthOverviewResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        budget:
+          $ref: '#/components/schemas/MonthOverviewBudget'
+        summary:
+          $ref: '#/components/schemas/MonthOverviewSummary'
+        month_progress:
+          $ref: '#/components/schemas/MonthOverviewMonthProgress'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthOverviewCategoryItem'
+        recurring:
+          $ref: '#/components/schemas/MonthOverviewRecurringSummary'
+        recent_transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        status_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthOverviewStatusCard'
+      required: [month, budget, summary, month_progress, categories, recurring, recent_transactions, status_cards]
 
     InsightsMonthlySpendPoint:
       type: object

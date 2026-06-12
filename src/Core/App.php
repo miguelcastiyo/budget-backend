@@ -13,6 +13,7 @@ use App\Controllers\BudgetSettingsController;
 use App\Controllers\HealthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
+use App\Controllers\MonthOverviewController;
 use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
 use App\Controllers\RecurringExpenseController;
@@ -80,6 +81,7 @@ final class App
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
+        $monthOverviewController = new MonthOverviewController($pdo, $auth, $budgetSettingsResolver);
         $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
 
@@ -141,6 +143,8 @@ final class App
         $add('POST', '/me/transactions', fn(Request $request) => $transactionController->create($request));
         $add('PATCH', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->update($request, $params));
         $add('DELETE', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->delete($request, $params));
+
+        $add('GET', '/me/months/{month}/overview', fn(Request $request, array $params) => $monthOverviewController->overview($request, $params));
 
         $add('GET', '/me/transactions/export.csv', fn(Request $request) => $importExportController->exportCsv($request));
         $add('POST', '/me/transactions/import.csv', fn(Request $request) => $importExportController->importCsv($request));
@@ -291,7 +295,7 @@ final class App
             return;
         }
 
-        if ($method === 'GET' && in_array($path, ['/me/metrics/tags', '/me/metrics/categories', '/me/dashboard', '/me/metrics/insights'], true)) {
+        if ($method === 'GET' && (in_array($path, ['/me/metrics/tags', '/me/metrics/categories', '/me/dashboard', '/me/metrics/insights'], true) || preg_match('#^/me/months/[^/]+/overview$#', $path) === 1)) {
             $this->hitAuthenticatedRateLimit(
                 $request,
                 'metrics',

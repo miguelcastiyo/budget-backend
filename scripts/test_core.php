@@ -8,11 +8,13 @@ use App\Http\Response;
 use App\Http\Router;
 use App\Budget\BudgetSettingsResolver;
 use App\Controllers\AuthController;
+use App\Controllers\MonthOverviewController;
 use App\Controllers\MasterApiKeyController;
 use App\Controllers\TaxonomyController;
 use App\Controllers\TransactionController;
 use App\Core\App;
 use App\Core\Config;
+use App\Auth\AuthService;
 use App\ImportExport\CsvExportService;
 use App\ImportExport\CsvImportCommitter;
 use App\ImportExport\CsvImportMapper;
@@ -284,6 +286,335 @@ assertSame('3100.00', $versions[2]['resolved_amounts']['needs'], 'amount mode re
 assertSame('1860.00', $versions[2]['resolved_amounts']['wants'], 'amount mode resolves stored wants amount');
 assertSame('1240.00', $versions[2]['resolved_amounts']['savings'], 'amount mode resolves stored savings amount');
 assertSame('2025-09', $budgetResolver->getBudgetSettingsVersions(2)[0]['effective_month'], 'budget settings versions isolates other users');
+
+$overviewPdo = $budgetPdo;
+$overviewPdo->exec('CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    avatar_url TEXT NULL,
+    user_preferences TEXT NOT NULL,
+    auth_provider TEXT NOT NULL,
+    email_verified INTEGER NOT NULL DEFAULT 1,
+    role TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+)');
+$overviewPdo->exec('CREATE TABLE master_api_keys (
+    key_id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    key_prefix TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    expires_at TEXT NULL,
+    revoked_at TEXT NULL,
+    last_used_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$overviewPdo->exec('CREATE TABLE tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    icon_key TEXT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    updated_at TEXT NOT NULL
+)');
+$overviewPdo->exec('CREATE TABLE cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    updated_at TEXT NOT NULL
+)');
+$overviewPdo->exec('CREATE TABLE transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    transaction_date TEXT NOT NULL,
+    expense TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    category TEXT NOT NULL,
+    is_split INTEGER NOT NULL DEFAULT 0,
+    tag_id INTEGER NOT NULL,
+    card_id INTEGER NULL,
+    source TEXT NOT NULL DEFAULT "manual",
+    recurring_expense_id INTEGER NULL,
+    deleted_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)');
+$overviewPdo->exec('CREATE TABLE recurring_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    expense TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    category TEXT NOT NULL,
+    tag_id INTEGER NOT NULL,
+    card_id INTEGER NULL,
+    billing_type TEXT NOT NULL,
+    billing_day INTEGER NULL,
+    starts_month TEXT NOT NULL,
+    ends_month TEXT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$overviewPdo->exec('CREATE TABLE recurring_expense_occurrences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    recurring_expense_id INTEGER NOT NULL,
+    occurrence_month TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    transaction_id INTEGER NULL
+)');
+
+$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$currentMonth = $nowUtc->format('Y-m');
+$pastMonth = $nowUtc->modify('-1 month')->format('Y-m');
+$futureMonth = $nowUtc->modify('+1 month')->format('Y-m');
+$noBudgetMonth = '2025-09';
+
+$overviewPdo->prepare('INSERT INTO users (id, email, display_name, avatar_url, user_preferences, auth_provider, email_verified, role, is_active, created_at) VALUES (1, :email, :display_name, NULL, :prefs, "password", 1, "member", 1, :created_at)')
+    ->execute([
+        ':email' => 'owner@example.com',
+        ':display_name' => 'Owner',
+        ':prefs' => '{"appearance":{"theme":"system"}}',
+        ':created_at' => '2026-06-01T00:00:00Z',
+    ]);
+$overviewPdo->prepare('INSERT INTO users (id, email, display_name, avatar_url, user_preferences, auth_provider, email_verified, role, is_active, created_at) VALUES (2, :email, :display_name, NULL, :prefs, "password", 1, "member", 1, :created_at)')
+    ->execute([
+        ':email' => 'other@example.com',
+        ':display_name' => 'Other',
+        ':prefs' => '{"appearance":{"theme":"system"}}',
+        ':created_at' => '2026-06-01T00:00:00Z',
+    ]);
+
+$apiKey = 'bgtm_live_testkey_abcdef1234567890';
+$overviewPdo->prepare('INSERT INTO master_api_keys (key_id, user_id, name, key_prefix, key_hash, is_active, expires_at, revoked_at, last_used_at) VALUES (:key_id, 1, "test key", "bgtm_live_testkey", :key_hash, 1, NULL, NULL, NULL)')
+    ->execute([
+        ':key_id' => 'mak_test',
+        ':key_hash' => Str::hashSha256($apiKey),
+    ]);
+
+$insertTag = static function (int $userId, string $name, string $iconKey) use ($overviewPdo): int {
+    $stmt = $overviewPdo->prepare('INSERT INTO tags (user_id, name, icon_key, is_active, deleted_at, updated_at) VALUES (:user_id, :name, :icon_key, 1, NULL, :updated_at)');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':name' => $name,
+        ':icon_key' => $iconKey,
+        ':updated_at' => '2026-06-01T00:00:00Z',
+    ]);
+
+    return (int) $overviewPdo->lastInsertId();
+};
+
+$insertTransaction = static function (
+    int $userId,
+    string $date,
+    string $expense,
+    string $amount,
+    string $category,
+    int $tagId,
+    ?int $cardId = null,
+    string $source = 'manual'
+) use ($overviewPdo): int {
+    $stmt = $overviewPdo->prepare('INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source, recurring_expense_id, deleted_at, created_at, updated_at) VALUES (:user_id, :transaction_date, :expense, :amount, :category, 0, :tag_id, :card_id, :source, NULL, NULL, :created_at, :updated_at)');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':transaction_date' => $date,
+        ':expense' => $expense,
+        ':amount' => $amount,
+        ':category' => $category,
+        ':tag_id' => $tagId,
+        ':card_id' => $cardId,
+        ':source' => $source,
+        ':created_at' => $date . 'T12:00:00Z',
+        ':updated_at' => $date . 'T12:00:00Z',
+    ]);
+
+    return (int) $overviewPdo->lastInsertId();
+};
+
+$insertRecurringExpense = static function (
+    int $userId,
+    string $expense,
+    string $amount,
+    string $category,
+    int $tagId,
+    ?int $cardId,
+    string $billingType,
+    ?int $billingDay,
+    string $startsMonth,
+    ?string $endsMonth
+) use ($overviewPdo): int {
+    $stmt = $overviewPdo->prepare('INSERT INTO recurring_expenses (user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active, deleted_at, created_at, updated_at) VALUES (:user_id, :expense, :amount, :category, :tag_id, :card_id, :billing_type, :billing_day, :starts_month, :ends_month, 1, NULL, :created_at, :updated_at)');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':expense' => $expense,
+        ':amount' => $amount,
+        ':category' => $category,
+        ':tag_id' => $tagId,
+        ':card_id' => $cardId,
+        ':billing_type' => $billingType,
+        ':billing_day' => $billingDay,
+        ':starts_month' => $startsMonth . '-01',
+        ':ends_month' => $endsMonth === null ? null : $endsMonth . '-01',
+        ':created_at' => '2026-06-01T00:00:00Z',
+        ':updated_at' => '2026-06-01T00:00:00Z',
+    ]);
+
+    return (int) $overviewPdo->lastInsertId();
+};
+
+$needsTag = $insertTag(1, 'Needs', 'home');
+$wantsTag = $insertTag(1, 'Wants', 'shopping_cart');
+$savingsTag = $insertTag(1, 'Savings', 'savings');
+$otherUserTag = $insertTag(2, 'Needs', 'home');
+
+$insertVersion(1, $pastMonth . '-01', '1000.00', 'amount', null, null, null, '400.00', '300.00', '300.00', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
+$insertVersion(1, $currentMonth . '-01', '1000.00', 'amount', null, null, null, '500.00', '300.00', '200.00', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
+
+$currentTx1 = $insertTransaction(1, $currentMonth . '-01', 'Groceries', '400.00', 'needs', $needsTag);
+$currentTx2 = $insertTransaction(1, $currentMonth . '-02', 'Utilities', '100.00', 'needs', $needsTag);
+$currentTx3 = $insertTransaction(1, $currentMonth . '-03', 'Dining Out', '250.00', 'wants', $wantsTag);
+$currentTx4 = $insertTransaction(1, $currentMonth . '-04', 'Shopping', '100.00', 'wants', $wantsTag);
+$currentTx5 = $insertTransaction(1, $currentMonth . '-05', 'Emergency Fund', '50.00', 'savings', $savingsTag);
+$currentTx6 = $insertTransaction(1, $currentMonth . '-06', 'Rainy Day', '10.00', 'savings', $savingsTag);
+$insertTransaction(2, $currentMonth . '-06', 'Other User Spend', '9999.00', 'needs', $otherUserTag);
+
+$recurringGenerated = $insertRecurringExpense(1, 'Rent', '25.00', 'needs', $needsTag, null, 'day_of_month', 1, $currentMonth, null);
+$recurringPending = $insertRecurringExpense(1, 'Subscription', '75.00', 'wants', $wantsTag, null, 'day_of_month', 15, $currentMonth, null);
+$overviewPdo->prepare('INSERT INTO recurring_expense_occurrences (user_id, recurring_expense_id, occurrence_month, due_date, transaction_id) VALUES (1, :recurring_expense_id, :occurrence_month, :due_date, :transaction_id)')
+    ->execute([
+        ':recurring_expense_id' => $recurringGenerated,
+        ':occurrence_month' => $currentMonth . '-01',
+        ':due_date' => $currentMonth . '-04',
+        ':transaction_id' => $currentTx4,
+    ]);
+
+$overviewConfig = Config::load(dirname(__DIR__));
+$overviewAuth = new AuthService($overviewPdo, $overviewConfig);
+$monthOverviewController = new MonthOverviewController($overviewPdo, $overviewAuth, $budgetResolver);
+
+$currentOverviewRequest = new Request(
+    method: 'GET',
+    path: '/api/v1/me/months/' . $currentMonth . '/overview',
+    rawBody: '',
+    query: [],
+    cookies: [],
+    files: [],
+    post: [],
+    headers: ['X-API-Key' => $apiKey]
+);
+$currentOverview = json_decode($monthOverviewController->overview($currentOverviewRequest, ['month' => $currentMonth])->body, true);
+$currentMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $currentMonth . '-01', new DateTimeZone('UTC'));
+assert($currentMonthStart !== false);
+$currentMonthDays = (int) $currentMonthStart->modify('last day of this month')->format('d');
+$currentDaysElapsed = (int) $nowUtc->format('d');
+$currentDaysRemaining = $currentMonthDays - $currentDaysElapsed;
+assertSame($currentMonthDays, $currentOverview['month_progress']['days_in_month'], 'month overview current month days in month');
+assertSame($currentDaysElapsed, $currentOverview['month_progress']['days_elapsed'], 'month overview current month days elapsed');
+assertSame($currentDaysRemaining, $currentOverview['month_progress']['days_remaining'], 'month overview current month days remaining');
+assertSame(number_format(($currentDaysElapsed / $currentMonthDays) * 100.0, 2, '.', ''), $currentOverview['month_progress']['percent_elapsed'], 'month overview current month percent elapsed');
+assertSame(number_format(max(90.0, 0.0) / max($currentDaysRemaining, 1), 2, '.', ''), $currentOverview['month_progress']['daily_safe_to_spend'], 'month overview current month daily safe to spend');
+assertSame($currentMonth, $currentOverview['month'], 'month overview returns the requested month');
+assertSame($currentMonth, $currentOverview['budget']['requested_month'], 'month overview keeps requested month in budget response');
+assertSame($currentMonth, $currentOverview['budget']['resolved_effective_month'], 'month overview resolves exact budget month');
+assertSame(true, $currentOverview['budget']['is_exact_match'], 'month overview reports exact budget month');
+assertSame('1000.00', $currentOverview['budget']['monthly_income'], 'month overview reports monthly income');
+assertSame('amount', $currentOverview['budget']['allocation_mode'], 'month overview reports allocation mode');
+assertSame('500.00', $currentOverview['budget']['resolved_amounts']['needs'], 'month overview resolves needs budget');
+assertSame('300.00', $currentOverview['budget']['resolved_amounts']['wants'], 'month overview resolves wants budget');
+assertSame('200.00', $currentOverview['budget']['resolved_amounts']['savings'], 'month overview resolves savings budget');
+assertSame('1000.00', $currentOverview['summary']['total_budgeted'], 'month overview totals budgeted amount');
+assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview totals spend');
+assertSame('90.00', $currentOverview['summary']['total_remaining'], 'month overview totals remaining');
+assertSame('91.00', $currentOverview['summary']['percent_used'], 'month overview totals percent used');
+assertSame(6, $currentOverview['summary']['transaction_count'], 'month overview counts transactions');
+assertSame('151.67', $currentOverview['summary']['avg_transaction'], 'month overview averages transactions');
+assertSame('needs', $currentOverview['categories'][0]['category'], 'month overview returns needs category first');
+assertSame('near', $currentOverview['categories'][0]['status'], 'month overview marks needs as near');
+assertSame('wants', $currentOverview['categories'][1]['category'], 'month overview returns wants category second');
+assertSame('over', $currentOverview['categories'][1]['status'], 'month overview marks wants as over');
+assertSame('savings', $currentOverview['categories'][2]['category'], 'month overview returns savings category third');
+assertSame('under', $currentOverview['categories'][2]['status'], 'month overview marks savings as under');
+assertSame('100.00', $currentOverview['categories'][0]['percent_used'], 'month overview calculates needs percent');
+assertSame('116.67', $currentOverview['categories'][1]['percent_used'], 'month overview calculates wants percent');
+assertSame('30.00', $currentOverview['categories'][2]['percent_used'], 'month overview calculates savings percent');
+assertSame('100.00', $currentOverview['recurring']['committed_total'], 'month overview recurring committed total');
+assertSame('25.00', $currentOverview['recurring']['generated_total'], 'month overview recurring generated total');
+assertSame('75.00', $currentOverview['recurring']['ungenerated_total'], 'month overview recurring ungenerated total');
+assertSame(1, $currentOverview['recurring']['generated_count'], 'month overview recurring generated count');
+assertSame(1, $currentOverview['recurring']['ungenerated_count'], 'month overview recurring ungenerated count');
+assertSame(2, $currentOverview['recurring']['items_count'], 'month overview recurring items count');
+assertSame(5, count($currentOverview['recent_transactions']), 'month overview limits recent transactions');
+assertSame($currentMonth . '-06', $currentOverview['recent_transactions'][0]['date'], 'month overview sorts recent transactions descending');
+assertSame($currentMonth . '-02', $currentOverview['recent_transactions'][4]['date'], 'month overview keeps the fifth most recent transaction');
+assertSame((string) $recurringGenerated, $currentOverview['recent_transactions'][2]['recurring_expense_id'], 'month overview exposes recurring transaction linkage');
+assertSame('warning', $currentOverview['status_cards'][0]['type'], 'month overview surfaces over-budget warning first');
+
+$noBudgetRequest = new Request(
+    method: 'GET',
+    path: '/api/v1/me/months/' . $noBudgetMonth . '/overview',
+    rawBody: '',
+    query: [],
+    cookies: [],
+    files: [],
+    post: [],
+    headers: ['X-API-Key' => $apiKey]
+);
+$noBudgetOverview = json_decode($monthOverviewController->overview($noBudgetRequest, ['month' => $noBudgetMonth])->body, true);
+assertSame(null, $noBudgetOverview['budget']['resolved_effective_month'], 'month overview keeps no budget resolved month null');
+assertSame(false, $noBudgetOverview['budget']['is_exact_match'], 'month overview reports no exact match when no budget exists');
+assertSame(null, $noBudgetOverview['budget']['monthly_income'], 'month overview returns null monthly income when no budget exists');
+assertSame('0.00', $noBudgetOverview['budget']['resolved_amounts']['needs'], 'month overview zeroes needs when no budget exists');
+assertSame('0.00', $noBudgetOverview['summary']['total_budgeted'], 'month overview zeroes total budgeted when no budget exists');
+assertSame('0.00', $noBudgetOverview['summary']['total_spent'], 'month overview zeroes total spent when no budget exists');
+assertSame('0.00', $noBudgetOverview['summary']['total_remaining'], 'month overview zeroes total remaining when no budget exists');
+assertSame('0.00', $noBudgetOverview['summary']['percent_used'], 'month overview zeroes percent used when no budget exists');
+assertSame('No budget for this month', $noBudgetOverview['status_cards'][0]['title'], 'month overview explains missing budget');
+
+$futureOverviewRequest = new Request(
+    method: 'GET',
+    path: '/api/v1/me/months/' . $futureMonth . '/overview',
+    rawBody: '',
+    query: [],
+    cookies: [],
+    files: [],
+    post: [],
+    headers: ['X-API-Key' => $apiKey]
+);
+$futureOverview = json_decode($monthOverviewController->overview($futureOverviewRequest, ['month' => $futureMonth])->body, true);
+assertSame(false, $futureOverview['budget']['is_exact_match'], 'month overview reports inherited budget month');
+assertSame($currentMonth, $futureOverview['budget']['resolved_effective_month'], 'month overview resolves inherited budget month');
+assertSame(0, $futureOverview['summary']['transaction_count'], 'month overview has no transactions for future month');
+assertSame(0, $futureOverview['month_progress']['days_elapsed'], 'month overview future month days elapsed is zero');
+assertSame((int) DateTimeImmutable::createFromFormat('Y-m-d', $futureMonth . '-01', new DateTimeZone('UTC'))->modify('last day of this month')->format('d'), $futureOverview['month_progress']['days_remaining'], 'month overview future month days remaining equals days in month');
+assertSame('0.00', $futureOverview['month_progress']['percent_elapsed'], 'month overview future month percent elapsed is zero');
+assertSame('No transactions yet', $futureOverview['status_cards'][0]['title'], 'month overview explains empty future month');
+assertSame('Month is on track', $futureOverview['status_cards'][1]['title'], 'month overview reports under-budget future month');
+
+$pastOverviewRequest = new Request(
+    method: 'GET',
+    path: '/api/v1/me/months/' . $pastMonth . '/overview',
+    rawBody: '',
+    query: [],
+    cookies: [],
+    files: [],
+    post: [],
+    headers: ['X-API-Key' => $apiKey]
+);
+$pastOverview = json_decode($monthOverviewController->overview($pastOverviewRequest, ['month' => $pastMonth])->body, true);
+$pastMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $pastMonth . '-01', new DateTimeZone('UTC'));
+assert($pastMonthStart !== false);
+$pastMonthDays = (int) $pastMonthStart->modify('last day of this month')->format('d');
+assertSame($pastMonthDays, $pastOverview['month_progress']['days_in_month'], 'month overview past month days in month');
+assertSame($pastMonthDays, $pastOverview['month_progress']['days_elapsed'], 'month overview past month days elapsed');
+assertSame(0, $pastOverview['month_progress']['days_remaining'], 'month overview past month days remaining');
+assertSame('100.00', $pastOverview['month_progress']['percent_elapsed'], 'month overview past month percent elapsed');
 
 $csvImportMapper = new CsvImportMapper();
 $csvExportReflection = new ReflectionClass(CsvExportService::class);

@@ -86,7 +86,7 @@ JOIN users u ON u.id = us.user_id
 WHERE us.session_id = :session_id
   AND us.session_secret_hash = :session_secret_hash
   AND us.revoked_at IS NULL
-  AND us.expires_at > UTC_TIMESTAMP()
+  AND us.expires_at > CURRENT_TIMESTAMP
   AND u.is_active = 1
 LIMIT 1
 SQL;
@@ -115,7 +115,7 @@ SQL;
         }
 
         if ($this->shouldTouchSession($row['last_seen_at'] ?? null)) {
-            $touch = $this->pdo->prepare('UPDATE user_sessions SET last_seen_at = UTC_TIMESTAMP() WHERE session_id = :session_id');
+            $touch = $this->pdo->prepare('UPDATE user_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE session_id = :session_id');
             $touch->execute([':session_id' => $sessionId]);
         }
 
@@ -143,7 +143,7 @@ JOIN users u ON u.id = mak.user_id
 WHERE mak.key_hash = :key_hash
   AND mak.is_active = 1
   AND mak.revoked_at IS NULL
-  AND (mak.expires_at IS NULL OR mak.expires_at > UTC_TIMESTAMP())
+  AND (mak.expires_at IS NULL OR mak.expires_at > CURRENT_TIMESTAMP)
   AND u.is_active = 1
 LIMIT 1
 SQL;
@@ -156,7 +156,7 @@ SQL;
             throw new HttpException(401, 'UNAUTHENTICATED', 'Master API key is invalid or expired');
         }
 
-        $touch = $this->pdo->prepare('UPDATE master_api_keys SET last_used_at = UTC_TIMESTAMP() WHERE key_id = :key_id');
+        $touch = $this->pdo->prepare('UPDATE master_api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key_id = :key_id');
         $touch->execute([':key_id' => $row['key_id']]);
 
         return new AuthContext($row, 'api_key', null, (string) $row['key_id']);
