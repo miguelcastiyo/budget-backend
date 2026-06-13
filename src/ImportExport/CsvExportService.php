@@ -154,8 +154,10 @@ SQL;
 
         $searchQuery = $this->mapper->validatedSearchQuery($query['q'] ?? null, 'q');
         if ($searchQuery !== null) {
-            $where[] = '(LOWER(t.expense) LIKE :search_query OR LOWER(tg.name) LIKE :search_query OR LOWER(COALESCE(c.name, \'\')) LIKE :search_query)';
-            $params[':search_query'] = '%' . $searchQuery . '%';
+            $where[] = '(LOWER(t.expense) LIKE :search_expense_query OR LOWER(tg.name) LIKE :search_tag_query OR LOWER(COALESCE(c.name, \'\')) LIKE :search_card_query)';
+            $params[':search_expense_query'] = '%' . $searchQuery . '%';
+            $params[':search_tag_query'] = '%' . $searchQuery . '%';
+            $params[':search_card_query'] = '%' . $searchQuery . '%';
         }
 
         return [implode(' AND ', $where), $params];

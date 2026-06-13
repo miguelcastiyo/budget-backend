@@ -158,7 +158,9 @@ final class ErrorReporter
             $result = curl_exec($curl);
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             $error = curl_error($curl);
-            curl_close($curl);
+            if (\PHP_VERSION_ID < 80500) {
+                curl_close($curl);
+            }
 
             if ($result === false || $status >= 400) {
                 throw new \RuntimeException($error !== '' ? $error : 'Webhook returned HTTP ' . $status);
