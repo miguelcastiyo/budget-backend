@@ -171,6 +171,29 @@ Response `200`:
 }
 ```
 
+### 3.1.2 Preview Invite Acceptance Path
+`GET /auth/invitations/preview?invite_token=...`
+
+Public route used by invite-acceptance clients before rendering the setup UI.
+
+Frontend behavior:
+- Call this route as soon as an invite link is opened.
+- Use `preferred_auth_provider` as the initial branch selector for the invite screen.
+- Classification rule is intentionally simple and centralized here:
+- invited `gmail.com` / `googlemail.com` addresses return `preferred_auth_provider: "google"`
+- every other address returns `preferred_auth_provider: "password"`
+- Frontends may still offer the other branch as a secondary fallback, but should not mix both paths equally by default.
+
+Response `200`:
+```json
+{
+  "invite_id": "inv_123",
+  "invitee_name": "New User",
+  "email": "new.user@gmail.com",
+  "preferred_auth_provider": "google"
+}
+```
+
 ### 3.2 Accept Invite with Email/Password
 `POST /auth/invitations/accept-password`
 

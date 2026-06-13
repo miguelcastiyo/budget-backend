@@ -98,6 +98,7 @@ final class App
 
         $add('GET', '/auth/invitations', fn(Request $request) => $authController->listInvitations($request));
         $add('POST', '/auth/invitations', fn(Request $request) => $authController->createInvitation($request));
+        $add('GET', '/auth/invitations/preview', fn(Request $request) => $authController->previewInvitation($request));
         $add('POST', '/auth/invitations/accept-password', fn(Request $request) => $authController->acceptInvitationPassword($request));
         $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $authController->acceptInvitationGoogle($request));
         $add('POST', '/auth/sessions/password', fn(Request $request) => $authController->signInPassword($request));

@@ -71,6 +71,11 @@ Master API keys are blocked from `/me/master-api-keys*` management routes.
 ## Invite acceptance UX requirement
 - Invite links must open an invite-acceptance experience, not a plain sign-in screen.
 - When the frontend receives an `invite_token`, it must keep the user in invite mode until the invite is accepted or rejected.
+- The frontend should call `GET /api/v1/auth/invitations/preview?invite_token=...` before rendering the invite form.
+- The preview response is the source of truth for the initial invite branch:
+- invited `gmail.com` / `googlemail.com` addresses map to `preferred_auth_provider: "google"`
+- all other addresses map to `preferred_auth_provider: "password"`
+- Keep the non-primary branch secondary so Gmail and non-Gmail invitees do not see the same mixed setup UI by default.
 - The invite screen must support both branches:
 - `Continue with Google` calls `POST /api/v1/auth/invitations/accept-google`.
 - `Set password` calls `POST /api/v1/auth/invitations/accept-password`.

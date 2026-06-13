@@ -108,6 +108,30 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /auth/invitations/preview:
+    get:
+      tags: [Auth]
+      summary: Preview invite acceptance path
+      description: Returns the invited email plus the preferred initial invite-acceptance branch. Gmail addresses map to Google; all other addresses map to password setup.
+      security: []
+      parameters:
+        - in: query
+          name: invite_token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /auth/invitations/accept-password:
     post:
       tags: [Auth]
@@ -1583,6 +1607,21 @@ components:
           items:
             $ref: '#/components/schemas/InviteResponse'
       required: [items]
+
+    InvitePreviewResponse:
+      type: object
+      properties:
+        invite_id:
+          type: string
+        invitee_name:
+          type: string
+        email:
+          type: string
+          format: email
+        preferred_auth_provider:
+          type: string
+          enum: [google, password]
+      required: [invite_id, invitee_name, email, preferred_auth_provider]
 
     AcceptInvitePasswordRequest:
       type: object

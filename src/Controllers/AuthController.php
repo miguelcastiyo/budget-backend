@@ -192,6 +192,27 @@ SQL;
         return Response::json(['items' => $items]);
     }
 
+    public function previewInvitation(Request $request): Response
+    {
+        $inviteToken = trim((string) ($request->query['invite_token'] ?? ''));
+
+        if ($inviteToken === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'invite_token is required', [
+                ['field' => 'invite_token', 'message' => 'is required'],
+            ]);
+        }
+
+        $invitation = $this->getActiveInvitationByToken($inviteToken);
+        $email = (string) $invitation['email'];
+
+        return Response::json([
+            'invite_id' => (string) $invitation['invite_id'],
+            'invitee_name' => (string) $invitation['invitee_name'],
+            'email' => $email,
+            'preferred_auth_provider' => $this->preferredInviteAuthProvider($email),
+        ]);
+    }
+
     public function acceptInvitationPassword(Request $request): Response
     {
         $payload = $request->json();
@@ -863,6 +884,19 @@ SQL;
         $html = InviteEmailTemplate::render($inviteUrl, $expiresAt, $inviteeName, $body);
 
         $this->mailer->send($toEmail, $subject, $text, $html);
+    }
+
+    private function preferredInviteAuthProvider(string $email): string
+    {
+        $normalizedEmail = strtolower(trim($email));
+        $domain = substr(strrchr($normalizedEmail, '@') ?: '', 1);
+
+        // Keep invite branching deterministic: Gmail addresses default to Google, everything else defaults to password setup.
+        if (in_array($domain, ['gmail.com', 'googlemail.com'], true)) {
+            return 'google';
+        }
+
+        return 'password';
     }
 
     private function sendPasswordResetEmail(string $toEmail, string $resetToken, string $expiresAt, string $displayName): void
