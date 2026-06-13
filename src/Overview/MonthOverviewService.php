@@ -45,7 +45,8 @@ final class MonthOverviewService
         $categories = $this->buildCategories($resolvedAmounts, $actualByCategory, $hasBudget);
         $tags = $this->queryTagSpend($userId, $dateFrom, $dateTo, $totalSpent);
         $recurring = $this->queryRecurringSummary($userId, $month);
-        $recentTransactions = $this->queryRecentTransactions($userId, $dateFrom, $dateTo, 5);
+        [, $recentTransactionsDateTo] = $this->recentTransactionsDateRange($month, $dateFrom, $dateTo, $currentMonth, $now);
+        $recentTransactions = $this->queryRecentTransactions($userId, $dateFrom, $recentTransactionsDateTo, 5);
         $monthProgress = $this->monthProgress($month, $currentMonth, $now, $summary['total_spent'], $leftThisMonth, $hasBudget);
 
         return [
@@ -89,6 +90,21 @@ final class MonthOverviewService
         }
 
         return [$start->format('Y-m-d'), $start->modify('last day of this month')->format('Y-m-d')];
+    }
+
+    /** @return array{0:string,1:string} */
+    private function recentTransactionsDateRange(
+        string $month,
+        string $dateFrom,
+        string $dateTo,
+        string $currentMonth,
+        DateTimeImmutable $now
+    ): array {
+        if ($month !== $currentMonth) {
+            return [$dateFrom, $dateTo];
+        }
+
+        return [$dateFrom, min($dateTo, $now->format('Y-m-d'))];
     }
 
     /** @param array<string,mixed>|null $settings

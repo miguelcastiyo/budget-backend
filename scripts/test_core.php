@@ -495,6 +495,16 @@ $overviewPdo->prepare('UPDATE transactions SET deleted_at = :deleted_at WHERE id
     ]);
 $insertTransaction(2, $currentMonth . '-06', 'Other User Spend', '9999.00', 'needs', $otherUserTag);
 
+$currentMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $currentMonth . '-01', new DateTimeZone('UTC'));
+assert($currentMonthStart !== false);
+$currentMonthDays = (int) $currentMonthStart->modify('last day of this month')->format('d');
+$currentDaysElapsed = (int) $nowUtc->format('j');
+$futureCurrentMonthDate = null;
+if ($currentDaysElapsed < $currentMonthDays) {
+    $futureCurrentMonthDate = sprintf('%s-%02d', $currentMonth, $currentDaysElapsed + 1);
+    $insertTransaction(1, $futureCurrentMonthDate, 'Future Scheduled Transfer', '0.00', 'savings', $savingsTag);
+}
+
 $recurringGenerated = $insertRecurringExpense(1, 'Rent', '25.00', 'needs', $needsTag, null, 'day_of_month', 1, $currentMonth, null);
 $recurringPending = $insertRecurringExpense(1, 'Subscription', '75.00', 'wants', $wantsTag, null, 'day_of_month', 15, $currentMonth, null);
 $overviewPdo->prepare('INSERT INTO recurring_expense_occurrences (user_id, recurring_expense_id, occurrence_month, due_date, transaction_id) VALUES (1, :recurring_expense_id, :occurrence_month, :due_date, :transaction_id)')
@@ -531,14 +541,10 @@ assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview
 assertSame('90.00', $currentOverview['summary']['left_this_month'], 'month overview totals remaining');
 assertSame('91.00', $currentOverview['summary']['percent_spent'], 'month overview totals percent spent');
 assertSame('current', $currentOverview['month_progress']['status'], 'month overview current month status');
-$currentMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $currentMonth . '-01', new DateTimeZone('UTC'));
-assert($currentMonthStart !== false);
-$currentMonthDays = (int) $currentMonthStart->modify('last day of this month')->format('d');
-$currentDaysElapsed = (int) $nowUtc->format('j');
 $currentDaysRemaining = $currentMonthDays - $currentDaysElapsed;
 $currentPercentElapsed = number_format(($currentDaysElapsed / $currentMonthDays) * 100.0, 2, '.', '');
 $currentDailyAvailable = number_format(90.0 / max($currentDaysRemaining, 1), 2, '.', '');
-$currentProjected = number_format(910.0 / (max((float) $currentPercentElapsed, 0.01) / 100.0), 2, '.', '');
+$currentProjected = number_format(910.0 / ($currentDaysElapsed / $currentMonthDays), 2, '.', '');
 assertSame($currentMonthDays, $currentOverview['month_progress']['days_in_month'], 'month overview current month days in month');
 assertSame($currentDaysElapsed, $currentOverview['month_progress']['day_of_month'], 'month overview current month day of month');
 assertSame($currentDaysElapsed, $currentOverview['month_progress']['days_elapsed'], 'month overview current month days elapsed');
@@ -573,6 +579,12 @@ assertSame(5, count($currentOverview['recent_transactions']), 'month overview li
 assertSame($currentMonth . '-06', $currentOverview['recent_transactions'][0]['date'], 'month overview sorts recent transactions descending');
 assertSame($currentMonth . '-02', $currentOverview['recent_transactions'][4]['date'], 'month overview keeps the fifth most recent transaction');
 assertSame((string) $recurringGenerated, $currentOverview['recent_transactions'][2]['recurring_expense_id'], 'month overview exposes recurring transaction linkage');
+foreach ($currentOverview['recent_transactions'] as $recentTransaction) {
+    assertSame(true, $recentTransaction['date'] <= $nowUtc->format('Y-m-d'), 'month overview current month recent transactions stop at today');
+}
+if ($futureCurrentMonthDate !== null) {
+    assertSame(false, in_array($futureCurrentMonthDate, array_column($currentOverview['recent_transactions'], 'date'), true), 'month overview excludes future-dated current month transactions from recent list');
+}
 assertSame('month_pace', $currentOverview['status_cards'][0]['id'], 'month overview returns month pace first');
 assertSame('largest_category', $currentOverview['status_cards'][1]['id'], 'month overview returns largest category second');
 assertSame('recurring', $currentOverview['status_cards'][2]['id'], 'month overview returns recurring third');
