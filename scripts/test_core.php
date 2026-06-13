@@ -476,6 +476,10 @@ $wantsTag = $insertTag(1, 'Wants', 'shopping_cart');
 $savingsTag = $insertTag(1, 'Savings', 'savings');
 $unusedTag = $insertTag(1, 'Unused', 'tag');
 $otherUserTag = $insertTag(2, 'Needs', 'home');
+$pastExtraTags = [];
+foreach (range(1, 9) as $index) {
+    $pastExtraTags[] = $insertTag(1, 'Past Extra ' . $index, 'tag');
+}
 
 $insertVersion(1, $pastMonth . '-01', '1000.00', 'amount', null, null, null, '400.00', '300.00', '300.00', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
 $insertVersion(1, $currentMonth . '-01', '1000.00', 'amount', null, null, null, '500.00', '300.00', '200.00', '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z');
@@ -494,6 +498,11 @@ $overviewPdo->prepare('UPDATE transactions SET deleted_at = :deleted_at WHERE id
         ':user_id' => 1,
     ]);
 $insertTransaction(2, $currentMonth . '-06', 'Other User Spend', '9999.00', 'needs', $otherUserTag);
+foreach ($pastExtraTags as $index => $tagId) {
+    $day = sprintf('%02d', $index + 1);
+    $amount = number_format((float) ($index + 1), 2, '.', '');
+    $insertTransaction(1, $pastMonth . '-' . $day, 'Past Extra Transaction ' . ($index + 1), $amount, 'wants', $tagId);
+}
 
 $currentMonthStart = DateTimeImmutable::createFromFormat('Y-m-d', $currentMonth . '-01', new DateTimeZone('UTC'));
 assert($currentMonthStart !== false);
@@ -679,6 +688,7 @@ $pastMonthDays = (int) $pastMonthStart->modify('last day of this month')->format
 assertSame(true, $pastOverview['budget']['has_budget'], 'month overview past month has budget');
 assertSame(true, $pastOverview['budget']['is_exact_match'], 'month overview past month exact budget');
 assertSame($pastMonth, $pastOverview['budget']['resolved_effective_month'], 'month overview past month resolved exact month');
+assertSame(9, count($pastOverview['tags']), 'month overview past month returns all tags instead of truncating to eight');
 assertSame('past', $pastOverview['month_progress']['status'], 'month overview past month status is past');
 assertSame($pastMonthDays, $pastOverview['month_progress']['days_in_month'], 'month overview past month days in month');
 assertSame($pastMonthDays, $pastOverview['month_progress']['days_elapsed'], 'month overview past month days elapsed');

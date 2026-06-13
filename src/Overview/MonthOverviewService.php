@@ -237,8 +237,7 @@ final class MonthOverviewService
                AND t.transaction_date BETWEEN :date_from AND :date_to
              GROUP BY t.tag_id, tg.name, tg.icon_key
              HAVING SUM(t.amount) > 0
-             ORDER BY spend DESC, tg.name ASC
-             LIMIT 8'
+             ORDER BY spend DESC, tg.name ASC'
         );
         $stmt->execute([
             ':user_id' => $userId,
