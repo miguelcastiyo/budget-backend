@@ -107,6 +107,16 @@ Categories are fixed in v1 (not user-editable). Debt payments use `needs` plus a
 
 ## 3) Invite-Only Onboarding
 
+Frontend requirement:
+- Invite links must enter an invite-acceptance flow, not a plain sign-in form.
+- If the frontend receives an `invite_token`, it must preserve that token through the acceptance flow and keep the user in invite mode until account creation succeeds or the invite is rejected as invalid/expired.
+- The acceptance UI must present two explicit choices when appropriate:
+- `Continue with Google` -> `POST /auth/invitations/accept-google`
+- `Set password` -> `POST /auth/invitations/accept-password`
+- New invitees must not be asked to sign in with an existing password before they have completed password setup.
+- The password acceptance form should prefill and lock the invited email, collect `display_name`, `password`, and `client_type`, and clearly communicate that submitting the form creates the account and signs the user in.
+- The invite acceptance experience should reuse the main auth screen's visual language and be optimized for narrow mobile viewports and iOS installed-web-app behavior.
+
 ### 3.1 Create Invite
 `POST /auth/invitations`
 
@@ -164,6 +174,10 @@ Response `200`:
 ### 3.2 Accept Invite with Email/Password
 `POST /auth/invitations/accept-password`
 
+Frontend behavior:
+- This route is the required account-creation path for invited users who are not completing onboarding with Google.
+- It is not a sign-in route and should be presented as password setup / account creation in the UI.
+
 Request:
 ```json
 {
@@ -199,6 +213,10 @@ Response `201`:
 
 ### 3.3 Accept Invite with Google
 `POST /auth/invitations/accept-google`
+
+Frontend behavior:
+- When an invite token is present, Google continuation must use this invite-accept route rather than the normal Google sign-in route.
+- The UI should preserve the same invite context and visual treatment used by the password acceptance branch.
 
 Request:
 ```json

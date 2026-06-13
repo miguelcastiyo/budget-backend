@@ -68,6 +68,22 @@
 
 Master API keys are blocked from `/me/master-api-keys*` management routes.
 
+## Invite acceptance UX requirement
+- Invite links must open an invite-acceptance experience, not a plain sign-in screen.
+- When the frontend receives an `invite_token`, it must keep the user in invite mode until the invite is accepted or rejected.
+- The invite screen must support both branches:
+- `Continue with Google` calls `POST /api/v1/auth/invitations/accept-google`.
+- `Set password` calls `POST /api/v1/auth/invitations/accept-password`.
+- New non-Google invitees must never be asked to sign in with an existing password before account creation.
+- The password branch should prefill and lock the invited email, collect `display_name`, `password`, and `client_type`, and explain that this creates the account.
+- The visual treatment should match the app's existing sign-in look and feel rather than sending users to a separate utilitarian form.
+- The invite screen must be mobile optimized, including iPhone Safari and installed iOS web app viewport behavior:
+- no clipped CTA or keyboard-covered submit button
+- no horizontal overflow
+- safe-area aware bottom spacing
+- large tap targets and a single-column layout
+- the primary action remains visible and usable on narrow screens
+
 ## Local setup
 1. Copy env file:
 ```bash

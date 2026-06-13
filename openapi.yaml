@@ -112,6 +112,7 @@ paths:
     post:
       tags: [Auth]
       summary: Accept invite with email/password
+      description: Creates an invited password account, creates a session, and completes invite acceptance. Frontends should use this route for invite-token password setup rather than sending new invitees to the normal sign-in form.
       security: []
       requestBody:
         required: true
@@ -140,6 +141,7 @@ paths:
     post:
       tags: [Auth]
       summary: Accept invite with Google
+      description: Creates or resolves the invited Google account, creates a session, and completes invite acceptance. When an invite token is present, frontends should keep users in invite-acceptance mode and use this route instead of the normal Google sign-in route.
       security: []
       requestBody:
         required: true
