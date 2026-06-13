@@ -346,6 +346,47 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /me/setup-status:
+    get:
+      tags: [Profile]
+      summary: Get first-run setup status
+      description: Returns deterministic setup state for onboarding and dashboard prompts.
+      responses:
+        '200':
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatus'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /me/onboarding-state:
+    patch:
+      tags: [Profile]
+      summary: Update first-run onboarding visibility state
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOnboardingStateRequest'
+      responses:
+        '200':
+          description: Onboarding state updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateOnboardingStateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /me/preferences:
     get:
       tags: [Profile]
@@ -1745,7 +1786,66 @@ components:
       properties:
         appearance:
           $ref: '#/components/schemas/AppearancePreferences'
-      required: [appearance]
+        onboarding:
+          type: object
+          properties:
+            dismissed:
+              type: boolean
+          required: [dismissed]
+      required: [appearance, onboarding]
+
+    SetupTask:
+      type: object
+      properties:
+        key:
+          type: string
+          enum: [add_first_transaction, add_recurring_expenses, import_transactions]
+        label:
+          type: string
+        status:
+          type: string
+          enum: [available, completed]
+        completed:
+          type: boolean
+      required: [key, label, status, completed]
+
+    SetupStatus:
+      type: object
+      properties:
+        budget_profile_complete:
+          type: boolean
+        has_transactions:
+          type: boolean
+        has_recurring_expenses:
+          type: boolean
+        has_imported_data:
+          type: boolean
+        first_transaction_added:
+          type: boolean
+        first_recurring_expense_added:
+          type: boolean
+        first_import_completed:
+          type: boolean
+        onboarding_dismissed:
+          type: boolean
+        recommended_next_action:
+          type: string
+          enum: [complete_budget_profile, add_first_transaction, add_recurring_expenses, import_transactions, none]
+        setup_tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetupTask'
+      required:
+        - budget_profile_complete
+        - has_transactions
+        - has_recurring_expenses
+        - has_imported_data
+        - first_transaction_added
+        - first_recurring_expense_added
+        - first_import_completed
+        - onboarding_dismissed
+        - recommended_next_action
+        - setup_tasks
 
     AuthUser:
       type: object
@@ -1828,6 +1928,25 @@ components:
           properties:
             theme:
               $ref: '#/components/schemas/ThemePreference'
+        onboarding:
+          type: object
+          properties:
+            dismissed:
+              type: boolean
+
+    UpdateOnboardingStateRequest:
+      type: object
+      properties:
+        onboarding_dismissed:
+          type: boolean
+      required: [onboarding_dismissed]
+
+    UpdateOnboardingStateResponse:
+      type: object
+      properties:
+        onboarding_dismissed:
+          type: boolean
+      required: [onboarding_dismissed]
 
     AuditLogEvent:
       type: object

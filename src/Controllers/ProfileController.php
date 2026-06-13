@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Budget\BudgetSettingsResolver;
 use App\Auth\GoogleTokenVerifier;
 use App\Core\Config;
 use App\Http\HttpException;
@@ -25,7 +26,8 @@ final class ProfileController
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
         private readonly Config $config,
-        private readonly AuditLogger $audit
+        private readonly AuditLogger $audit,
+        private readonly BudgetSettingsResolver $budgetSettingsResolver
     ) {
     }
 
@@ -78,6 +80,44 @@ final class ProfileController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         return Response::json($this->fetchPreferences($ctx->userId()));
+    }
+
+    public function getSetupStatus(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+
+        return Response::json($this->buildSetupStatus($ctx->userId()));
+    }
+
+    public function updateOnboardingState(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $payload = $request->json();
+
+        if (!is_array($payload) || !array_key_exists('onboarding_dismissed', $payload) || !is_bool($payload['onboarding_dismissed'])) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'onboarding_dismissed', 'message' => 'must be a boolean'],
+            ]);
+        }
+
+        $current = $this->fetchPreferences($ctx->userId());
+        $next = $current;
+        $next['onboarding']['dismissed'] = $payload['onboarding_dismissed'];
+
+        $encoded = json_encode($this->validatedPreferences($next), JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            throw new HttpException(500, 'INTERNAL_ERROR', 'Unable to encode user preferences');
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE users SET user_preferences = :user_preferences WHERE id = :id');
+        $stmt->execute([
+            ':user_preferences' => $encoded,
+            ':id' => $ctx->userId(),
+        ]);
+
+        return Response::json([
+            'onboarding_dismissed' => (bool) $payload['onboarding_dismissed'],
+        ]);
     }
 
     public function settingsSummary(Request $request): Response
@@ -558,7 +598,27 @@ final class ProfileController
             $next['appearance'] = $nextAppearance;
         }
 
-        $unsupported = array_diff(array_keys($patch), ['appearance']);
+        if (array_key_exists('onboarding', $patch)) {
+            if (!is_array($patch['onboarding'])) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'onboarding', 'message' => 'must be an object'],
+                ]);
+            }
+
+            $nextOnboarding = is_array($next['onboarding'] ?? null) ? $next['onboarding'] : [];
+            if (array_key_exists('dismissed', $patch['onboarding'])) {
+                if (!is_bool($patch['onboarding']['dismissed'])) {
+                    throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                        ['field' => 'onboarding.dismissed', 'message' => 'must be a boolean'],
+                    ]);
+                }
+
+                $nextOnboarding['dismissed'] = $patch['onboarding']['dismissed'];
+            }
+            $next['onboarding'] = $nextOnboarding;
+        }
+
+        $unsupported = array_diff(array_keys($patch), ['appearance', 'onboarding']);
         if ($unsupported !== []) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => (string) array_values($unsupported)[0], 'message' => 'is not supported'],
@@ -576,6 +636,10 @@ final class ProfileController
         $defaults = $this->defaultPreferences();
         $appearance = is_array($preferences['appearance'] ?? null) ? $preferences['appearance'] : [];
         $theme = (string) ($appearance['theme'] ?? $defaults['appearance']['theme']);
+        $onboarding = is_array($preferences['onboarding'] ?? null) ? $preferences['onboarding'] : [];
+        $dismissed = is_bool($onboarding['dismissed'] ?? null)
+            ? $onboarding['dismissed']
+            : $defaults['onboarding']['dismissed'];
 
         if (!in_array($theme, ['light', 'dark', 'system'], true)) {
             $theme = $defaults['appearance']['theme'];
@@ -584,6 +648,9 @@ final class ProfileController
         return [
             'appearance' => [
                 'theme' => $theme,
+            ],
+            'onboarding' => [
+                'dismissed' => $dismissed,
             ],
         ];
     }
@@ -595,6 +662,138 @@ final class ProfileController
             'appearance' => [
                 'theme' => 'system',
             ],
+            'onboarding' => [
+                'dismissed' => false,
+            ],
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function buildSetupStatus(int $userId): array
+    {
+        $currentMonth = $this->currentMonthKey();
+        $budgetProfileComplete = $this->budgetProfileCompleteForMonth($userId, $currentMonth);
+        $transactionCount = $this->transactionCount($userId);
+        $hasTransactions = $transactionCount > 0;
+        $hasRecurringExpenses = $this->hasRecurringExpenses($userId);
+        $hasImportedData = $this->hasImportedData($userId);
+        $preferences = $this->fetchPreferences($userId);
+        $onboardingDismissed = (bool) ($preferences['onboarding']['dismissed'] ?? false);
+        $recommendedNextAction = $this->recommendedNextAction(
+            $budgetProfileComplete,
+            $hasTransactions,
+            $hasRecurringExpenses,
+            $hasImportedData,
+            $transactionCount
+        );
+
+        return [
+            'budget_profile_complete' => $budgetProfileComplete,
+            'has_transactions' => $hasTransactions,
+            'has_recurring_expenses' => $hasRecurringExpenses,
+            'has_imported_data' => $hasImportedData,
+            'first_transaction_added' => $hasTransactions,
+            'first_recurring_expense_added' => $hasRecurringExpenses,
+            'first_import_completed' => $hasImportedData,
+            'onboarding_dismissed' => $onboardingDismissed,
+            'recommended_next_action' => $recommendedNextAction,
+            'setup_tasks' => [
+                $this->setupTask('add_first_transaction', 'Add your first transaction', $hasTransactions),
+                $this->setupTask('add_recurring_expenses', 'Add fixed monthly bills', $hasRecurringExpenses),
+                $this->setupTask('import_transactions', 'Import past transactions', $hasImportedData),
+            ],
+        ];
+    }
+
+    private function budgetProfileCompleteForMonth(int $userId, string $month): bool
+    {
+        $resolved = $this->budgetSettingsResolver->getEffectiveSettingsForMonth($userId, $month);
+
+        return $resolved['resolved_effective_month'] !== null && is_array($resolved['settings']);
+    }
+
+    private function currentMonthKey(): string
+    {
+        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m');
+    }
+
+    private function transactionCount(int $userId): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) AS total
+             FROM transactions
+             WHERE user_id = :user_id
+               AND deleted_at IS NULL'
+        );
+        $stmt->execute([':user_id' => $userId]);
+
+        return (int) ($stmt->fetch()['total'] ?? 0);
+    }
+
+    private function hasRecurringExpenses(int $userId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT 1
+             FROM recurring_expenses
+             WHERE user_id = :user_id
+               AND is_active = 1
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([':user_id' => $userId]);
+
+        return (bool) $stmt->fetch();
+    }
+
+    private function hasImportedData(int $userId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT 1
+             FROM csv_import_runs
+             WHERE user_id = :user_id
+               AND mode = 'commit'
+               AND imported_rows > 0
+             LIMIT 1"
+        );
+        $stmt->execute([':user_id' => $userId]);
+
+        return (bool) $stmt->fetch();
+    }
+
+    private function recommendedNextAction(
+        bool $budgetProfileComplete,
+        bool $hasTransactions,
+        bool $hasRecurringExpenses,
+        bool $hasImportedData,
+        int $transactionCount
+    ): string {
+        if (!$budgetProfileComplete) {
+            return 'complete_budget_profile';
+        }
+
+        if (!$hasTransactions) {
+            return 'add_first_transaction';
+        }
+
+        if (!$hasRecurringExpenses) {
+            return 'add_recurring_expenses';
+        }
+
+        if (!$hasImportedData && $transactionCount < 10) {
+            return 'import_transactions';
+        }
+
+        return 'none';
+    }
+
+    /** @return array{key:string,label:string,status:string,completed:bool} */
+    private function setupTask(string $key, string $label, bool $completed): array
+    {
+        return [
+            'key' => $key,
+            'label' => $label,
+            'status' => $completed ? 'completed' : 'available',
+            'completed' => $completed,
         ];
     }
 

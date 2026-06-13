@@ -842,9 +842,15 @@ SQL;
             $theme = 'system';
         }
 
+        $onboarding = is_array($preferences['onboarding'] ?? null) ? $preferences['onboarding'] : [];
+        $dismissed = is_bool($onboarding['dismissed'] ?? null) ? $onboarding['dismissed'] : false;
+
         return [
             'appearance' => [
                 'theme' => $theme,
+            ],
+            'onboarding' => [
+                'dismissed' => $dismissed,
             ],
         ];
     }
@@ -855,6 +861,9 @@ SQL;
         return [
             'appearance' => [
                 'theme' => 'system',
+            ],
+            'onboarding' => [
+                'dismissed' => false,
             ],
         ];
     }

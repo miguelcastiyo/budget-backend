@@ -79,7 +79,7 @@ final class App
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth, $budgetSettingsResolver);
         $importExportController = new ImportExportController($auth, $auditLogger, $csvImportService, $csvExportService, $dataRunRepository, $csvImportMapper);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
-        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $budgetSettingsResolver);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
@@ -109,6 +109,8 @@ final class App
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
         $add('PATCH', '/me', fn(Request $request) => $profileController->updateMe($request));
+        $add('GET', '/me/setup-status', fn(Request $request) => $profileController->getSetupStatus($request));
+        $add('PATCH', '/me/onboarding-state', fn(Request $request) => $profileController->updateOnboardingState($request));
         $add('GET', '/me/preferences', fn(Request $request) => $profileController->getPreferences($request));
         $add('PATCH', '/me/preferences', fn(Request $request) => $profileController->updatePreferences($request));
         $add('GET', '/me/settings-summary', fn(Request $request) => $profileController->settingsSummary($request));
@@ -308,7 +310,7 @@ final class App
             return;
         }
 
-        if ($method === 'PATCH' && in_array($path, ['/me', '/me/preferences'], true)) {
+        if ($method === 'PATCH' && in_array($path, ['/me', '/me/preferences', '/me/onboarding-state'], true)) {
             $this->hitAuthenticatedRateLimit(
                 $request,
                 'profile-change',

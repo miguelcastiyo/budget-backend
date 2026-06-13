@@ -223,6 +223,9 @@ Response `201`:
     "user_preferences": {
       "appearance": {
         "theme": "system"
+      },
+      "onboarding": {
+        "dismissed": false
       }
     }
   },
@@ -359,6 +362,9 @@ Response:
   "user_preferences": {
     "appearance": {
       "theme": "system"
+    },
+    "onboarding": {
+      "dismissed": false
     }
   }
 }
@@ -382,6 +388,9 @@ Response:
 {
   "appearance": {
     "theme": "dark"
+  },
+  "onboarding": {
+    "dismissed": false
   }
 }
 ```
@@ -391,6 +400,7 @@ Notes:
 - Unknown or invalid preference keys are rejected by the backend.
 - Currently supported:
   - `appearance.theme`: `light | dark | system`
+  - `onboarding.dismissed`: `true | false`
 
 ### 4.4 Update User Preferences
 `PATCH /me/preferences`
@@ -400,6 +410,9 @@ Request:
 {
   "appearance": {
     "theme": "dark"
+  },
+  "onboarding": {
+    "dismissed": true
   }
 }
 ```
@@ -409,6 +422,9 @@ Response `200`:
 {
   "appearance": {
     "theme": "dark"
+  },
+  "onboarding": {
+    "dismissed": true
   }
 }
 ```
@@ -443,7 +459,66 @@ Notes:
 - `recurring_committed_total` is the active committed recurring total for the current UTC month.
 - `avg_monthly_spend` is calculated server-side from non-deleted transactions grouped by transaction month.
 
-### 4.6 Request Email Change (Password Users Only)
+### 4.6 Setup Status
+`GET /me/setup-status`
+
+Purpose:
+- Returns the first-run setup state used by onboarding and the dashboard checklist.
+- Keeps setup heuristics out of the frontend.
+
+Response `200`:
+```json
+{
+  "budget_profile_complete": true,
+  "has_transactions": false,
+  "has_recurring_expenses": false,
+  "has_imported_data": false,
+  "first_transaction_added": false,
+  "first_recurring_expense_added": false,
+  "first_import_completed": false,
+  "onboarding_dismissed": false,
+  "recommended_next_action": "add_first_transaction",
+  "setup_tasks": [
+    {
+      "key": "add_first_transaction",
+      "label": "Add your first transaction",
+      "status": "available",
+      "completed": false
+    },
+    {
+      "key": "add_recurring_expenses",
+      "label": "Add fixed monthly bills",
+      "status": "available",
+      "completed": false
+    },
+    {
+      "key": "import_transactions",
+      "label": "Import past transactions",
+      "status": "available",
+      "completed": false
+    }
+  ]
+}
+```
+
+### 4.7 Update Onboarding State
+`PATCH /me/onboarding-state`
+
+Request:
+```json
+{
+  "onboarding_dismissed": true
+}
+```
+
+Response `200`:
+```json
+{
+  "onboarding_dismissed": true
+}
+```
+
+### 4.8 Request Email Change (Password Users Only)
 `POST /me/email-change/request`
 
 Request:
@@ -467,7 +542,7 @@ Response `202`:
 }
 ```
 
-### 4.7 Verify Email Change
+### 4.9 Verify Email Change
 `POST /me/email-change/verify`
 
 Request:
@@ -490,7 +565,7 @@ Response `200`:
 }
 ```
 
-### 4.8 Convert Password Account To Google Sign-In
+### 4.10 Convert Password Account To Google Sign-In
 `POST /me/auth/convert-google`
 
 Auth required: session auth only.
@@ -522,12 +597,15 @@ Response `200`:
   "user_preferences": {
     "appearance": {
       "theme": "system"
+    },
+    "onboarding": {
+      "dismissed": false
     }
   }
 }
 ```
 
-### 4.9 List Master API Keys
+### 4.11 List Master API Keys
 `GET /me/master-api-keys`
 
 Auth required: session auth only.
