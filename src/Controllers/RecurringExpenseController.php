@@ -17,6 +17,7 @@ final class RecurringExpenseController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
     private const ALLOWED_BILLING_TYPES = ['day_of_month', 'last_day'];
+    private const ALLOWED_GENERATED_TRANSACTION_ACTIONS = ['reject', 'update_linked_transaction'];
 
     public function __construct(
         private readonly PDO $pdo,
@@ -53,6 +54,7 @@ final class RecurringExpenseController
         $sql = <<<'SQL'
 SELECT
   re.id,
+  re.series_id,
   re.expense,
   re.amount,
   re.category,
@@ -97,6 +99,7 @@ SQL;
 
             $items[] = [
                 'id' => (string) $row['id'],
+                'series_id' => (string) $row['series_id'],
                 'expense' => (string) $row['expense'],
                 'amount' => $this->fmt((string) $row['amount']),
                 'category' => (string) $row['category'],
@@ -159,10 +162,11 @@ SQL;
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO recurring_expenses (user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active)
-             VALUES (:user_id, :expense, :amount, :category, :tag_id, :card_id, :billing_type, :billing_day, :starts_month, :ends_month, :is_active)'
+            'INSERT INTO recurring_expenses (series_id, user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active)
+             VALUES (:series_id, :user_id, :expense, :amount, :category, :tag_id, :card_id, :billing_type, :billing_day, :starts_month, :ends_month, :is_active)'
         );
         $stmt->execute([
+            ':series_id' => $this->recurring->newSeriesId(),
             ':user_id' => $ctx->userId(),
             ':expense' => $expense,
             ':amount' => $amount,
@@ -255,35 +259,54 @@ SQL;
             ]);
         }
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE recurring_expenses
-             SET expense = :expense,
-                 amount = :amount,
-                 category = :category,
-                 tag_id = :tag_id,
-                 card_id = :card_id,
-                 billing_type = :billing_type,
-                 billing_day = :billing_day,
-                 starts_month = :starts_month,
-                 ends_month = :ends_month,
-                 is_active = :is_active,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
-        );
-        $stmt->execute([
-            ':expense' => $expense,
-            ':amount' => $amount,
-            ':category' => $category,
-            ':tag_id' => $tagId,
-            ':card_id' => $cardId,
-            ':billing_type' => $billingType,
-            ':billing_day' => $billingDay,
-            ':starts_month' => $startsMonth . '-01',
-            ':ends_month' => $endsMonth === null ? null : ($endsMonth . '-01'),
-            ':is_active' => $isActive ? 1 : 0,
-            ':id' => $id,
-            ':user_id' => $ctx->userId(),
-        ]);
+        try {
+            $this->pdo->beginTransaction();
+
+            $stmt = $this->pdo->prepare(
+                'UPDATE recurring_expenses
+                 SET expense = :expense,
+                     amount = :amount,
+                     category = :category,
+                     tag_id = :tag_id,
+                     card_id = :card_id,
+                     billing_type = :billing_type,
+                     billing_day = :billing_day,
+                     starts_month = :starts_month,
+                     ends_month = :ends_month,
+                     is_active = :is_active,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
+            );
+            $stmt->execute([
+                ':expense' => $expense,
+                ':amount' => $amount,
+                ':category' => $category,
+                ':tag_id' => $tagId,
+                ':card_id' => $cardId,
+                ':billing_type' => $billingType,
+                ':billing_day' => $billingDay,
+                ':starts_month' => $startsMonth . '-01',
+                ':ends_month' => $endsMonth === null ? null : ($endsMonth . '-01'),
+                ':is_active' => $isActive ? 1 : 0,
+                ':id' => $id,
+                ':user_id' => $ctx->userId(),
+            ]);
+            $this->recurring->assertNoSeriesOverlap($ctx->userId(), (string) $existing['series_id']);
+
+            $this->pdo->commit();
+        } catch (HttpException $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
 
         if ($isActive && $this->monthApplies($this->recurring->currentMonth(), $startsMonth, $endsMonth)) {
             $this->recurring->ensureGeneratedForMonth($ctx->userId(), $this->recurring->currentMonth());
@@ -315,11 +338,85 @@ SQL;
         return Response::noContent();
     }
 
+    /** @param array{recurring_expense_id:string} $params */
+    public function series(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $id = $this->parseEntityId((string) ($params['recurring_expense_id'] ?? ''), 'recurring_expense_id');
+        $seriesId = $this->recurring->recurringExpenseSeriesId($ctx->userId(), $id);
+
+        return Response::json([
+            'series_id' => $seriesId,
+            'items' => $this->fetchSeriesItems($ctx->userId(), $seriesId),
+        ]);
+    }
+
+    /** @param array{recurring_expense_id:string} $params */
+    public function scheduleChange(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $id = $this->parseEntityId((string) ($params['recurring_expense_id'] ?? ''), 'recurring_expense_id');
+        $source = $this->fetchRaw($ctx->userId(), $id);
+        $payload = $request->json();
+
+        $effectiveMonth = $this->validatedMonth($payload['effective_month'] ?? null, 'effective_month');
+        $generatedTransactionAction = array_key_exists('generated_transaction_action', $payload)
+            ? $this->validatedGeneratedTransactionAction($payload['generated_transaction_action'])
+            : 'reject';
+
+        $changes = [];
+        if (array_key_exists('amount', $payload)) {
+            $changes['amount'] = $this->validatedMoney($payload['amount'], 'amount');
+        }
+        if (array_key_exists('category', $payload)) {
+            $changes['category'] = $this->validatedCategory($payload['category']);
+        }
+        if (array_key_exists('tag_id', $payload)) {
+            $changes['tag_id'] = $this->resolvedTagId($ctx->userId(), $payload['tag_id']);
+        }
+        if (array_key_exists('card_id', $payload)) {
+            $changes['card_id'] = $this->resolvedCardId($ctx->userId(), $payload['card_id']);
+        }
+        if (array_key_exists('billing_type', $payload) || array_key_exists('billing_day', $payload)) {
+            $billingType = array_key_exists('billing_type', $payload)
+                ? $this->validatedBillingType($payload['billing_type'])
+                : (string) $source['billing_type'];
+            $existingBillingDay = $source['billing_day'] === null ? null : (int) $source['billing_day'];
+            $billingDayInput = array_key_exists('billing_day', $payload)
+                ? $payload['billing_day']
+                : ($billingType === 'last_day' ? null : $existingBillingDay);
+            $changes['billing_type'] = $billingType;
+            $changes['billing_day'] = $this->validatedBillingDay($billingDayInput, $billingType);
+        }
+
+        if ($changes === []) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'amount', 'message' => 'at least one change field is required'],
+            ]);
+        }
+
+        $result = $this->recurring->scheduleChange(
+            $ctx->userId(),
+            $id,
+            $effectiveMonth,
+            $changes,
+            $generatedTransactionAction
+        );
+
+        return Response::json([
+            'status' => 'scheduled',
+            'series_id' => $result['series_id'],
+            'ended_rule' => $this->fetchOne($ctx->userId(), $result['ended_rule_id']),
+            'new_rule' => $this->fetchOne($ctx->userId(), $result['new_rule_id']),
+            'series_items' => $this->fetchSeriesItems($ctx->userId(), $result['series_id']),
+        ]);
+    }
+
     /** @return array<string,mixed> */
     private function fetchRaw(int $userId, int $id): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active
+            'SELECT id, series_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active
              FROM recurring_expenses
              WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL
              LIMIT 1'
@@ -342,6 +439,7 @@ SQL;
         $sql = <<<'SQL'
 SELECT
   re.id,
+  re.series_id,
   re.expense,
   re.amount,
   re.category,
@@ -379,6 +477,7 @@ SQL;
 
         return [
             'id' => (string) $row['id'],
+            'series_id' => (string) $row['series_id'],
             'expense' => (string) $row['expense'],
             'amount' => $this->fmt((string) $row['amount']),
             'category' => (string) $row['category'],
@@ -443,6 +542,17 @@ SQL;
         if (!is_string($value) || !in_array($value, self::ALLOWED_CATEGORIES, true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'category', 'message' => 'must be one of needs,wants,savings'],
+            ]);
+        }
+
+        return $value;
+    }
+
+    private function validatedGeneratedTransactionAction(mixed $value): string
+    {
+        if (!is_string($value) || !in_array($value, self::ALLOWED_GENERATED_TRANSACTION_ACTIONS, true)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'generated_transaction_action', 'message' => 'must be one of reject,update_linked_transaction'],
             ]);
         }
 
@@ -649,5 +759,90 @@ SQL;
     private function fmt(string $decimal): string
     {
         return number_format((float) $decimal, 2, '.', '');
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function fetchSeriesItems(int $userId, string $seriesId): array
+    {
+        $month = $this->recurring->currentMonth();
+        $instanceMonth = $month . '-01';
+
+        $sql = <<<'SQL'
+SELECT
+  re.id,
+  re.series_id,
+  re.expense,
+  re.amount,
+  re.category,
+  re.tag_id,
+  re.card_id,
+  re.billing_type,
+  re.billing_day,
+  re.starts_month,
+  re.ends_month,
+  re.is_active,
+  re.created_at,
+  re.updated_at,
+  tg.name AS tag_name,
+  tg.icon_key AS tag_icon_key,
+  c.name AS card_name,
+  EXISTS(
+    SELECT 1
+    FROM recurring_expense_occurrences reo
+    WHERE reo.user_id = re.user_id
+      AND reo.recurring_expense_id = re.id
+      AND reo.occurrence_month = :instance_month
+    LIMIT 1
+  ) AS generated_for_month
+FROM recurring_expenses re
+JOIN tags tg ON tg.id = re.tag_id AND tg.user_id = re.user_id
+LEFT JOIN cards c ON c.id = re.card_id AND c.user_id = re.user_id
+WHERE re.user_id = :user_id
+  AND re.series_id = :series_id
+  AND re.deleted_at IS NULL
+ORDER BY re.starts_month ASC, re.id ASC
+SQL;
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':instance_month' => $instanceMonth,
+            ':user_id' => $userId,
+            ':series_id' => $seriesId,
+        ]);
+
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $billingType = (string) $row['billing_type'];
+            $billingDay = $row['billing_day'] === null ? null : (int) $row['billing_day'];
+
+            $items[] = [
+                'id' => (string) $row['id'],
+                'series_id' => (string) $row['series_id'],
+                'expense' => (string) $row['expense'],
+                'amount' => $this->fmt((string) $row['amount']),
+                'category' => (string) $row['category'],
+                'tag' => [
+                    'id' => (string) $row['tag_id'],
+                    'name' => (string) $row['tag_name'],
+                    'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
+                ],
+                'card' => $row['card_id'] === null
+                    ? null
+                    : [
+                        'id' => (string) $row['card_id'],
+                        'name' => (string) $row['card_name'],
+                    ],
+                'billing_type' => $billingType,
+                'billing_day' => $billingDay,
+                'projected_date_for_month' => $this->projectedDateForMonth($month, $billingType, $billingDay),
+                'starts_month' => substr((string) $row['starts_month'], 0, 7),
+                'ends_month' => $row['ends_month'] === null ? null : substr((string) $row['ends_month'], 0, 7),
+                'is_active' => (bool) $row['is_active'],
+                'generated_for_month' => (bool) $row['generated_for_month'],
+                'created_at' => (string) $row['created_at'],
+                'updated_at' => (string) $row['updated_at'],
+            ];
+        }
+
+        return $items;
     }
 }

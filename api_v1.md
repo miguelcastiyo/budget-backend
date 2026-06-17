@@ -830,6 +830,7 @@ Response:
   "items": [
     {
       "id": "1",
+      "series_id": "rser_1",
       "expense": "Rent",
       "amount": "1200.00",
       "category": "needs",
@@ -849,6 +850,8 @@ Response:
 
 ### 7.2 Create Recurring Expense
 `POST /me/recurring-expenses`
+
+The backend creates `series_id` automatically. Clients do not send it during normal recurring creation.
 
 Request:
 ```json
@@ -872,14 +875,168 @@ Request:
 
 Any field from create can be updated. Updates only affect future generated months.
 
+Recurring expense versions in the same `series_id` may not overlap by month window.
+
 ### 7.4 Delete Recurring Expense
 `DELETE /me/recurring-expenses/{recurring_expense_id}`
+
+### 7.5 Get Recurring Expense Series History
+`GET /me/recurring-expenses/{recurring_expense_id}/series`
+
+Response:
+```json
+{
+  "series_id": "rser_abc123",
+  "items": [
+    {
+      "id": "123",
+      "series_id": "rser_abc123",
+      "expense": "AMC A-List",
+      "amount": "27.99",
+      "category": "wants",
+      "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+      "card": { "id": "4", "name": "Apple Card" },
+      "billing_type": "day_of_month",
+      "billing_day": 7,
+      "projected_date_for_month": "2026-06-07",
+      "starts_month": "2025-11",
+      "ends_month": "2026-06",
+      "is_active": true,
+      "generated_for_month": true,
+      "created_at": "2026-06-01T00:00:00Z",
+      "updated_at": "2026-06-01T00:00:00Z"
+    },
+    {
+      "id": "456",
+      "series_id": "rser_abc123",
+      "expense": "AMC A-List",
+      "amount": "29.99",
+      "category": "wants",
+      "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+      "card": { "id": "4", "name": "Apple Card" },
+      "billing_type": "day_of_month",
+      "billing_day": 7,
+      "projected_date_for_month": "2026-06-07",
+      "starts_month": "2026-07",
+      "ends_month": null,
+      "is_active": true,
+      "generated_for_month": false,
+      "created_at": "2026-06-16T00:00:00Z",
+      "updated_at": "2026-06-16T00:00:00Z"
+    }
+  ]
+}
+```
+
+### 7.6 Schedule Recurring Expense Change
+`POST /me/recurring-expenses/{recurring_expense_id}/schedule-change`
+
+Request:
+```json
+{
+  "effective_month": "2026-07",
+  "amount": "29.99",
+  "generated_transaction_action": "reject"
+}
+```
+
+Rules:
+- `effective_month` is required and must be `YYYY-MM`.
+- At least one change field is required. Current implementation supports amount, category, tag, card, and billing schedule fields.
+- `effective_month` must be after the source row `starts_month`.
+- If the source row has `ends_month`, `effective_month` must be `<= ends_month`.
+- The source recurring expense must be active and owned by the caller.
+- If the effective month already has a generated occurrence for the source recurring expense and `generated_transaction_action=reject` (default), the endpoint returns `409 CONFLICT`.
+- `generated_transaction_action=update_linked_transaction` is reserved for future support and currently validates but is rejected by the service with a validation error.
+
+Response:
+```json
+{
+  "status": "scheduled",
+  "series_id": "rser_abc123",
+  "ended_rule": {
+    "id": "123",
+    "series_id": "rser_abc123",
+    "expense": "AMC A-List",
+    "amount": "27.99",
+    "category": "wants",
+    "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+    "card": { "id": "4", "name": "Apple Card" },
+    "billing_type": "day_of_month",
+    "billing_day": 7,
+    "projected_date_for_month": "2026-06-07",
+    "starts_month": "2025-11",
+    "ends_month": "2026-06",
+    "is_active": true,
+    "generated_for_month": false,
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-16T00:00:00Z"
+  },
+  "new_rule": {
+    "id": "456",
+    "series_id": "rser_abc123",
+    "expense": "AMC A-List",
+    "amount": "29.99",
+    "category": "wants",
+    "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+    "card": { "id": "4", "name": "Apple Card" },
+    "billing_type": "day_of_month",
+    "billing_day": 7,
+    "projected_date_for_month": "2026-06-07",
+    "starts_month": "2026-07",
+    "ends_month": null,
+    "is_active": true,
+    "generated_for_month": false,
+    "created_at": "2026-06-16T00:00:00Z",
+    "updated_at": "2026-06-16T00:00:00Z"
+  },
+  "series_items": [
+    {
+      "id": "123",
+      "series_id": "rser_abc123",
+      "expense": "AMC A-List",
+      "amount": "27.99",
+      "category": "wants",
+      "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+      "card": { "id": "4", "name": "Apple Card" },
+      "billing_type": "day_of_month",
+      "billing_day": 7,
+      "projected_date_for_month": "2026-06-07",
+      "starts_month": "2025-11",
+      "ends_month": "2026-06",
+      "is_active": true,
+      "generated_for_month": false,
+      "created_at": "2026-06-01T00:00:00Z",
+      "updated_at": "2026-06-16T00:00:00Z"
+    },
+    {
+      "id": "456",
+      "series_id": "rser_abc123",
+      "expense": "AMC A-List",
+      "amount": "29.99",
+      "category": "wants",
+      "tag": { "id": "12", "name": "Entertainment", "icon_key": "film" },
+      "card": { "id": "4", "name": "Apple Card" },
+      "billing_type": "day_of_month",
+      "billing_day": 7,
+      "projected_date_for_month": "2026-06-07",
+      "starts_month": "2026-07",
+      "ends_month": null,
+      "is_active": true,
+      "generated_for_month": false,
+      "created_at": "2026-06-16T00:00:00Z",
+      "updated_at": "2026-06-16T00:00:00Z"
+    }
+  ]
+}
+```
 
 Rules:
 - Delete stops future generation. Existing transactions are unchanged.
 - `billing_day` is required only for `billing_type=day_of_month`.
 - `starts_month`/`ends_month` use `YYYY-MM` and `ends_month >= starts_month` when present.
 - `seed_transaction_id` is optional and can link the current month occurrence to an already-created transaction to avoid duplicates.
+- `series_id` groups multiple versions of the same commitment.
 
 ## 8) Budget Settings (Monthly Income + 3 Buckets)
 

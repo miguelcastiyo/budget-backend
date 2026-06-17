@@ -214,6 +214,7 @@ CREATE TABLE cards (
 
 CREATE TABLE recurring_expenses (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  series_id VARCHAR(64) NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
   expense VARCHAR(160) NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
@@ -230,7 +231,10 @@ CREATE TABLE recurring_expenses (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_recurring_expenses_user_active (user_id, is_active),
+  KEY idx_recurring_expenses_user_series (user_id, series_id),
+  KEY idx_recurring_expenses_user_series_window (user_id, series_id, starts_month, ends_month),
   KEY idx_recurring_expenses_user_window (user_id, starts_month, ends_month),
+  UNIQUE KEY uq_recurring_expenses_user_series_start (user_id, series_id, starts_month),
   CONSTRAINT fk_recurring_expenses_user
     FOREIGN KEY (user_id) REFERENCES users (id),
   CONSTRAINT fk_recurring_expenses_tag

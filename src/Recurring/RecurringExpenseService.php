@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Recurring;
 
 use App\Http\HttpException;
+use App\Support\Str;
 use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
@@ -19,6 +20,11 @@ final class RecurringExpenseService
     public function currentMonth(): string
     {
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m');
+    }
+
+    public function newSeriesId(): string
+    {
+        return Str::randomId('rser');
     }
 
     public function normalizeMonth(string $month): string
@@ -162,6 +168,268 @@ final class RecurringExpenseService
         }
     }
 
+    /**
+     * @param array{
+     *   amount?:string,
+     *   category?:string,
+     *   tag_id?:int,
+     *   card_id?:int|null,
+     *   billing_type?:string,
+     *   billing_day?:int|null
+     * } $changes
+     * @return array{series_id:string,ended_rule_id:int,new_rule_id:int}
+     */
+    public function scheduleChange(
+        int $userId,
+        int $recurringExpenseId,
+        string $effectiveMonth,
+        array $changes,
+        string $generatedTransactionAction = 'reject'
+    ): array {
+        $effectiveMonth = $this->normalizeMonth($effectiveMonth);
+
+        if ($generatedTransactionAction !== 'reject') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'generated_transaction_action', 'message' => 'update_linked_transaction is not supported yet'],
+            ]);
+        }
+
+        try {
+            $this->pdo->beginTransaction();
+
+            $sourceStmt = $this->pdo->prepare(
+                'SELECT id, series_id, user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active, deleted_at
+                 FROM recurring_expenses
+                 WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL
+                 LIMIT 1
+                 FOR UPDATE'
+            );
+            $sourceStmt->execute([
+                ':id' => $recurringExpenseId,
+                ':user_id' => $userId,
+            ]);
+            $source = $sourceStmt->fetch();
+
+            if (!$source) {
+                throw new HttpException(404, 'NOT_FOUND', 'Recurring expense not found');
+            }
+
+            if ((int) $source['is_active'] !== 1) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'recurring_expense_id', 'message' => 'schedule changes are only supported for active recurring expenses'],
+                ]);
+            }
+
+            $sourceStartsMonth = substr((string) $source['starts_month'], 0, 7);
+            $sourceEndsMonth = $source['ends_month'] === null ? null : substr((string) $source['ends_month'], 0, 7);
+
+            if ($effectiveMonth <= $sourceStartsMonth) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'effective_month', 'message' => 'must be after starts_month'],
+                ]);
+            }
+
+            if ($sourceEndsMonth !== null && $effectiveMonth > $sourceEndsMonth) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'effective_month', 'message' => 'must be <= ends_month'],
+                ]);
+            }
+
+            $seriesId = (string) $source['series_id'];
+
+            $seriesLock = $this->pdo->prepare(
+                'SELECT id
+                 FROM recurring_expenses
+                 WHERE user_id = :user_id
+                   AND series_id = :series_id
+                   AND deleted_at IS NULL
+                 ORDER BY starts_month ASC, id ASC
+                 FOR UPDATE'
+            );
+            $seriesLock->execute([
+                ':user_id' => $userId,
+                ':series_id' => $seriesId,
+            ]);
+            $seriesLock->fetchAll();
+
+            $occurrenceStmt = $this->pdo->prepare(
+                'SELECT id
+                 FROM recurring_expense_occurrences
+                 WHERE user_id = :user_id
+                   AND recurring_expense_id = :recurring_expense_id
+                   AND occurrence_month = :occurrence_month
+                 LIMIT 1
+                 FOR UPDATE'
+            );
+            $occurrenceStmt->execute([
+                ':user_id' => $userId,
+                ':recurring_expense_id' => $recurringExpenseId,
+                ':occurrence_month' => $effectiveMonth . '-01',
+            ]);
+            if ($occurrenceStmt->fetch()) {
+                throw new HttpException(409, 'CONFLICT', 'This recurring expense has already generated a transaction for the effective month.', [
+                    ['field' => 'effective_month', 'message' => 'Update the generated transaction manually or retry with generated_transaction_action=update_linked_transaction when supported.'],
+                ]);
+            }
+
+            $newRule = [
+                'expense' => (string) $source['expense'],
+                'amount' => $this->fmt((string) $source['amount']),
+                'category' => (string) $source['category'],
+                'tag_id' => (int) $source['tag_id'],
+                'card_id' => $source['card_id'] === null ? null : (int) $source['card_id'],
+                'billing_type' => (string) $source['billing_type'],
+                'billing_day' => $source['billing_day'] === null ? null : (int) $source['billing_day'],
+            ];
+
+            foreach ($changes as $field => $value) {
+                $newRule[$field] = $value;
+            }
+
+            if (
+                $newRule['expense'] === (string) $source['expense']
+                && $newRule['amount'] === $this->fmt((string) $source['amount'])
+                && $newRule['category'] === (string) $source['category']
+                && $newRule['tag_id'] === (int) $source['tag_id']
+                && $newRule['card_id'] === ($source['card_id'] === null ? null : (int) $source['card_id'])
+                && $newRule['billing_type'] === (string) $source['billing_type']
+                && $newRule['billing_day'] === ($source['billing_day'] === null ? null : (int) $source['billing_day'])
+            ) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'amount', 'message' => 'must change at least one recurring field'],
+                ]);
+            }
+
+            $endedMonth = $this->previousMonth($effectiveMonth);
+
+            $insertStmt = $this->pdo->prepare(
+                'INSERT INTO recurring_expenses (series_id, user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active)
+                 VALUES (:series_id, :user_id, :expense, :amount, :category, :tag_id, :card_id, :billing_type, :billing_day, :starts_month, :ends_month, 1)'
+            );
+            $insertStmt->execute([
+                ':series_id' => $seriesId,
+                ':user_id' => $userId,
+                ':expense' => $newRule['expense'],
+                ':amount' => $newRule['amount'],
+                ':category' => $newRule['category'],
+                ':tag_id' => $newRule['tag_id'],
+                ':card_id' => $newRule['card_id'],
+                ':billing_type' => $newRule['billing_type'],
+                ':billing_day' => $newRule['billing_day'],
+                ':starts_month' => $effectiveMonth . '-01',
+                ':ends_month' => $sourceEndsMonth === null ? null : ($sourceEndsMonth . '-01'),
+            ]);
+            $newRuleId = (int) $this->pdo->lastInsertId();
+
+            $updateStmt = $this->pdo->prepare(
+                'UPDATE recurring_expenses
+                 SET ends_month = :ends_month,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND user_id = :user_id'
+            );
+            $updateStmt->execute([
+                ':ends_month' => $endedMonth . '-01',
+                ':id' => $recurringExpenseId,
+                ':user_id' => $userId,
+            ]);
+
+            $this->assertNoSeriesOverlap($userId, $seriesId);
+
+            $this->pdo->commit();
+
+            return [
+                'series_id' => $seriesId,
+                'ended_rule_id' => $recurringExpenseId,
+                'new_rule_id' => $newRuleId,
+            ];
+        } catch (PDOException $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        } catch (HttpException $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
+    }
+
+    public function recurringExpenseSeriesId(int $userId, int $recurringExpenseId): string
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT series_id
+             FROM recurring_expenses
+             WHERE id = :id
+               AND user_id = :user_id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':id' => $recurringExpenseId,
+            ':user_id' => $userId,
+        ]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            throw new HttpException(404, 'NOT_FOUND', 'Recurring expense not found');
+        }
+
+        return (string) $row['series_id'];
+    }
+
+    public function previousMonth(string $month): string
+    {
+        $month = $this->normalizeMonth($month);
+        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        if (!$dt) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'month', 'message' => 'must be a valid month'],
+            ]);
+        }
+
+        return $dt->modify('-1 month')->format('Y-m');
+    }
+
+    public function assertNoSeriesOverlap(int $userId, string $seriesId): void
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, starts_month, ends_month
+             FROM recurring_expenses
+             WHERE user_id = :user_id
+               AND series_id = :series_id
+               AND deleted_at IS NULL
+             ORDER BY starts_month ASC, id ASC'
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':series_id' => $seriesId,
+        ]);
+
+        $items = $stmt->fetchAll();
+        for ($index = 0, $count = count($items); $index < $count; $index++) {
+            $current = $items[$index];
+            $currentStart = substr((string) $current['starts_month'], 0, 7);
+            $currentEnd = $current['ends_month'] === null ? null : substr((string) $current['ends_month'], 0, 7);
+
+            for ($compareIndex = $index + 1; $compareIndex < $count; $compareIndex++) {
+                $candidate = $items[$compareIndex];
+                $candidateStart = substr((string) $candidate['starts_month'], 0, 7);
+                $candidateEnd = $candidate['ends_month'] === null ? null : substr((string) $candidate['ends_month'], 0, 7);
+
+                if (!$this->monthRangesOverlap($currentStart, $currentEnd, $candidateStart, $candidateEnd)) {
+                    continue;
+                }
+
+                throw new HttpException(409, 'CONFLICT', 'Recurring series contains overlapping month windows.', [
+                    ['field' => 'effective_month', 'message' => 'Recurring series versions must not overlap.'],
+                ]);
+            }
+        }
+    }
+
     /** @return array{0:string,1:int} */
     private function monthStartAndDays(string $month): array
     {
@@ -176,6 +444,14 @@ final class RecurringExpenseService
         $daysInMonth = (int) $start->modify('last day of this month')->format('d');
 
         return [$start->format('Y-m-d'), $daysInMonth];
+    }
+
+    private function monthRangesOverlap(string $firstStart, ?string $firstEnd, string $secondStart, ?string $secondEnd): bool
+    {
+        $firstUpperBound = $firstEnd ?? '9999-12';
+        $secondUpperBound = $secondEnd ?? '9999-12';
+
+        return $firstStart <= $secondUpperBound && $secondStart <= $firstUpperBound;
     }
 
     private function fmt(string $decimal): string

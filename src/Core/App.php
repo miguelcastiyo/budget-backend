@@ -140,6 +140,8 @@ final class App
 
         $add('GET', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->list($request));
         $add('POST', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->create($request));
+        $add('GET', '/me/recurring-expenses/{recurring_expense_id}/series', fn(Request $request, array $params) => $recurringExpenseController->series($request, $params));
+        $add('POST', '/me/recurring-expenses/{recurring_expense_id}/schedule-change', fn(Request $request, array $params) => $recurringExpenseController->scheduleChange($request, $params));
         $add('PATCH', '/me/recurring-expenses/{recurring_expense_id}', fn(Request $request, array $params) => $recurringExpenseController->update($request, $params));
         $add('DELETE', '/me/recurring-expenses/{recurring_expense_id}', fn(Request $request, array $params) => $recurringExpenseController->delete($request, $params));
 
