@@ -1588,9 +1588,139 @@ Response:
 }
 ```
 
-## 11) CSV Export
+## 11) Month Closeouts
 
-### 11.1 Export Transactions CSV
+Purpose:
+- Month closeouts compare the resolved budget plan for a month against actual recorded transactions.
+- Closeout records are stored separately from transactions. The backend does not create synthetic closeout transactions.
+- A closed month can become stale if transactions or budget settings for that month change later.
+
+Definitions:
+- Full result: `planned_total - actual_total`
+- Spending-only result: `(planned_needs + planned_wants) - (actual_needs + actual_wants)`
+
+Lifecycle:
+- `GET /me/month-closeouts/{month}` returns a computed snapshot plus any saved closeout row.
+- `POST /me/month-closeouts/{month}/close` creates or re-closes a month using the current computed snapshot.
+- `PATCH /me/month-closeouts/{month}` only updates `notes` and `allocations` against the stored snapshot.
+- `POST /me/month-closeouts/{month}/reopen` marks a closed month reopened without deleting the saved snapshot.
+
+Rules:
+- Path/query month fields use `YYYY-MM`.
+- A month is closeable only when it is before the current app month in `APP_TIMEZONE`.
+- If no budget settings resolve for the requested month, reads return `status: "missing_budget"` and close attempts return `422 VALIDATION_ERROR`.
+- Balanced closeouts cannot have allocations.
+- Allocation sums must not exceed the stored surplus or deficit amount.
+- `rollover` allocations require `target_month`; non-rollover allocations must omit it.
+- Closed rows may return `is_stale: true` with `stale_reasons`.
+
+### 11.1 Get One Month Closeout
+`GET /me/month-closeouts/{month}`
+
+Response states:
+- `open`
+- `future`
+- `missing_budget`
+- `ready_to_close`
+- `closed`
+- `reopened`
+
+Example:
+```json
+{
+  "month": "2026-05",
+  "status": "closed",
+  "is_closeable": true,
+  "computed": {
+    "budget_effective_month": "2026-05",
+    "budget_allocation_mode": "percent",
+    "monthly_income": "4970.00",
+    "planned": {
+      "needs": "2485.00",
+      "wants": "1491.00",
+      "savings": "994.00",
+      "total": "4970.00"
+    },
+    "actual": {
+      "needs": "2300.00",
+      "wants": "1100.00",
+      "savings": "900.00",
+      "total": "4300.00"
+    },
+    "result_type": "surplus",
+    "surplus_amount": "670.00",
+    "deficit_amount": "0.00",
+    "spending_surplus_amount": "576.00",
+    "spending_deficit_amount": "0.00"
+  },
+  "closeout": {
+    "id": "clo_123",
+    "status": "closed",
+    "result_type": "surplus",
+    "surplus_amount": "670.00",
+    "deficit_amount": "0.00",
+    "allocated_amount": "500.00",
+    "unallocated_amount": "170.00",
+    "is_stale": false,
+    "stale_reasons": [],
+    "closed_at": "2026-06-01T08:40:00Z",
+    "reopened_at": null,
+    "notes": "Good month.",
+    "allocations": []
+  }
+}
+```
+
+### 11.2 List Saved Month Closeouts
+`GET /me/month-closeouts?date_from=2026-01&date_to=2026-12`
+
+Filters:
+- `date_from=YYYY-MM` optional
+- `date_to=YYYY-MM` optional
+- `status=closed|reopened` optional
+
+### 11.3 Close Or Re-Close A Month
+`POST /me/month-closeouts/{month}/close`
+
+Request:
+```json
+{
+  "notes": "Good month.",
+  "allocations": [
+    {
+      "allocation_type": "savings",
+      "label": "HYSA",
+      "amount": "500.00"
+    },
+    {
+      "allocation_type": "rollover",
+      "label": "June cushion",
+      "amount": "170.00",
+      "target_month": "2026-06"
+    }
+  ]
+}
+```
+
+### 11.4 Update Notes Or Allocations
+`PATCH /me/month-closeouts/{month}`
+
+Rules:
+- The closeout row must already exist.
+- The closeout status must be `closed`.
+- The stored closeout math does not change on `PATCH`.
+
+### 11.5 Reopen A Month
+`POST /me/month-closeouts/{month}/reopen`
+
+Non-goals:
+- Automatic bank transfer tracking for closeouts
+- Rollover mutating future month budgets
+- Creating normal transactions from closeout allocations
+
+## 12) CSV Export
+
+### 12.1 Export Transactions CSV
 `GET /me/transactions/export.csv`
 
 Supports the same filters as `GET /me/transactions`.
@@ -1606,9 +1736,9 @@ Examples:
 Response:
 - `200 text/csv` file download.
 
-## 12) CSV Import
+## 13) CSV Import
 
-### 12.1 Import Transactions CSV
+### 13.1 Import Transactions CSV
 `POST /me/transactions/import.csv`
 
 Request:

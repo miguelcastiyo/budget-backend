@@ -641,30 +641,10 @@ final class MetricsController
     private function budgetPlanFromSettings(?array $settings): array
     {
         $income = $settings ? (float) $settings['monthly_income'] : 0.0;
-        $mode = $settings ? (string) $settings['allocation_mode'] : 'percent';
-
-        if ($mode === 'amount') {
-            return [
-                'monthly_income' => $income,
-                'budget_amounts' => [
-                    'needs' => (float) ($settings['needs_amount'] ?? 0.0),
-                    'wants' => (float) ($settings['wants_amount'] ?? 0.0),
-                    'savings' => (float) ($settings['savings_amount'] ?? 0.0),
-                ],
-            ];
-        }
-
-        $needsPercent = (float) ($settings['needs_percent'] ?? 50.0);
-        $wantsPercent = (float) ($settings['wants_percent'] ?? 30.0);
-        $savingsPercent = (float) ($settings['savings_percent'] ?? 20.0);
 
         return [
             'monthly_income' => $income,
-            'budget_amounts' => [
-                'needs' => ($income * $needsPercent) / 100.0,
-                'wants' => ($income * $wantsPercent) / 100.0,
-                'savings' => ($income * $savingsPercent) / 100.0,
-            ],
+            'budget_amounts' => $this->budgetSettingsResolver->resolveAmounts($settings),
         ];
     }
 

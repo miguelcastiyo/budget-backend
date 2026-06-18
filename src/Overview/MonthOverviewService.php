@@ -31,7 +31,7 @@ final class MonthOverviewService
         $budgetResolution = $this->budgetSettingsResolver->getEffectiveSettingsForMonth($userId, $month);
         $hasBudget = $budgetResolution['settings'] !== null;
         $budgetIncome = $hasBudget ? (float) $budgetResolution['settings']['monthly_income'] : null;
-        $resolvedAmounts = $this->resolvedAmounts($budgetResolution['settings']);
+        $resolvedAmounts = $this->budgetSettingsResolver->resolveAmounts($budgetResolution['settings']);
 
         $summary = $this->queryMonthlySummary($userId, $dateFrom, $dateTo);
         $totalSpent = $summary['total_spent'];
@@ -105,39 +105,6 @@ final class MonthOverviewService
         }
 
         return [$dateFrom, min($dateTo, $now->format('Y-m-d'))];
-    }
-
-    /** @param array<string,mixed>|null $settings
-     *  @return array{needs:float,wants:float,savings:float}
-     */
-    private function resolvedAmounts(?array $settings): array
-    {
-        if ($settings === null) {
-            return [
-                'needs' => 0.0,
-                'wants' => 0.0,
-                'savings' => 0.0,
-            ];
-        }
-
-        if ((string) $settings['allocation_mode'] === 'amount') {
-            return [
-                'needs' => (float) ($settings['needs_amount'] ?? 0.0),
-                'wants' => (float) ($settings['wants_amount'] ?? 0.0),
-                'savings' => (float) ($settings['savings_amount'] ?? 0.0),
-            ];
-        }
-
-        $income = (float) $settings['monthly_income'];
-        $needsPercent = (float) ($settings['needs_percent'] ?? 50.0);
-        $wantsPercent = (float) ($settings['wants_percent'] ?? 30.0);
-        $savingsPercent = (float) ($settings['savings_percent'] ?? 20.0);
-
-        return [
-            'needs' => ($income * $needsPercent) / 100.0,
-            'wants' => ($income * $wantsPercent) / 100.0,
-            'savings' => ($income * $savingsPercent) / 100.0,
-        ];
     }
 
     /** @return array<string,float> */

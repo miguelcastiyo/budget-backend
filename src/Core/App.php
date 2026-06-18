@@ -13,6 +13,7 @@ use App\Controllers\BudgetSettingsController;
 use App\Controllers\HealthController;
 use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
+use App\Controllers\MonthCloseoutController;
 use App\Controllers\MonthOverviewController;
 use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
@@ -32,6 +33,8 @@ use App\ImportExport\CsvImportService;
 use App\ImportExport\DataRunRepository;
 use App\ImportExport\TaxonomyImportRepository;
 use App\Mail\Mailer;
+use App\MonthCloseout\MonthCloseoutRepository;
+use App\MonthCloseout\MonthCloseoutService;
 use App\Monitoring\ErrorReporter;
 use App\Monitoring\StructuredLogger;
 use App\Overview\MonthOverviewService;
@@ -60,6 +63,8 @@ final class App
         $recurring = new RecurringExpenseService($pdo);
         $budgetSettingsResolver = new BudgetSettingsResolver($pdo);
         $monthOverviewService = new MonthOverviewService($pdo, $budgetSettingsResolver);
+        $monthCloseoutRepository = new MonthCloseoutRepository($pdo);
+        $monthCloseoutService = new MonthCloseoutService($pdo, $config, $budgetSettingsResolver, $monthCloseoutRepository);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
         $structuredLogger = new StructuredLogger($config);
@@ -84,6 +89,7 @@ final class App
         $taxonomyController = new TaxonomyController($pdo, $auth);
         $transactionController = new TransactionController($pdo, $auth, $recurring);
         $monthOverviewController = new MonthOverviewController($auth, $monthOverviewService);
+        $monthCloseoutController = new MonthCloseoutController($auth, $monthCloseoutService);
         $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
 
@@ -152,6 +158,11 @@ final class App
         $add('DELETE', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->delete($request, $params));
 
         $add('GET', '/me/months/{month}/overview', fn(Request $request, array $params) => $monthOverviewController->overview($request, $params));
+        $add('GET', '/me/month-closeouts', fn(Request $request) => $monthCloseoutController->list($request));
+        $add('GET', '/me/month-closeouts/{month}', fn(Request $request, array $params) => $monthCloseoutController->get($request, $params));
+        $add('POST', '/me/month-closeouts/{month}/close', fn(Request $request, array $params) => $monthCloseoutController->close($request, $params));
+        $add('PATCH', '/me/month-closeouts/{month}', fn(Request $request, array $params) => $monthCloseoutController->update($request, $params));
+        $add('POST', '/me/month-closeouts/{month}/reopen', fn(Request $request, array $params) => $monthCloseoutController->reopen($request, $params));
 
         $add('GET', '/me/transactions/export.csv', fn(Request $request) => $importExportController->exportCsv($request));
         $add('POST', '/me/transactions/import.csv', fn(Request $request) => $importExportController->importCsv($request));
@@ -308,6 +319,19 @@ final class App
                 'metrics',
                 $this->config->getInt('RATE_LIMIT_METRICS_MAX', 120),
                 $this->config->getInt('RATE_LIMIT_METRICS_WINDOW_SECONDS', 60)
+            );
+            return;
+        }
+
+        if (
+            ($method === 'POST' && preg_match('#^/me/month-closeouts/[^/]+/(close|reopen)$#', $path) === 1)
+            || ($method === 'PATCH' && preg_match('#^/me/month-closeouts/[^/]+$#', $path) === 1)
+        ) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'month-closeout-write',
+                $this->config->getInt('RATE_LIMIT_MONTH_CLOSEOUT_WRITE_MAX', 60),
+                $this->config->getInt('RATE_LIMIT_MONTH_CLOSEOUT_WRITE_WINDOW_SECONDS', 3600)
             );
             return;
         }

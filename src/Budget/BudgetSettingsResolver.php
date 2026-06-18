@@ -127,6 +127,28 @@ final class BudgetSettingsResolver
         return is_array($row) ? $row : null;
     }
 
+    /** @param array<string,mixed>|null $settings
+     *  @return array{needs:float,wants:float,savings:float}
+     */
+    public function resolveAmounts(?array $settings): array
+    {
+        if ($settings === null) {
+            return [
+                'needs' => 0.0,
+                'wants' => 0.0,
+                'savings' => 0.0,
+            ];
+        }
+
+        $resolved = $this->resolvedAmounts($settings);
+
+        return [
+            'needs' => (float) $resolved['needs'],
+            'wants' => (float) $resolved['wants'],
+            'savings' => (float) $resolved['savings'],
+        ];
+    }
+
     /**
      * @return array<int, array{
      *   effective_month:string,
@@ -264,7 +286,12 @@ final class BudgetSettingsResolver
         return [
             'needs' => $this->percentToMoney((string) $row['monthly_income'], (string) $row['needs_percent']),
             'wants' => $this->percentToMoney((string) $row['monthly_income'], (string) $row['wants_percent']),
-            'savings' => $this->percentToMoney((string) $row['monthly_income'], (string) $row['savings_percent']),
+            // Keep savings as the remainder so the resolved categories always total monthly income.
+            'savings' => $this->fmtDecimal((string) (
+                (float) $row['monthly_income']
+                - (float) $this->percentToMoney((string) $row['monthly_income'], (string) $row['needs_percent'])
+                - (float) $this->percentToMoney((string) $row['monthly_income'], (string) $row['wants_percent'])
+            )),
         ];
     }
 

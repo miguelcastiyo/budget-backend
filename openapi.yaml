@@ -23,6 +23,7 @@ tags:
   - name: Transactions
   - name: Metrics
   - name: MonthOverview
+  - name: MonthCloseouts
   - name: ImportExport
   - name: DataRuns
 paths:
@@ -1259,6 +1260,136 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '422':
           $ref: '#/components/responses/ValidationError'
+
+  /me/month-closeouts:
+    get:
+      tags: [MonthCloseouts]
+      summary: List saved month closeouts
+      parameters:
+        - name: date_from
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\\d{4}-\\d{2}$'
+        - name: date_to
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\\d{4}-\\d{2}$'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [closed, reopened]
+      responses:
+        '200':
+          description: Saved month closeouts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthCloseoutListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/month-closeouts/{month}:
+    get:
+      tags: [MonthCloseouts]
+      summary: Get computed and saved closeout for one month
+      parameters:
+        - $ref: '#/components/parameters/MonthPath'
+      responses:
+        '200':
+          description: Month closeout detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthCloseoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [MonthCloseouts]
+      summary: Update closeout notes and allocations
+      parameters:
+        - $ref: '#/components/parameters/MonthPath'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMonthCloseoutRequest'
+      responses:
+        '200':
+          description: Updated month closeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthCloseoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /me/month-closeouts/{month}/close:
+    post:
+      tags: [MonthCloseouts]
+      summary: Close or re-close a month
+      parameters:
+        - $ref: '#/components/parameters/MonthPath'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseMonthRequest'
+      responses:
+        '200':
+          description: Closed month closeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthCloseoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /me/month-closeouts/{month}/reopen:
+    post:
+      tags: [MonthCloseouts]
+      summary: Reopen a closed month
+      parameters:
+        - $ref: '#/components/parameters/MonthPath'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '200':
+          description: Reopened month closeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthCloseoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
 
   /me/transactions/export.csv:
     get:
@@ -3691,3 +3822,239 @@ components:
     Percent:
       type: string
       pattern: '^\\d+(\\.\\d{2})$'
+
+    MonthCloseoutStatus:
+      type: string
+      enum: [open, future, missing_budget, ready_to_close, closed, reopened]
+
+    MonthCloseoutResultType:
+      type: string
+      enum: [surplus, deficit, balanced]
+
+    MonthCloseoutAllocationType:
+      type: string
+      enum: [savings, investment, debt, rollover, buffer, covered_by_buffer, ignored, other]
+
+    MonthCloseoutPlannedActual:
+      type: object
+      properties:
+        needs:
+          $ref: '#/components/schemas/Money'
+        wants:
+          $ref: '#/components/schemas/Money'
+        savings:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+      required: [needs, wants, savings, total]
+
+    MonthCloseoutComputed:
+      type: object
+      properties:
+        budget_effective_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        budget_allocation_mode:
+          type: string
+          enum: [percent, amount]
+        monthly_income:
+          $ref: '#/components/schemas/Money'
+        planned:
+          $ref: '#/components/schemas/MonthCloseoutPlannedActual'
+        actual:
+          $ref: '#/components/schemas/MonthCloseoutPlannedActual'
+        result_type:
+          $ref: '#/components/schemas/MonthCloseoutResultType'
+        surplus_amount:
+          $ref: '#/components/schemas/Money'
+        deficit_amount:
+          $ref: '#/components/schemas/Money'
+        spending_surplus_amount:
+          $ref: '#/components/schemas/Money'
+        spending_deficit_amount:
+          $ref: '#/components/schemas/Money'
+      required:
+        - budget_effective_month
+        - budget_allocation_mode
+        - monthly_income
+        - planned
+        - actual
+        - result_type
+        - surplus_amount
+        - deficit_amount
+        - spending_surplus_amount
+        - spending_deficit_amount
+
+    MonthCloseoutAllocation:
+      type: object
+      properties:
+        id:
+          type: string
+        allocation_type:
+          $ref: '#/components/schemas/MonthCloseoutAllocationType'
+        label:
+          type: [string, 'null']
+          maxLength: 120
+        amount:
+          $ref: '#/components/schemas/Money'
+        target_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        notes:
+          type: [string, 'null']
+      required: [id, allocation_type, label, amount, target_month, notes]
+
+    MonthCloseoutAllocationInput:
+      type: object
+      properties:
+        allocation_type:
+          $ref: '#/components/schemas/MonthCloseoutAllocationType'
+        label:
+          type: [string, 'null']
+          maxLength: 120
+        amount:
+          $ref: '#/components/schemas/Money'
+        target_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        notes:
+          type: [string, 'null']
+      required: [allocation_type, amount]
+
+    MonthCloseoutSaved:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [closed, reopened]
+        result_type:
+          $ref: '#/components/schemas/MonthCloseoutResultType'
+        surplus_amount:
+          $ref: '#/components/schemas/Money'
+        deficit_amount:
+          $ref: '#/components/schemas/Money'
+        allocated_amount:
+          $ref: '#/components/schemas/Money'
+        unallocated_amount:
+          $ref: '#/components/schemas/Money'
+        is_stale:
+          type: boolean
+        stale_reasons:
+          type: array
+          items:
+            type: string
+        closed_at:
+          type: string
+          format: date-time
+        reopened_at:
+          type: [string, 'null']
+          format: date-time
+        notes:
+          type: [string, 'null']
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthCloseoutAllocation'
+      required:
+        - id
+        - status
+        - result_type
+        - surplus_amount
+        - deficit_amount
+        - allocated_amount
+        - unallocated_amount
+        - is_stale
+        - stale_reasons
+        - closed_at
+        - reopened_at
+        - notes
+        - allocations
+
+    MonthCloseoutResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        status:
+          $ref: '#/components/schemas/MonthCloseoutStatus'
+        is_closeable:
+          type: boolean
+        computed:
+          oneOf:
+            - $ref: '#/components/schemas/MonthCloseoutComputed'
+            - type: 'null'
+        closeout:
+          oneOf:
+            - $ref: '#/components/schemas/MonthCloseoutSaved'
+            - type: 'null'
+      required: [month, status, is_closeable, computed, closeout]
+
+    MonthCloseoutListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        status:
+          type: string
+          enum: [closed, reopened]
+        result_type:
+          $ref: '#/components/schemas/MonthCloseoutResultType'
+        surplus_amount:
+          $ref: '#/components/schemas/Money'
+        deficit_amount:
+          $ref: '#/components/schemas/Money'
+        allocated_amount:
+          $ref: '#/components/schemas/Money'
+        unallocated_amount:
+          $ref: '#/components/schemas/Money'
+        is_stale:
+          type: boolean
+        closed_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - month
+        - status
+        - result_type
+        - surplus_amount
+        - deficit_amount
+        - allocated_amount
+        - unallocated_amount
+        - is_stale
+        - closed_at
+
+    MonthCloseoutListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthCloseoutListItem'
+      required: [items]
+
+    CloseMonthRequest:
+      type: object
+      properties:
+        notes:
+          type: [string, 'null']
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthCloseoutAllocationInput'
+
+    UpdateMonthCloseoutRequest:
+      type: object
+      properties:
+        notes:
+          type: [string, 'null']
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthCloseoutAllocationInput'

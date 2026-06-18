@@ -21,6 +21,8 @@ use App\ImportExport\CsvImportMapper;
 use App\ImportExport\CsvImportReader;
 use App\ImportExport\DataRunRepository;
 use App\ImportExport\TaxonomyImportRepository;
+use App\MonthCloseout\MonthCloseoutRepository;
+use App\MonthCloseout\MonthCloseoutService;
 use App\Monitoring\StructuredLogger;
 use App\Overview\MonthOverviewService;
 use App\Support\Str;
@@ -1248,6 +1250,307 @@ expectHttpException(
     'VALIDATION_ERROR',
     'password reset rejects short passwords'
 );
+
+$closeoutPdo = new PDO('sqlite::memory:');
+$closeoutPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$closeoutPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$closeoutPdo->exec('CREATE TABLE budget_settings_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    effective_month TEXT NOT NULL,
+    monthly_income TEXT NOT NULL,
+    income_source_type TEXT NOT NULL,
+    primary_monthly_income TEXT NULL,
+    primary_hourly_rate TEXT NULL,
+    primary_weekly_hours TEXT NULL,
+    side_income_type TEXT NOT NULL,
+    side_income_label TEXT NULL,
+    side_monthly_income TEXT NULL,
+    side_hourly_rate TEXT NULL,
+    side_weekly_hours TEXT NULL,
+    allocation_mode TEXT NOT NULL,
+    needs_percent TEXT NULL,
+    wants_percent TEXT NULL,
+    savings_percent TEXT NULL,
+    needs_amount TEXT NULL,
+    wants_amount TEXT NULL,
+    savings_amount TEXT NULL,
+    created_at TEXT NULL,
+    updated_at TEXT NULL
+)');
+$closeoutPdo->exec('CREATE TABLE transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    transaction_date TEXT NOT NULL,
+    expense TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    category TEXT NOT NULL,
+    tag_id INTEGER NOT NULL DEFAULT 1,
+    card_id INTEGER NULL,
+    is_split INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT "manual",
+    import_fingerprint TEXT NULL,
+    csv_import_run_id INTEGER NULL,
+    created_at TEXT NULL,
+    updated_at TEXT NULL,
+    deleted_at TEXT NULL
+)');
+$closeoutPdo->exec('CREATE TABLE monthly_closeouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    closeout_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    month TEXT NOT NULL,
+    status TEXT NOT NULL,
+    result_type TEXT NOT NULL,
+    budget_effective_month TEXT NULL,
+    budget_allocation_mode TEXT NOT NULL,
+    monthly_income_snapshot TEXT NOT NULL,
+    planned_needs TEXT NOT NULL,
+    planned_wants TEXT NOT NULL,
+    planned_savings TEXT NOT NULL,
+    planned_total TEXT NOT NULL,
+    actual_needs TEXT NOT NULL,
+    actual_wants TEXT NOT NULL,
+    actual_savings TEXT NOT NULL,
+    actual_total TEXT NOT NULL,
+    surplus_amount TEXT NOT NULL,
+    deficit_amount TEXT NOT NULL,
+    spending_surplus_amount TEXT NOT NULL,
+    spending_deficit_amount TEXT NOT NULL,
+    calculation_hash TEXT NOT NULL,
+    notes TEXT NULL,
+    closed_at TEXT NOT NULL,
+    reopened_at TEXT NULL,
+    created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$closeoutPdo->exec('CREATE TABLE monthly_closeout_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    allocation_id TEXT NOT NULL,
+    closeout_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    allocation_type TEXT NOT NULL,
+    label TEXT NULL,
+    amount TEXT NOT NULL,
+    target_month TEXT NULL,
+    notes TEXT NULL,
+    created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+
+$insertCloseoutBudgetVersion = static function (
+    int $userId,
+    string $effectiveMonth,
+    string $monthlyIncome,
+    string $allocationMode,
+    ?string $needsPercent,
+    ?string $wantsPercent,
+    ?string $savingsPercent,
+    ?string $needsAmount,
+    ?string $wantsAmount,
+    ?string $savingsAmount
+) use ($closeoutPdo): void {
+    $stmt = $closeoutPdo->prepare('
+        INSERT INTO budget_settings_versions (
+            user_id, effective_month, monthly_income, income_source_type,
+            primary_monthly_income, primary_hourly_rate, primary_weekly_hours,
+            side_income_type, side_income_label, side_monthly_income, side_hourly_rate, side_weekly_hours,
+            allocation_mode, needs_percent, wants_percent, savings_percent, needs_amount, wants_amount, savings_amount,
+            created_at, updated_at
+        ) VALUES (
+            :user_id, :effective_month, :monthly_income, :income_source_type,
+            :primary_monthly_income, :primary_hourly_rate, :primary_weekly_hours,
+            :side_income_type, :side_income_label, :side_monthly_income, :side_hourly_rate, :side_weekly_hours,
+            :allocation_mode, :needs_percent, :wants_percent, :savings_percent, :needs_amount, :wants_amount, :savings_amount,
+            :created_at, :updated_at
+        )
+    ');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':effective_month' => $effectiveMonth,
+        ':monthly_income' => $monthlyIncome,
+        ':income_source_type' => 'monthly',
+        ':primary_monthly_income' => $monthlyIncome,
+        ':primary_hourly_rate' => null,
+        ':primary_weekly_hours' => null,
+        ':side_income_type' => 'none',
+        ':side_income_label' => null,
+        ':side_monthly_income' => null,
+        ':side_hourly_rate' => null,
+        ':side_weekly_hours' => null,
+        ':allocation_mode' => $allocationMode,
+        ':needs_percent' => $needsPercent,
+        ':wants_percent' => $wantsPercent,
+        ':savings_percent' => $savingsPercent,
+        ':needs_amount' => $needsAmount,
+        ':wants_amount' => $wantsAmount,
+        ':savings_amount' => $savingsAmount,
+        ':created_at' => '2026-06-01 00:00:00',
+        ':updated_at' => '2026-06-01 00:00:00',
+    ]);
+};
+$insertCloseoutTransaction = static function (
+    int $userId,
+    string $date,
+    string $amount,
+    string $category,
+    string $expense = 'Test'
+) use ($closeoutPdo): void {
+    $stmt = $closeoutPdo->prepare('
+        INSERT INTO transactions (
+            user_id, transaction_date, expense, amount, category, tag_id, card_id,
+            is_split, source, import_fingerprint, csv_import_run_id, created_at, updated_at, deleted_at
+        ) VALUES (
+            :user_id, :transaction_date, :expense, :amount, :category, 1, NULL,
+            0, "manual", NULL, NULL, "2026-06-01 00:00:00", "2026-06-01 00:00:00", NULL
+        )
+    ');
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':transaction_date' => $date,
+        ':expense' => $expense,
+        ':amount' => $amount,
+        ':category' => $category,
+    ]);
+};
+
+$closeoutConfig = $configReflection->newInstanceWithoutConstructor();
+$valuesProperty->setValue($closeoutConfig, ['APP_TIMEZONE' => 'UTC']);
+$closeoutResolver = new BudgetSettingsResolver($closeoutPdo);
+$closeoutRepository = new MonthCloseoutRepository($closeoutPdo);
+$closeoutService = new MonthCloseoutService($closeoutPdo, $closeoutConfig, $closeoutResolver, $closeoutRepository);
+
+$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$currentCloseoutMonth = $nowUtc->format('Y-m');
+$pastCloseoutMonth = $nowUtc->modify('-1 month')->format('Y-m');
+$futureCloseoutMonth = $nowUtc->modify('+1 month')->format('Y-m');
+$pastCloseoutMonthStart = $pastCloseoutMonth . '-01';
+$currentCloseoutMonthStart = $currentCloseoutMonth . '-01';
+
+$insertCloseoutBudgetVersion(11, $pastCloseoutMonthStart, '1000.00', 'percent', '50.00', '30.00', '20.00', null, null, null);
+$insertCloseoutBudgetVersion(11, $currentCloseoutMonthStart, '1000.00', 'percent', '50.00', '30.00', '20.00', null, null, null);
+$insertCloseoutTransaction(11, $pastCloseoutMonth . '-05', '400.00', 'needs', 'Rent share');
+$insertCloseoutTransaction(11, $pastCloseoutMonth . '-10', '100.00', 'wants', 'Dining');
+$insertCloseoutTransaction(11, $pastCloseoutMonth . '-12', '50.00', 'savings', 'Transfer');
+$insertCloseoutTransaction(11, $currentCloseoutMonth . '-02', '20.00', 'needs', 'Current month spend');
+
+$computedPastCloseout = $closeoutService->getMonthCloseout(11, $pastCloseoutMonth);
+assertSame('ready_to_close', $computedPastCloseout['status'], 'month closeout marks past month ready to close');
+assertSame(true, $computedPastCloseout['is_closeable'], 'month closeout marks past month closeable');
+assertSame('surplus', $computedPastCloseout['computed']['result_type'], 'month closeout computes surplus result');
+assertSame('450.00', $computedPastCloseout['computed']['surplus_amount'], 'month closeout computes surplus amount');
+assertSame('300.00', $computedPastCloseout['computed']['spending_surplus_amount'], 'month closeout computes spending-only surplus');
+
+$currentCloseout = $closeoutService->getMonthCloseout(11, $currentCloseoutMonth);
+assertSame('open', $currentCloseout['status'], 'month closeout keeps current month open');
+assertSame(false, $currentCloseout['is_closeable'], 'month closeout rejects closing current month');
+
+$futureCloseout = $closeoutService->computeMonthResult(11, $futureCloseoutMonth);
+assertSame('future', $futureCloseout['status'], 'month closeout marks future month as future');
+assertSame(false, $futureCloseout['is_closeable'], 'month closeout rejects future month');
+
+$missingBudgetCloseout = $closeoutService->getMonthCloseout(404, $pastCloseoutMonth);
+assertSame('missing_budget', $missingBudgetCloseout['status'], 'month closeout reports missing budget');
+assertSame(null, $missingBudgetCloseout['computed'], 'month closeout omits computed payload when budget is missing');
+
+$closedPastCloseout = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+    'notes' => 'Good month.',
+    'allocations' => [
+        [
+            'allocation_type' => 'savings',
+            'label' => 'HYSA',
+            'amount' => '300.00',
+        ],
+    ],
+]);
+assertSame('closed', $closedPastCloseout['status'], 'close month returns closed status');
+assertSame('300.00', $closedPastCloseout['closeout']['allocated_amount'], 'close month stores allocated amount');
+assertSame('150.00', $closedPastCloseout['closeout']['unallocated_amount'], 'close month stores unallocated amount');
+assertSame('Good month.', $closedPastCloseout['closeout']['notes'], 'close month stores notes');
+assertSame(false, $closedPastCloseout['closeout']['is_stale'], 'newly closed month is not stale');
+
+expectHttpException(
+    fn() => $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+        'allocations' => [
+            [
+                'allocation_type' => 'covered_by_buffer',
+                'amount' => '10.00',
+            ],
+        ],
+    ]),
+    422,
+    'VALIDATION_ERROR',
+    'surplus closeout rejects deficit-only allocation type'
+);
+expectHttpException(
+    fn() => $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+        'allocations' => [
+            [
+                'allocation_type' => 'rollover',
+                'amount' => '10.00',
+            ],
+        ],
+    ]),
+    422,
+    'VALIDATION_ERROR',
+    'rollover allocation requires target month'
+);
+expectHttpException(
+    fn() => $closeoutService->closeMonth(11, $currentCloseoutMonth, []),
+    422,
+    'VALIDATION_ERROR',
+    'current month cannot be closed'
+);
+
+$insertCloseoutTransaction(11, $pastCloseoutMonth . '-18', '25.00', 'needs', 'Late transaction');
+$stalePastCloseout = $closeoutService->getMonthCloseout(11, $pastCloseoutMonth);
+assertSame(true, $stalePastCloseout['closeout']['is_stale'], 'closeout becomes stale after historical transaction changes');
+assertSame(['calculation_changed'], $stalePastCloseout['closeout']['stale_reasons'], 'closeout returns stale reason');
+
+$patchedPastCloseout = $closeoutService->updateCloseout(11, $pastCloseoutMonth, [
+    'notes' => 'Updated note.',
+    'allocations' => [
+        [
+            'allocation_type' => 'savings',
+            'label' => 'HYSA',
+            'amount' => '250.00',
+        ],
+        [
+            'allocation_type' => 'buffer',
+            'label' => 'Checking',
+            'amount' => '50.00',
+        ],
+    ],
+]);
+assertSame('Updated note.', $patchedPastCloseout['closeout']['notes'], 'patch updates notes');
+assertSame('300.00', $patchedPastCloseout['closeout']['allocated_amount'], 'patch replaces allocations');
+assertSame(true, $patchedPastCloseout['closeout']['is_stale'], 'patch preserves stale status when calculation changed');
+
+$reopenedPastCloseout = $closeoutService->reopenMonth(11, $pastCloseoutMonth);
+assertSame('reopened', $reopenedPastCloseout['status'], 'reopen marks closeout reopened');
+assertSame(null !== $reopenedPastCloseout['closeout']['reopened_at'], true, 'reopen records reopened timestamp');
+expectHttpException(
+    fn() => $closeoutService->updateCloseout(11, $pastCloseoutMonth, ['notes' => 'Nope']),
+    409,
+    'CONFLICT',
+    'patch rejects reopened closeout'
+);
+
+$reclosedPastCloseout = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+    'notes' => 'Reclosed.',
+    'allocations' => [
+        [
+            'allocation_type' => 'savings',
+            'amount' => '200.00',
+        ],
+    ],
+]);
+assertSame('closed', $reclosedPastCloseout['status'], 'reclose closes reopened month again');
+assertSame(false, $reclosedPastCloseout['closeout']['is_stale'], 'reclose refreshes stale closeout');
+
+$closeoutList = $closeoutService->listMonthCloseouts(11, []);
+assertSame(1, count($closeoutList['items']), 'list closeouts returns saved closeout');
+assertSame('200.00', $closeoutList['items'][0]['allocated_amount'], 'list closeouts includes allocated amount');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 
