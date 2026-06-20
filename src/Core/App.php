@@ -117,9 +117,7 @@ final class App
         $add('PATCH', '/me', fn(Request $request) => $profileController->updateMe($request));
         $add('GET', '/me/setup-status', fn(Request $request) => $profileController->getSetupStatus($request));
         $add('PATCH', '/me/onboarding-state', fn(Request $request) => $profileController->updateOnboardingState($request));
-        $add('GET', '/me/preferences', fn(Request $request) => $profileController->getPreferences($request));
         $add('PATCH', '/me/preferences', fn(Request $request) => $profileController->updatePreferences($request));
-        $add('GET', '/me/settings-summary', fn(Request $request) => $profileController->settingsSummary($request));
         $add('POST', '/me/email-change/request', fn(Request $request) => $profileController->requestEmailChange($request));
         $add('POST', '/me/email-change/verify', fn(Request $request) => $profileController->verifyEmailChange($request));
         $add('POST', '/me/auth/convert-google', fn(Request $request) => $profileController->convertAccountToGoogle($request));
