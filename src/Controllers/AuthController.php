@@ -171,25 +171,72 @@ SQL;
         );
         $rows = $stmt ? $stmt->fetchAll() : [];
 
-        $items = array_map(static function (array $row): array {
-            $status = (string) $row['status'];
-            if ($status === 'pending' && strtotime((string) $row['expires_at'] . ' UTC') <= time()) {
-                $status = 'expired';
-            }
-
-            return [
-                'invite_id' => (string) $row['invite_id'],
-                'invitee_name' => (string) $row['invitee_name'],
-                'email' => (string) $row['email'],
-                'role' => (string) $row['role'],
-                'status' => $status,
-                'expires_at' => (string) $row['expires_at'],
-                'created_at' => (string) $row['created_at'],
-                'accepted_at' => $row['accepted_at'] !== null ? (string) $row['accepted_at'] : null,
-            ];
-        }, $rows);
+        $items = array_map(fn(array $row): array => [
+            'invite_id' => (string) $row['invite_id'],
+            'invitee_name' => (string) $row['invitee_name'],
+            'email' => (string) $row['email'],
+            'role' => (string) $row['role'],
+            'status' => $this->invitationStatus($row),
+            'expires_at' => (string) $row['expires_at'],
+            'created_at' => (string) $row['created_at'],
+            'accepted_at' => $row['accepted_at'] !== null ? (string) $row['accepted_at'] : null,
+        ], $rows);
 
         return Response::json(['items' => $items]);
+    }
+
+    /** @param array{invite_id:string} $params */
+    public function revokeInvitation(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $this->auth->requireRole($ctx, ['owner']);
+
+        $inviteId = trim((string) ($params['invite_id'] ?? ''));
+        if ($inviteId === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'invite_id', 'message' => 'is required'],
+            ]);
+        }
+
+        $lookup = $this->pdo->prepare(
+            'SELECT invite_id, email, role, status, expires_at FROM invitations WHERE invite_id = :invite_id LIMIT 1'
+        );
+        $lookup->execute([':invite_id' => $inviteId]);
+        $invitation = $lookup->fetch();
+
+        if (!$invitation) {
+            throw new HttpException(404, 'NOT_FOUND', 'Invitation not found');
+        }
+
+        $status = $this->invitationStatus($invitation);
+        if ($status !== 'pending') {
+            throw new HttpException(404, 'NOT_FOUND', 'Invitation not found');
+        }
+
+        $stmt = $this->pdo->prepare(
+            "UPDATE invitations SET status = 'revoked' WHERE invite_id = :invite_id AND status = 'pending' AND expires_at > UTC_TIMESTAMP()"
+        );
+        $stmt->execute([':invite_id' => $inviteId]);
+
+        if ($stmt->rowCount() === 0) {
+            throw new HttpException(404, 'NOT_FOUND', 'Invitation not found');
+        }
+
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            'invitation.revoked',
+            'invitation',
+            $inviteId,
+            [
+                'email' => (string) $invitation['email'],
+                'role' => (string) $invitation['role'],
+                'prior_status' => $status,
+            ]
+        );
+
+        return Response::noContent();
     }
 
     public function previewInvitation(Request $request): Response
@@ -716,6 +763,17 @@ SQL;
         }
 
         return $invitation;
+    }
+
+    /** @param array<string,mixed> $row */
+    private function invitationStatus(array $row): string
+    {
+        $status = (string) ($row['status'] ?? 'pending');
+        if ($status === 'pending' && strtotime((string) ($row['expires_at'] ?? '') . ' UTC') <= time()) {
+            return 'expired';
+        }
+
+        return $status;
     }
 
     private function markInvitationAccepted(int $invitationRowId, int $userId): void

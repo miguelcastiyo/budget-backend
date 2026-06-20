@@ -65,7 +65,7 @@ paths:
     get:
       tags: [Auth]
       summary: List invites
-      description: Requires owner privileges.
+      description: Requires owner privileges. Revoked invites remain visible for account history and cannot be accepted.
       security:
         - cookieAuth: []
         - sessionTokenAuth: []
@@ -106,6 +106,33 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/invitations/{invite_id}:
+    delete:
+      tags: [Auth]
+      summary: Revoke an invite
+      description: Requires owner privileges. Only pending, non-expired invites can be revoked.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+        - in: path
+          name: invite_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Invite revoked
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
         '422':
           $ref: '#/components/responses/ValidationError'
 

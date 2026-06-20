@@ -153,6 +153,8 @@ Response `201`:
 
 Auth required: user must be owner.
 
+Revoked invites remain visible for account history and can no longer be accepted.
+
 Response `200`:
 ```json
 {
@@ -171,7 +173,23 @@ Response `200`:
 }
 ```
 
-### 3.1.2 Preview Invite Acceptance Path
+### 3.1.2 Revoke Invite
+`DELETE /auth/invitations/{invite_id}`
+
+Auth required: user must be owner.
+
+Behavior:
+- Only pending, non-expired invites can be revoked.
+- Revoked invites remain visible in list results with `status: "revoked"`.
+- Revoked invite links stop working and follow the existing inactive invite failure path.
+
+Response `204`:
+- No body
+
+Response `404`:
+- Invite does not exist or is no longer revocable because it was already accepted, expired, or revoked.
+
+### 3.1.3 Preview Invite Acceptance Path
 `GET /auth/invitations/preview?invite_token=...`
 
 Public route used by invite-acceptance clients before rendering the setup UI.
