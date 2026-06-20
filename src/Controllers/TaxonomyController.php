@@ -106,7 +106,7 @@ final class TaxonomyController
     public function listCards(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
-        return Response::json(['items' => $this->listByTable('cards', $ctx->userId())]);
+        return Response::json(['items' => $this->listCardsByUser($ctx->userId())]);
     }
 
     public function createCard(Request $request): Response
@@ -121,7 +121,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['card_id'] ?? '', 'card_id');
 
-        return Response::json($this->updateInTable('cards', $ctx->userId(), $id, $request));
+        return Response::json($this->updateCardForUser($ctx->userId(), $id, $request));
     }
 
     /** @param array{card_id:string} $params */
@@ -130,7 +130,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['card_id'] ?? '', 'card_id');
 
-        $this->softDeleteInTable('cards', $ctx->userId(), $id);
+        $this->softDeleteCard($ctx->userId(), $id);
         return Response::noContent();
     }
 
@@ -156,6 +156,20 @@ final class TaxonomyController
         }
 
         return $items;
+    }
+
+    /** @return list<array{id:string,name:string,is_favorite:bool}> */
+    private function listCardsByUser(int $userId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, name, is_favorite
+             FROM cards
+             WHERE user_id = :user_id AND is_active = 1 AND deleted_at IS NULL
+             ORDER BY is_favorite DESC, LOWER(name) ASC, id ASC'
+        );
+        $stmt->execute([':user_id' => $userId]);
+
+        return array_map(fn(array $row): array => $this->cardResponseFromRow($row), $stmt->fetchAll());
     }
 
     private function clampedQuickPickLimit(mixed $value): int
@@ -248,7 +262,7 @@ final class TaxonomyController
         $existingStmt = $this->pdo->prepare(
             $table === 'tags'
                 ? "SELECT id, is_active, deleted_at, icon_key FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1"
-                : "SELECT id, is_active, deleted_at FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1"
+                : "SELECT id, is_active, deleted_at, is_favorite FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1"
         );
         $existingStmt->execute([
             ':user_id' => $userId,
@@ -281,6 +295,8 @@ final class TaxonomyController
             ];
             if ($table === 'tags') {
                 $response['icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] === null ? null : (string) $existing['icon_key']);
+            } else {
+                $response['is_favorite'] = ((int) ($existing['is_favorite'] ?? 0)) === 1;
             }
 
             return $response;
@@ -313,6 +329,8 @@ final class TaxonomyController
         ];
         if ($table === 'tags') {
             $response['icon_key'] = $iconKey;
+        } else {
+            $response['is_favorite'] = false;
         }
 
         return $response;
@@ -389,6 +407,110 @@ final class TaxonomyController
         }
     }
 
+    /** @return array{id:string,name:string,is_favorite:bool} */
+    private function updateCardForUser(int $userId, int $id, Request $request): array
+    {
+        $payload = $request->json();
+        $nameProvided = array_key_exists('name', $payload);
+        $favoriteProvided = array_key_exists('is_favorite', $payload);
+
+        if (!$nameProvided && !$favoriteProvided) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'request', 'message' => 'must include name or is_favorite'],
+            ]);
+        }
+
+        $existing = $this->findActiveCard($userId, $id);
+        $name = $nameProvided ? $this->validatedName($request) : (string) $existing['name'];
+        $isFavorite = $favoriteProvided
+            ? $this->validatedBoolean($payload['is_favorite'], 'is_favorite')
+            : ((int) $existing['is_favorite']) === 1;
+
+        $this->pdo->beginTransaction();
+        try {
+            if ($isFavorite) {
+                $clearFavorite = $this->pdo->prepare(
+                    'UPDATE cards
+                     SET is_favorite = 0, updated_at = CURRENT_TIMESTAMP
+                     WHERE user_id = :user_id
+                       AND id <> :id
+                       AND is_active = 1
+                       AND deleted_at IS NULL
+                       AND is_favorite = 1'
+                );
+                $clearFavorite->execute([
+                    ':user_id' => $userId,
+                    ':id' => $id,
+                ]);
+            }
+
+            $stmt = $this->pdo->prepare(
+                'UPDATE cards
+                 SET name = :name,
+                     is_favorite = :is_favorite,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id
+                   AND user_id = :user_id
+                   AND is_active = 1
+                   AND deleted_at IS NULL'
+            );
+            $stmt->execute([
+                ':name' => $name,
+                ':is_favorite' => $isFavorite ? 1 : 0,
+                ':id' => $id,
+                ':user_id' => $userId,
+            ]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new HttpException(404, 'NOT_FOUND', 'Card not found');
+            }
+
+            $this->pdo->commit();
+        } catch (PDOException $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            if (($e->errorInfo[0] ?? '') === '23000') {
+                throw new HttpException(409, 'CONFLICT', 'Card already exists');
+            }
+            throw $e;
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        return [
+            'id' => (string) $id,
+            'name' => $name,
+            'is_favorite' => $isFavorite,
+        ];
+    }
+
+    private function softDeleteCard(int $userId, int $id): void
+    {
+        $stmt = $this->pdo->prepare(
+            'UPDATE cards
+             SET is_active = 0,
+                 is_favorite = 0,
+                 deleted_at = UTC_TIMESTAMP(),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = :id
+               AND user_id = :user_id
+               AND is_active = 1
+               AND deleted_at IS NULL'
+        );
+        $stmt->execute([
+            ':id' => $id,
+            ':user_id' => $userId,
+        ]);
+
+        if ($stmt->rowCount() === 0) {
+            throw new HttpException(404, 'NOT_FOUND', 'Card not found');
+        }
+    }
+
     private function validatedName(Request $request): string
     {
         $payload = $request->json();
@@ -407,6 +529,17 @@ final class TaxonomyController
         }
 
         return $name;
+    }
+
+    private function validatedBoolean(mixed $value, string $field): bool
+    {
+        if (!is_bool($value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => $field, 'message' => 'must be a boolean'],
+            ]);
+        }
+
+        return $value;
     }
 
     private function validatedTagIconKey(Request $request): ?string
@@ -446,5 +579,42 @@ final class TaxonomyController
         }
 
         return (int) $raw;
+    }
+
+    /** @return array<string,mixed> */
+    private function findActiveCard(int $userId, int $id): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, name, is_favorite
+             FROM cards
+             WHERE id = :id
+               AND user_id = :user_id
+               AND is_active = 1
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':id' => $id,
+            ':user_id' => $userId,
+        ]);
+
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new HttpException(404, 'NOT_FOUND', 'Card not found');
+        }
+
+        return $row;
+    }
+
+    /** @param array<string,mixed> $row
+     *  @return array{id:string,name:string,is_favorite:bool}
+     */
+    private function cardResponseFromRow(array $row): array
+    {
+        return [
+            'id' => (string) $row['id'],
+            'name' => (string) $row['name'],
+            'is_favorite' => ((int) ($row['is_favorite'] ?? 0)) === 1,
+        ];
     }
 }

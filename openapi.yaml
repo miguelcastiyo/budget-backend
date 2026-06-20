@@ -767,6 +767,7 @@ paths:
     get:
       tags: [Cards]
       summary: List cards
+      description: Returns active, non-deleted cards ordered by favorite first, then case-insensitive name, then id.
       responses:
         '200':
           description: Cards
@@ -813,6 +814,7 @@ paths:
     patch:
       tags: [Cards]
       summary: Update card
+      description: Accepts a partial card update. At least one of `name` or `is_favorite` is required.
       parameters:
         - $ref: '#/components/parameters/CardId'
         - $ref: '#/components/parameters/XCsrfToken'
@@ -821,7 +823,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateNamedEntityRequest'
+              $ref: '#/components/schemas/UpdateCardRequest'
       responses:
         '200':
           description: Card updated
@@ -2414,7 +2416,20 @@ components:
           type: string
         name:
           type: string
-      required: [id, name]
+        is_favorite:
+          type: boolean
+      required: [id, name, is_favorite]
+
+    UpdateCardRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        is_favorite:
+          type: boolean
+      minProperties: 1
 
     RecurringBillingType:
       type: string

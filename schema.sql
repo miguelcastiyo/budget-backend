@@ -200,6 +200,7 @@ CREATE TABLE cards (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(120) NOT NULL,
+  is_favorite TINYINT(1) NOT NULL DEFAULT 0,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   deleted_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -208,6 +209,7 @@ CREATE TABLE cards (
   UNIQUE KEY uq_cards_user_name (user_id, name),
   UNIQUE KEY uq_cards_id_user (id, user_id),
   KEY idx_cards_user_active (user_id, is_active),
+  KEY idx_cards_user_favorite_sort (user_id, is_active, deleted_at, is_favorite, name, id),
   CONSTRAINT fk_cards_user
     FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -6,6 +6,7 @@ $root = dirname(__DIR__);
 $scripts = [
     'scripts/test_core.php',
     'scripts/smoke_budget_settings_validation.php',
+    'scripts/smoke_card_favorites.php',
     'scripts/smoke_recurring_schedule_change_validation.php',
     'scripts/smoke_google_verifier.php',
 ];

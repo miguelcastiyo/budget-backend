@@ -140,6 +140,7 @@ SELECT
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
   c.name AS card_name,
+  c.is_favorite AS card_is_favorite,
   reo.recurring_expense_id,
   t.created_at,
   t.updated_at
@@ -234,7 +235,8 @@ SELECT
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
-  c.name AS card_name
+  c.name AS card_name,
+  c.is_favorite AS card_is_favorite
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id
   AND tg.user_id = t.user_id
@@ -383,6 +385,7 @@ SELECT
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
   c.name AS card_name,
+  c.is_favorite AS card_is_favorite,
   reo.recurring_expense_id,
   t.created_at,
   t.updated_at
@@ -434,6 +437,7 @@ SQL;
                 : [
                     'id' => (string) $row['card_id'],
                     'name' => (string) $row['card_name'],
+                    'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
                 ],
             'created_at' => (string) $row['created_at'],
             'updated_at' => (string) $row['updated_at'],
@@ -522,6 +526,7 @@ SQL;
             $this->countSuggestionValue($group['cards'], $row['card_id'] === null ? '' : (string) $row['card_id'], $usedAt, $rowId, $row['card_id'] === null ? null : [
                 'id' => (string) $row['card_id'],
                 'name' => (string) $row['card_name'],
+                'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
             ]);
             $this->countSuggestionValue($group['splits'], ((int) $row['is_split']) === 1 ? '1' : '0', $usedAt, $rowId);
             unset($group);

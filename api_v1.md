@@ -796,6 +796,29 @@ Rules:
 ### 6.1 List Cards
 `GET /me/cards`
 
+Returns active, non-deleted cards ordered by:
+- `is_favorite DESC`
+- `LOWER(name) ASC`
+- `id ASC`
+
+Example response:
+```json
+{
+  "items": [
+    {
+      "id": "4",
+      "name": "Apple Card",
+      "is_favorite": true
+    },
+    {
+      "id": "7",
+      "name": "Chase Sapphire",
+      "is_favorite": false
+    }
+  ]
+}
+```
+
 ### 6.2 Create Card
 `POST /me/cards`
 
@@ -803,6 +826,15 @@ Request:
 ```json
 {
   "name": "Chase Sapphire"
+}
+```
+
+Response:
+```json
+{
+  "id": "7",
+  "name": "Chase Sapphire",
+  "is_favorite": false
 }
 ```
 
@@ -816,12 +848,37 @@ Request:
 }
 ```
 
+Favorite card:
+```json
+{
+  "is_favorite": true
+}
+```
+
+Clear favorite:
+```json
+{
+  "is_favorite": false
+}
+```
+
+Rename and favorite:
+```json
+{
+  "name": "Chase Sapphire Reserve",
+  "is_favorite": true
+}
+```
+
 ### 6.4 Delete Card
 `DELETE /me/cards/{card_id}`
 
 Rules:
 - Card names are unique per user (case-insensitive).
 - Soft delete recommended in DB.
+- Only one active card per user may have `is_favorite = true`.
+- Favoriting one card clears favorite status from any other active favorite card for that user.
+- Clearing favorite uses `is_favorite: false` on the target card.
 
 ## 7) Recurring Expenses
 

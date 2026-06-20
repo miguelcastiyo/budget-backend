@@ -313,6 +313,7 @@ SELECT
   tg.icon_key AS tag_icon_key,
   c.id AS card_id,
   c.name AS card_name,
+  c.is_favorite AS card_is_favorite,
   reo.recurring_expense_id,
   t.created_at,
   t.updated_at
@@ -359,6 +360,7 @@ SQL;
                     : [
                         'id' => (string) $row['card_id'],
                         'name' => (string) $row['card_name'],
+                        'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
                     ],
                 'created_at' => $this->formatTimestamp((string) $row['created_at']),
                 'updated_at' => $this->formatTimestamp((string) $row['updated_at']),

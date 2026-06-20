@@ -328,6 +328,7 @@ $overviewPdo->exec('CREATE TABLE cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     deleted_at TEXT NULL,
     updated_at TEXT NOT NULL
@@ -973,7 +974,7 @@ $importPdo = new PDO('sqlite::memory:');
 $importPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $importPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $importPdo->exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, icon_key TEXT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
-$importPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_favorite INTEGER NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", import_fingerprint TEXT NULL, csv_import_run_id INTEGER NULL, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE UNIQUE INDEX uq_transactions_import_dedupe ON transactions (user_id, import_fingerprint)');
 $importPdo->exec("INSERT INTO tags (user_id, name, icon_key, is_active) VALUES (1, 'Coffee', 'coffee', 1)");

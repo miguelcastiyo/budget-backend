@@ -70,6 +70,7 @@ SELECT
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
   c.name AS card_name,
+  c.is_favorite AS card_is_favorite,
   EXISTS(
     SELECT 1
     FROM recurring_expense_occurrences reo
@@ -113,6 +114,7 @@ SQL;
                     : [
                         'id' => (string) $row['card_id'],
                         'name' => (string) $row['card_name'],
+                        'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
                     ],
                 'billing_type' => $billingType,
                 'billing_day' => $billingDay,
@@ -454,7 +456,8 @@ SELECT
   re.updated_at,
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
-  c.name AS card_name
+  c.name AS card_name,
+  c.is_favorite AS card_is_favorite
 FROM recurring_expenses re
 JOIN tags tg ON tg.id = re.tag_id AND tg.user_id = re.user_id
 LEFT JOIN cards c ON c.id = re.card_id AND c.user_id = re.user_id
@@ -491,6 +494,7 @@ SQL;
                 : [
                     'id' => (string) $row['card_id'],
                     'name' => (string) $row['card_name'],
+                    'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
                 ],
             'billing_type' => $billingType,
             'billing_day' => $billingDay,
@@ -786,6 +790,7 @@ SELECT
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
   c.name AS card_name,
+  c.is_favorite AS card_is_favorite,
   EXISTS(
     SELECT 1
     FROM recurring_expense_occurrences reo
@@ -830,6 +835,7 @@ SQL;
                     : [
                         'id' => (string) $row['card_id'],
                         'name' => (string) $row['card_name'],
+                        'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
                     ],
                 'billing_type' => $billingType,
                 'billing_day' => $billingDay,
