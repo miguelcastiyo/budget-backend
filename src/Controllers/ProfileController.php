@@ -97,17 +97,7 @@ final class ProfileController
         $current = $this->fetchPreferences($ctx->userId());
         $next = $current;
         $next['onboarding']['dismissed'] = $payload['onboarding_dismissed'];
-
-        $encoded = json_encode($this->validatedPreferences($next), JSON_UNESCAPED_SLASHES);
-        if ($encoded === false) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Unable to encode user preferences');
-        }
-
-        $stmt = $this->pdo->prepare('UPDATE users SET user_preferences = :user_preferences WHERE id = :id');
-        $stmt->execute([
-            ':user_preferences' => $encoded,
-            ':id' => $ctx->userId(),
-        ]);
+        $this->savePreferences($ctx->userId(), $this->validatedPreferences($next));
 
         return Response::json([
             'onboarding_dismissed' => (bool) $payload['onboarding_dismissed'],
@@ -124,16 +114,7 @@ final class ProfileController
 
         $current = $this->fetchPreferences($ctx->userId());
         $next = $this->mergePreferences($current, $payload);
-        $encoded = json_encode($next, JSON_UNESCAPED_SLASHES);
-        if ($encoded === false) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Unable to encode user preferences');
-        }
-
-        $stmt = $this->pdo->prepare('UPDATE users SET user_preferences = :user_preferences WHERE id = :id');
-        $stmt->execute([
-            ':user_preferences' => $encoded,
-            ':id' => $ctx->userId(),
-        ]);
+        $this->savePreferences($ctx->userId(), $next);
 
         if ($next !== $current) {
             $this->audit->record(
@@ -151,6 +132,21 @@ final class ProfileController
         }
 
         return Response::json($next);
+    }
+
+    /** @param array<string,mixed> $preferences */
+    private function savePreferences(int $userId, array $preferences): void
+    {
+        $encoded = json_encode($preferences, JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            throw new HttpException(500, 'INTERNAL_ERROR', 'Unable to encode user preferences');
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE users SET user_preferences = :user_preferences WHERE id = :id');
+        $stmt->execute([
+            ':user_preferences' => $encoded,
+            ':id' => $userId,
+        ]);
     }
 
     public function requestEmailChange(Request $request): Response
