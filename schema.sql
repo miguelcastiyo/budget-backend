@@ -558,6 +558,7 @@ CREATE TABLE transactions (
   tag_id BIGINT UNSIGNED NOT NULL,
   card_id BIGINT UNSIGNED NULL,
   is_split TINYINT(1) NOT NULL DEFAULT 0,
+  notes VARCHAR(255) NULL,
   source ENUM('manual', 'import') NOT NULL DEFAULT 'manual',
   import_fingerprint CHAR(64) NULL COMMENT 'sha256(date|amount|lower(trim(expense))|category|is_split|tag|card)',
   csv_import_run_id BIGINT UNSIGNED NULL,

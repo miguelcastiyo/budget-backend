@@ -307,6 +307,7 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.notes,
   t.source,
   tg.id AS tag_id,
   tg.name AS tag_name,
@@ -348,6 +349,7 @@ SQL;
                 'amount' => $this->fmt((float) $row['amount']),
                 'category' => (string) $row['category'],
                 'is_split' => ((int) $row['is_split']) === 1,
+                'notes' => $row['notes'] === null ? null : (string) $row['notes'],
                 'source' => (string) $row['source'],
                 'recurring_expense_id' => $row['recurring_expense_id'] === null ? null : (string) $row['recurring_expense_id'],
                 'tag' => [

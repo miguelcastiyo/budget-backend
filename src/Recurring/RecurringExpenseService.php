@@ -104,8 +104,8 @@ final class RecurringExpenseService
             'INSERT IGNORE INTO recurring_expense_occurrences (user_id, recurring_expense_id, occurrence_month, due_date) VALUES (:user_id, :recurring_expense_id, :occurrence_month, :due_date)'
         );
         $insertTransaction = $this->pdo->prepare(
-            "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, source)
-             VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :card_id, 'manual')"
+            "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, notes, source)
+             VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :card_id, NULL, 'manual')"
         );
         $linkOccurrence = $this->pdo->prepare(
             'UPDATE recurring_expense_occurrences SET transaction_id = :transaction_id WHERE id = :id AND user_id = :user_id'

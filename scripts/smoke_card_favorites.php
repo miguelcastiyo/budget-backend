@@ -75,10 +75,36 @@ $pdo->exec('CREATE TABLE transactions (
     amount TEXT NOT NULL,
     category TEXT NOT NULL,
     is_split INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NULL,
     tag_id INTEGER NOT NULL,
     card_id INTEGER NULL,
     source TEXT NOT NULL DEFAULT "manual",
     recurring_expense_id INTEGER NULL,
+    deleted_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$pdo->exec('CREATE TABLE recurring_expense_occurrences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    recurring_expense_id INTEGER NOT NULL,
+    occurrence_month TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    transaction_id INTEGER NULL
+)');
+$pdo->exec('CREATE TABLE recurring_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    expense TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    category TEXT NOT NULL,
+    tag_id INTEGER NOT NULL,
+    card_id INTEGER NULL,
+    billing_type TEXT NOT NULL,
+    billing_day INTEGER NULL,
+    starts_month TEXT NOT NULL,
+    ends_month TEXT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
     deleted_at TEXT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -114,10 +140,10 @@ $insertCard->execute([':id' => 3, ':user_id' => 1, ':name' => 'beta card', ':is_
 $insertCard->execute([':id' => 4, ':user_id' => 2, ':name' => 'Outside Card', ':is_favorite' => 1, ':is_active' => 1, ':deleted_at' => null]);
 
 $pdo->exec("INSERT INTO tags (id, user_id, name, icon_key, is_active, deleted_at, updated_at) VALUES (1, 1, 'Coffee', 'coffee', 1, NULL, CURRENT_TIMESTAMP)");
-$pdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source, deleted_at, created_at, updated_at) VALUES
-    (1, '2026-06-10', 'Coffee Shop', '5.25', 'wants', 0, 1, 3, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    (1, '2026-06-12', 'Coffee Shop', '5.75', 'wants', 0, 1, 3, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    (1, '2026-06-14', 'Coffee Shop', '6.10', 'wants', 0, 1, 2, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+$pdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source, deleted_at, created_at, updated_at) VALUES
+    (1, '2026-06-10', 'Coffee Shop', '5.25', 'wants', 0, NULL, 1, 3, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1, '2026-06-12', 'Coffee Shop', '5.75', 'wants', 0, NULL, 1, 3, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (1, '2026-06-14', 'Coffee Shop', '6.10', 'wants', 0, NULL, 1, 2, 'manual', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ");
 
 $config = Config::load(sys_get_temp_dir());
@@ -208,6 +234,50 @@ $suggestionsResponse = $transactions->suggestions(apiKeyRequest('GET', '/me/tran
 $suggestionsPayload = decodeJsonBody($suggestionsResponse->body);
 assertSame('3', $suggestionsPayload['items'][0]['card']['id'] ?? null, 'transaction suggestions remain history-based instead of favorite-based');
 assertSame(false, $suggestionsPayload['items'][0]['card']['is_favorite'] ?? null, 'transaction suggestion card payload serializes favorite field');
+
+$createTransactionResponse = $transactions->create(apiKeyRequest('POST', '/me/transactions', $apiKeyUser1, [
+    'date' => '2026-06-18',
+    'expense' => 'Movie Snacks',
+    'amount' => '14.25',
+    'category' => 'wants',
+    'is_split' => false,
+    'tag_id' => '1',
+    'card_id' => '2',
+    'notes' => '  Bought snacks for movie night  ',
+]));
+$createdTransaction = decodeJsonBody($createTransactionResponse->body);
+assertSame('Bought snacks for movie night', $createdTransaction['notes'] ?? null, 'transaction create trims and returns notes');
+
+$updatedTransactionResponse = $transactions->update(
+    apiKeyRequest('PATCH', '/me/transactions/' . $createdTransaction['id'], $apiKeyUser1, ['notes' => " \t "]),
+    ['transaction_id' => (string) $createdTransaction['id']]
+);
+$updatedTransaction = decodeJsonBody($updatedTransactionResponse->body);
+assertTrue(array_key_exists('notes', $updatedTransaction), 'transaction update keeps notes field in payload');
+assertSame(null, $updatedTransaction['notes'], 'transaction update clears blank notes to null');
+
+expectHttpException(
+    fn() => $transactions->create(apiKeyRequest('POST', '/me/transactions', $apiKeyUser1, [
+        'date' => '2026-06-19',
+        'expense' => 'Long Note',
+        'amount' => '1.00',
+        'category' => 'wants',
+        'tag_id' => '1',
+        'notes' => str_repeat('é', 256),
+    ])),
+    422,
+    'VALIDATION_ERROR',
+    'transaction create rejects overlong utf8 notes'
+);
+expectHttpException(
+    fn() => $transactions->update(
+        apiKeyRequest('PATCH', '/me/transactions/' . $createdTransaction['id'], $apiKeyUser1, ['notes' => ['bad']]),
+        ['transaction_id' => (string) $createdTransaction['id']]
+    ),
+    422,
+    'VALIDATION_ERROR',
+    'transaction update rejects nonstring notes'
+);
 
 fwrite(STDOUT, "Card favorites smoke test passed\n");
 

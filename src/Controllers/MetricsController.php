@@ -467,6 +467,7 @@ final class MetricsController
                t.amount,
                t.category,
                t.is_split,
+               t.notes,
                tg.id AS tag_id,
                tg.name AS tag_name,
                tg.icon_key AS tag_icon_key,
@@ -495,6 +496,7 @@ final class MetricsController
                 'amount' => $this->fmt((float) $row['amount']),
                 'category' => (string) $row['category'],
                 'is_split' => ((int) $row['is_split']) === 1,
+                'notes' => $row['notes'] === null ? null : (string) $row['notes'],
                 'tag' => [
                     'id' => (string) $row['tag_id'],
                     'name' => (string) $row['tag_name'],
@@ -556,6 +558,7 @@ final class MetricsController
                t.amount,
                t.category,
                t.is_split,
+               t.notes,
                tg.id AS tag_id,
                tg.name AS tag_name,
                tg.icon_key AS tag_icon_key,
@@ -588,6 +591,7 @@ final class MetricsController
                 'amount' => $this->fmt((float) $row['amount']),
                 'category' => (string) $row['category'],
                 'is_split' => ((int) $row['is_split']) === 1,
+                'notes' => $row['notes'] === null ? null : (string) $row['notes'],
                 'tag' => [
                     'id' => (string) $row['tag_id'],
                     'name' => (string) $row['tag_name'],

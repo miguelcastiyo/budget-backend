@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\ImportExport;
 
 use App\Http\HttpException;
+use App\Support\TransactionNotes;
 use DateTimeImmutable;
 use DateTimeZone;
 
 final class CsvImportMapper
 {
     public const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
-    public const IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag', 'card', 'is_split'];
+    public const IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag', 'card', 'is_split', 'notes'];
     public const REQUIRED_IMPORT_FIELDS = ['date', 'expense', 'amount', 'category', 'tag'];
 
     public function __construct(private readonly ?TaxonomyImportRepository $taxonomy = null)
@@ -34,6 +35,7 @@ final class CsvImportMapper
             'tag' => ['tag', 'tags', 'bank_category_guess', 'label'],
             'card' => ['card', 'account', 'payment_source', 'payment_card', 'payment_method'],
             'is_split' => ['is_split', 'split', 'split_transaction'],
+            'notes' => ['notes', 'note', 'memo', 'description_notes'],
         ];
 
         $mapping = [];
@@ -348,12 +350,14 @@ final class CsvImportMapper
         $tag = $this->getCsvValue($cols, $mapping, 'tag');
         $card = $this->getCsvValue($cols, $mapping, 'card');
         $isSplitRaw = $this->getCsvValue($cols, $mapping, 'is_split');
+        $notesRaw = $this->getCsvValue($cols, $mapping, 'notes');
 
         $date = $this->validatedImportDate($date, $dateStrategy);
         $expense = $this->validatedExpense($expense);
         $amount = $this->validatedMoney($amount, 'amount');
         $category = $this->validatedCategory($category);
         $isSplit = $this->validatedOptionalBoolean($isSplitRaw, 'is_split');
+        $notes = TransactionNotes::normalize($notesRaw, 'notes', 'Row validation failed');
 
         $tag = $this->resolvedImportTag($tag, $tagStrategy);
         if ($tag === null) {
@@ -371,6 +375,7 @@ final class CsvImportMapper
             'tag_name' => $tag['tag_name'],
             'tag_id' => $tag['tag_id'],
             'card_name' => trim($card),
+            'notes' => $notes,
             'row' => $rowNum,
         ];
     }

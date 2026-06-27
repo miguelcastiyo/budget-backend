@@ -9,6 +9,7 @@ use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Recurring\RecurringExpenseService;
+use App\Support\TransactionNotes;
 use PDO;
 use PDOException;
 
@@ -134,6 +135,7 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.notes,
   t.source,
   tg.id AS tag_id,
   tg.name AS tag_name,
@@ -199,9 +201,12 @@ SQL;
         $isSplit = array_key_exists('is_split', $payload)
             ? $this->validatedBoolean($payload['is_split'], 'is_split')
             : false;
+        $notes = array_key_exists('notes', $payload)
+            ? TransactionNotes::normalize($payload['notes'])
+            : null;
 
         $stmt = $this->pdo->prepare(
-            "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, is_split, source) VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :card_id, :is_split, 'manual')"
+            "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, is_split, notes, source) VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :card_id, :is_split, :notes, 'manual')"
         );
         $stmt->execute([
             ':user_id' => $ctx->userId(),
@@ -212,6 +217,7 @@ SQL;
             ':tag_id' => $tagId,
             ':card_id' => $cardId,
             ':is_split' => $isSplit ? 1 : 0,
+            ':notes' => $notes,
         ]);
 
         return Response::json($this->fetchTransaction($ctx->userId(), (int) $this->pdo->lastInsertId()), 201);
@@ -309,9 +315,12 @@ SQL;
         $isSplit = array_key_exists('is_split', $payload)
             ? $this->validatedBoolean($payload['is_split'], 'is_split')
             : ((int) $existing['is_split'] === 1);
+        $notes = array_key_exists('notes', $payload)
+            ? TransactionNotes::normalize($payload['notes'])
+            : ($existing['notes'] === null ? null : (string) $existing['notes']);
 
         $stmt = $this->pdo->prepare(
-            'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, card_id = :card_id, is_split = :is_split, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
+            'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, card_id = :card_id, is_split = :is_split, notes = :notes, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
         );
         $stmt->execute([
             ':transaction_date' => $date,
@@ -321,6 +330,7 @@ SQL;
             ':tag_id' => $tagId,
             ':card_id' => $cardId,
             ':is_split' => $isSplit ? 1 : 0,
+            ':notes' => $notes,
             ':id' => $transactionId,
             ':user_id' => $ctx->userId(),
         ]);
@@ -353,7 +363,7 @@ SQL;
     private function fetchRawTransaction(int $userId, int $transactionId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, transaction_date, expense, amount, category, tag_id, card_id, is_split FROM transactions WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL LIMIT 1'
+            'SELECT id, transaction_date, expense, amount, category, tag_id, card_id, is_split, notes FROM transactions WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([
             ':id' => $transactionId,
@@ -379,6 +389,7 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.notes,
   t.source,
   tg.id AS tag_id,
   tg.name AS tag_name,
@@ -425,6 +436,7 @@ SQL;
             'amount' => $this->fmt((string) $row['amount']),
             'category' => (string) $row['category'],
             'is_split' => ((int) $row['is_split']) === 1,
+            'notes' => $row['notes'] === null ? null : (string) $row['notes'],
             'source' => (string) $row['source'],
             'recurring_expense_id' => $row['recurring_expense_id'] === null ? null : (string) $row['recurring_expense_id'],
             'tag' => [

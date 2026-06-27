@@ -31,6 +31,7 @@ SELECT
   t.amount,
   t.category,
   t.is_split,
+  t.notes,
   tg.name AS tag_name,
   c.name AS card_name,
   t.created_at,
@@ -60,7 +61,7 @@ SQL;
 
             $totalRows = 0;
             try {
-                fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at'], ',', '"', '\\');
+                fputcsv($stream, ['date', 'expense', 'amount', 'category', 'is_split', 'tag', 'card', 'created_at', 'updated_at', 'notes'], ',', '"', '\\');
 
                 foreach ($stmt as $row) {
                     fputcsv($stream, [
@@ -73,6 +74,7 @@ SQL;
                         $this->csvCell($row['card_name'] === null ? '' : (string) $row['card_name']),
                         $this->csvCell((string) $row['created_at']),
                         $this->csvCell((string) $row['updated_at']),
+                        $this->csvCell($row['notes'] === null ? '' : (string) $row['notes']),
                     ], ',', '"', '\\');
                     $totalRows++;
                 }

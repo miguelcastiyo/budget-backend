@@ -341,6 +341,7 @@ $overviewPdo->exec('CREATE TABLE transactions (
     amount TEXT NOT NULL,
     category TEXT NOT NULL,
     is_split INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NULL,
     tag_id INTEGER NOT NULL,
     card_id INTEGER NULL,
     source TEXT NOT NULL DEFAULT "manual",
@@ -426,7 +427,7 @@ $insertTransaction = static function (
     ?int $cardId = null,
     string $source = 'manual'
 ) use ($overviewPdo): int {
-    $stmt = $overviewPdo->prepare('INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source, recurring_expense_id, deleted_at, created_at, updated_at) VALUES (:user_id, :transaction_date, :expense, :amount, :category, 0, :tag_id, :card_id, :source, NULL, NULL, :created_at, :updated_at)');
+    $stmt = $overviewPdo->prepare('INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source, recurring_expense_id, deleted_at, created_at, updated_at) VALUES (:user_id, :transaction_date, :expense, :amount, :category, 0, NULL, :tag_id, :card_id, :source, NULL, NULL, :created_at, :updated_at)');
     $stmt->execute([
         ':user_id' => $userId,
         ':transaction_date' => $date,
@@ -857,9 +858,22 @@ $mapping = $validatedImportMapping->invoke($csvImportMapper, json_encode([
     'category' => 'Budget Category',
     'tag' => 'Tag',
     'card' => 'Account',
-], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account']);
+    'notes' => 'Memo',
+], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Account', 'Memo']);
 assertSame(0, $mapping['date'], 'csv import mapping resolves date index');
 assertSame(5, $mapping['card'], 'csv import mapping resolves optional card index');
+assertSame(6, $mapping['notes'], 'csv import mapping resolves optional notes index alongside other optional fields');
+$notesSuggestedMapping = $suggestImportMapping->invoke($csvImportMapper, ['Posted Date', 'Description', 'Amount', 'Tag', 'Memo']);
+assertSame('Memo', $notesSuggestedMapping['notes'] ?? null, 'csv import preview suggests memo mapping for notes');
+$notesMapping = $validatedImportMapping->invoke($csvImportMapper, json_encode([
+    'date' => 'Posted Date',
+    'expense' => 'Description',
+    'amount' => 'Amount',
+    'category' => 'Budget Category',
+    'tag' => 'Tag',
+    'notes' => 'Memo',
+], JSON_THROW_ON_ERROR), ['Posted Date', 'Description', 'Amount', 'Budget Category', 'Tag', 'Memo']);
+assertSame(5, $notesMapping['notes'], 'csv import mapping resolves optional notes index');
 $valueMapMapping = $validatedImportMapping->invoke($csvImportMapper, json_encode([
     'date' => 'Posted Date',
     'expense' => 'Description',
@@ -888,7 +902,7 @@ $tagStrategy = ['mode' => 'value_map', 'value_map' => [
     'Refund' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Refund'],
     'Debt' => ['mode' => 'new', 'tag_id' => null, 'tag_name' => 'Debt'],
 ]];
-$parsedImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes'], [
+$parsedImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', 'Amex Gold', 'yes', '  Bought snacks  '], [
     'date' => 0,
     'expense' => 1,
     'amount' => 2,
@@ -896,11 +910,13 @@ $parsedImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffe
     'tag' => 4,
     'card' => 5,
     'is_split' => 6,
+    'notes' => 7,
 ], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
 assertSame('2026-06-01', $parsedImportRow['date'], 'csv import row normalizes mapped date');
 assertSame('6.25', $parsedImportRow['amount'], 'csv import row normalizes mapped amount');
 assertSame('wants', $parsedImportRow['category'], 'csv import row normalizes mapped category');
 assertSame(true, $parsedImportRow['is_split'], 'csv import row normalizes mapped split flag');
+assertSame('Bought snacks', $parsedImportRow['notes'], 'csv import row trims mapped notes');
 $savingsImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Brokerage Transfer', '$100.00', 'Savings', 'Utilities'], [
     'date' => 0,
     'expense' => 1,
@@ -952,6 +968,28 @@ $blankAmountImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', '
     'tag' => 3,
 ], ['mode' => 'default', 'default_category' => 'needs'], ['blank_mapped_amount' => 'skip'], $dateStrategyReject, $tagStrategy, 2);
 assertSame(null, $blankAmountImportRow, 'csv import row skips blank mapped amount rows when configured');
+$blankNotesImportRow = $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', '   '], [
+    'date' => 0,
+    'expense' => 1,
+    'amount' => 2,
+    'category' => 3,
+    'tag' => 4,
+    'notes' => 5,
+], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2);
+assertSame(null, $blankNotesImportRow['notes'], 'csv import row stores blank mapped notes as null');
+expectHttpException(
+    fn() => $parseImportRow->invoke($csvImportMapper, ['6/1/2026', 'Coffee Shop', '$6.25', 'Wants', 'Coffee', str_repeat('é', 256)], [
+        'date' => 0,
+        'expense' => 1,
+        'amount' => 2,
+        'category' => 3,
+        'tag' => 4,
+        'notes' => 5,
+    ], ['mode' => 'exact_column'], ['blank_mapped_amount' => 'error'], $dateStrategyReject, $tagStrategy, 2),
+    422,
+    'VALIDATION_ERROR',
+    'csv import row rejects overlong utf8 notes'
+);
 $inferredTagIconKey = $mapperReflection->getMethod('inferredTagIconKey');
 assertSame('coffee', $inferredTagIconKey->invoke($csvImportMapper, 'Coffee Shops'), 'csv import infers coffee icon');
 assertSame('tag', $inferredTagIconKey->invoke($csvImportMapper, 'Miscellaneous'), 'csv import falls back to tag icon');
@@ -975,11 +1013,11 @@ $importPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $importPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $importPdo->exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, icon_key TEXT NULL, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_favorite INTEGER NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1, deleted_at TEXT NULL, updated_at TEXT NULL)');
-$importPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", import_fingerprint TEXT NULL, csv_import_run_id INTEGER NULL, deleted_at TEXT NULL, updated_at TEXT NULL)');
+$importPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, notes TEXT NULL, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", import_fingerprint TEXT NULL, csv_import_run_id INTEGER NULL, deleted_at TEXT NULL, updated_at TEXT NULL)');
 $importPdo->exec('CREATE UNIQUE INDEX uq_transactions_import_dedupe ON transactions (user_id, import_fingerprint)');
 $importPdo->exec("INSERT INTO tags (user_id, name, icon_key, is_active) VALUES (1, 'Coffee', 'coffee', 1)");
 $importPdo->exec("INSERT INTO cards (user_id, name, is_active) VALUES (1, 'Amex Gold', 1)");
-$importPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, tag_id, card_id, source) VALUES (1, '2026-06-01', 'Coffee Shop', '6.25', 'wants', 1, 1, 1, 'manual')");
+$importPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source) VALUES (1, '2026-06-01', 'Coffee Shop', '6.25', 'wants', 1, 'Existing note', 1, 1, 'manual')");
 $taxonomyImportRepository = new TaxonomyImportRepository($importPdo, $csvImportMapper);
 $csvImportCommitter = new CsvImportCommitter($importPdo, $taxonomyImportRepository, $csvImportMapper);
 $parsedRowsForBatch = [
@@ -989,6 +1027,7 @@ $parsedRowsForBatch = [
         'amount' => '6.25',
         'category' => 'wants',
         'is_split' => true,
+        'notes' => 'Morning coffee',
         'tag_name' => 'Coffee',
         'tag_id' => null,
         'card_name' => 'Amex Gold',
@@ -1000,6 +1039,7 @@ $parsedRowsForBatch = [
         'amount' => '49.61',
         'category' => 'needs',
         'is_split' => false,
+        'notes' => 'First import note',
         'tag_name' => 'Utilities',
         'tag_id' => null,
         'card_name' => 'Visa',
@@ -1020,10 +1060,37 @@ assertSame(2, $commitResult['duplicate_rows'], 'csv import committer skips exist
 assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM tags WHERE user_id = 1 AND LOWER(name) = 'utilities'")->fetch()['total'], 'csv import committer creates a missing tag once per import');
 assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM cards WHERE user_id = 1 AND LOWER(name) = 'visa'")->fetch()['total'], 'csv import committer creates a missing card once per import');
 assertSame(1, (int) $importPdo->query("SELECT COUNT(*) AS total FROM transactions WHERE user_id = 1 AND expense = 'LADWP' AND source = 'import'")->fetch()['total'], 'csv import committer reuses created taxonomy for duplicate in-file rows');
+assertSame('First import note', $importPdo->query("SELECT notes FROM transactions WHERE user_id = 1 AND expense = 'LADWP' AND source = 'import'")->fetch()['notes'] ?? null, 'csv import committer persists imported notes');
 $importPdo->exec("UPDATE transactions SET deleted_at = '2026-06-03' WHERE user_id = 1 AND expense = 'LADWP' AND source = 'import'");
 $uniqueConflictResult = $csvImportCommitter->commitRows(1, [$parsedRowsForBatch[1]], 100);
 assertSame(0, $uniqueConflictResult['imported_rows'], 'csv import committer treats unique fingerprint conflicts as duplicates');
 assertSame(1, $uniqueConflictResult['duplicate_rows'], 'csv import committer keeps unique constraint as the final duplicate guard');
+$notesChangedDuplicateRow = $parsedRowsForBatch[0];
+$notesChangedDuplicateRow['notes'] = 'Changed duplicate note';
+assertSame(1, $csvImportCommitter->estimateDryRunDuplicates(1, [$notesChangedDuplicateRow]), 'csv import duplicate detection ignores notes changes');
+
+$exportPdo = new PDO('sqlite::memory:');
+$exportPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$exportPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+$exportPdo->exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, icon_key TEXT NULL)');
+$exportPdo->exec('CREATE TABLE cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, is_favorite INTEGER NOT NULL DEFAULT 0)');
+$exportPdo->exec('CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, transaction_date TEXT NOT NULL, expense TEXT NOT NULL, amount TEXT NOT NULL, category TEXT NOT NULL, is_split INTEGER NOT NULL DEFAULT 0, notes TEXT NULL, tag_id INTEGER NOT NULL, card_id INTEGER NULL, source TEXT NOT NULL DEFAULT "manual", deleted_at TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)');
+$exportPdo->exec('CREATE TABLE csv_export_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, status TEXT NOT NULL, date_from TEXT NULL, date_to TEXT NULL, total_rows INTEGER NOT NULL DEFAULT 0, error_summary TEXT NULL, completed_at TEXT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+$exportPdo->exec("INSERT INTO tags (id, user_id, name, icon_key) VALUES (1, 7, 'Groceries', 'shopping_cart')");
+$exportPdo->exec("INSERT INTO cards (id, user_id, name, is_favorite) VALUES (1, 7, 'Chase Sapphire', 1)");
+$exportPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source, deleted_at, created_at, updated_at) VALUES
+    (7, '2026-06-01', 'Trader Joe''s', '72.43', 'needs', 0, NULL, 1, 1, 'manual', NULL, '2026-06-01 12:00:00', '2026-06-01 12:00:00'),
+    (7, '2026-06-02', 'Payroll', '1.00', 'needs', 0, '=SUM(A1:A2)', 1, NULL, 'manual', NULL, '2026-06-02 12:00:00', '2026-06-02 12:00:00')");
+$csvExportService = new CsvExportService($exportPdo, $csvImportMapper, new DataRunRepository($exportPdo));
+$exportResponse = $csvExportService->exportCsv(7, []);
+ob_start();
+$exportResponse->send();
+$exportCsv = ob_get_clean();
+assertTrue(is_string($exportCsv), 'csv export response streams csv');
+$exportLines = preg_split("/\r\n|\n|\r/", trim((string) $exportCsv)) ?: [];
+assertSame('date,expense,amount,category,is_split,tag,card,created_at,updated_at,notes', $exportLines[0] ?? null, 'csv export appends notes column at the end');
+assertTrue(str_contains($exportLines[1] ?? '', "'=SUM(A1:A2)"), 'csv export formula-escapes notes cells');
+assertTrue(str_ends_with($exportLines[2] ?? '', ','), 'csv export writes blank notes cells for null notes');
 
 $taxonomyReflection = new ReflectionClass(TaxonomyController::class);
 $taxonomyController = $taxonomyReflection->newInstanceWithoutConstructor();
@@ -1571,6 +1638,13 @@ function assertMatches(string $pattern, string $actual, string $label): void
 {
     if (preg_match($pattern, $actual) !== 1) {
         fail(sprintf('%s: expected %s to match %s', $label, var_export($actual, true), $pattern));
+    }
+}
+
+function assertTrue(bool $condition, string $label): void
+{
+    if (!$condition) {
+        fail($label);
     }
 }
 

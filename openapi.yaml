@@ -1424,7 +1424,7 @@ paths:
     get:
       tags: [ImportExport]
       summary: Export filtered transactions as CSV
-      description: Streams filtered transactions as CSV. Exported cell values are escaped when they start with spreadsheet formula prefixes.
+      description: Streams filtered transactions as CSV. The exported header includes notes as the final column, and exported cell values are escaped when they start with spreadsheet formula prefixes.
       parameters:
         - $ref: '#/components/parameters/DateFrom'
         - $ref: '#/components/parameters/DateTo'
@@ -1470,7 +1470,7 @@ paths:
                   enum: [preview, dry_run, commit]
                 mapping:
                   type: string
-                  description: JSON object mapping Budget fields to CSV headers. Required for dry_run and commit. Required fields are date, expense, amount, and tag. Category is required only when category_strategy.mode is exact_column; optional fields are card and is_split.
+                  description: JSON object mapping Budget fields to CSV headers. Required for dry_run and commit. Required fields are date, expense, amount, and tag. Category is required only when category_strategy.mode is exact_column; optional fields are card, is_split, and notes.
                 date_strategy:
                   type: string
                   description: JSON object matching CsvImportDateStrategy. Applies an explicit year to yearless dates.
@@ -2865,6 +2865,11 @@ components:
               $ref: '#/components/schemas/CategoryEnum'
             is_split:
               type: boolean
+            notes:
+              anyOf:
+                - type: string
+                  maxLength: 255
+                - type: 'null'
           required: [date, expense, amount, category]
         - $ref: '#/components/schemas/TransactionRefTag'
         - type: object
@@ -2896,6 +2901,11 @@ components:
           $ref: '#/components/schemas/CategoryEnum'
         is_split:
           type: boolean
+        notes:
+          anyOf:
+            - type: string
+              maxLength: 255
+            - type: 'null'
         tag_id:
           type: string
         tag:
@@ -2933,6 +2943,10 @@ components:
           $ref: '#/components/schemas/CategoryEnum'
         is_split:
           type: boolean
+        notes:
+          anyOf:
+            - type: string
+            - type: 'null'
         tag:
           $ref: '#/components/schemas/Tag'
         card:
@@ -2945,7 +2959,7 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, date, expense, amount, category, is_split, tag, created_at, updated_at]
+      required: [id, date, expense, amount, category, is_split, notes, tag, created_at, updated_at]
 
     TransactionsPage:
       type: object
@@ -3342,13 +3356,17 @@ components:
           $ref: '#/components/schemas/CategoryEnum'
         is_split:
           type: boolean
+        notes:
+          anyOf:
+            - type: string
+            - type: 'null'
         tag:
           $ref: '#/components/schemas/Tag'
         card_name:
           anyOf:
             - type: string
             - type: 'null'
-      required: [transaction_id, date, expense, amount, category, is_split, tag, card_name]
+      required: [transaction_id, date, expense, amount, category, is_split, notes, tag, card_name]
 
     InsightsRecurringVsVariable:
       type: object
@@ -3589,6 +3607,8 @@ components:
         card:
           type: string
         is_split:
+          type: string
+        notes:
           type: string
 
     CsvImportCategoryStrategy:

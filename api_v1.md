@@ -1269,6 +1269,7 @@ Notes:
 - `is_split` (optional boolean, default `false`)
 - `tag_id` (required)
 - `card_id` (optional)
+- `notes` (`string | null`, optional on write, always present on read)
 - `created_at`, `updated_at`
 
 ### 9.1 Create Transaction
@@ -1283,7 +1284,8 @@ Request (existing tag/card):
   "category": "needs",
   "is_split": false,
   "tag_id": "12",
-  "card_id": "4"
+  "card_id": "4",
+  "notes": "Bought snacks for movie night"
 }
 ```
 
@@ -1303,12 +1305,15 @@ Request (Notion-style inline create for tag and optional card):
 Rules:
 - `tag_id` or `tag.name` required.
 - `card_id` or `card.name` optional.
+- `notes` accepts `string`, `null`, or blank string. Blank and whitespace-only values are stored as `null`.
+- `notes` is trimmed and must be 255 characters or fewer.
 - When inline name does not exist, backend creates it and links it.
 
 ### 9.2 Update Transaction
 `PATCH /me/transactions/{transaction_id}`
 
 Any field from create can be updated.
+If `notes` is omitted on `PATCH`, the existing value is kept. Sending `null`, `""`, or whitespace clears it.
 
 ### 9.3 Delete Transaction
 `DELETE /me/transactions/{transaction_id}`
@@ -1348,6 +1353,7 @@ Response `200`:
       "amount": "72.43",
       "category": "needs",
       "is_split": false,
+      "notes": null,
       "tag": { "id": "12", "name": "Groceries" },
       "card": { "id": "4", "name": "Chase Sapphire" }
     }
@@ -1800,6 +1806,7 @@ Non-goals:
 
 Supports the same filters as `GET /me/transactions`.
 Includes `is_split` as a CSV column (`true|false`) for round-trip imports.
+Includes `notes` as the final CSV column. Null notes export as a blank cell.
 The response streams rows as CSV instead of buffering the full export first.
 Exported cells are escaped when they start with spreadsheet formula prefixes (`=`, `+`, `-`, `@`, tab, carriage return, or leading whitespace before a formula prefix).
 
@@ -1835,11 +1842,13 @@ Mapping shape:
   "category": "Budget Category",
   "tag": "Tag",
   "card": "Account",
-  "is_split": "Split"
+  "is_split": "Split",
+  "notes": "Memo"
 }
 ```
 
-Required mapped fields: `date`, `expense`, `amount`, and `tag`. `category` is required only for `category_strategy.mode=exact_column`. Optional mapped fields are `card` and `is_split`.
+Required mapped fields: `date`, `expense`, `amount`, and `tag`. `category` is required only for `category_strategy.mode=exact_column`. Optional mapped fields are `card`, `is_split`, and `notes`.
+If mapped, `notes` is trimmed, blank values become `null`, and values longer than 255 characters fail row validation.
 
 When `category_strategy.mode` is `value_map` or `default`, `category` may be omitted from `mapping`. Budget categories stay fixed as `needs`, `wants`, and `savings`; external category labels are translated, not created. Debt-like labels such as `Debt`, `Loan`, or `Credit Card Payment` should map to `needs`, with the tag mapped to `Debt`.
 
