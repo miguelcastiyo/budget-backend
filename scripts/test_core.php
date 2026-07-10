@@ -1731,6 +1731,22 @@ $linkedTransactionId = (int) $closeoutPdo->query("SELECT id FROM transactions WH
 $linkedEntryRow = $fundRepository->findActiveEntryByTransactionId(11, $linkedTransactionId);
 assertSame(true, $linkedEntryRow !== null, 'create_transaction links active fund entry to transaction');
 
+$closeoutPdo->exec("INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source) VALUES (11, '{$pastCloseoutMonth}-17', 'Extra Japan contribution', '25.00', 'savings', 0, 'Manual savings transfer', 1, NULL, 'manual')");
+$unlinkedSavingsTransactionId = (int) $closeoutPdo->lastInsertId();
+
+$linkedExistingEntry = $fundService->createEntry(11, $createdFund['id'], [
+    'entry_date' => $pastCloseoutMonth . '-17',
+    'entry_type' => 'contribution',
+    'direction' => 'in',
+    'amount' => '25.00',
+    'source_type' => 'manual',
+    'budget_tracking' => 'link_existing_transaction',
+    'transaction_id' => (string) $unlinkedSavingsTransactionId,
+    'note' => 'Linked from existing savings transaction',
+]);
+assertSame('transaction', $linkedExistingEntry['source_type'], 'link_existing_transaction creates transaction-linked fund entry even when payload source_type is manual');
+assertSame((string) $unlinkedSavingsTransactionId, $linkedExistingEntry['source_transaction_id'], 'link_existing_transaction stores linked transaction id');
+
 $closeWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
     'notes' => 'Funded trip.',
     'allocations' => [
@@ -1747,7 +1763,7 @@ assertSame('fund', $closeWithFundAllocation['closeout']['allocations'][0]['alloc
 assertSame($createdFund['id'], $closeWithFundAllocation['closeout']['allocations'][0]['fund_id'], 'closeout serializes allocated fund id');
 
 $fundAfterCloseout = $fundService->getFund(11, $createdFund['id']);
-assertSame('700.00', $fundAfterCloseout['current_balance'], 'closeout-linked fund entry increases fund balance');
+assertSame('725.00', $fundAfterCloseout['current_balance'], 'closeout-linked fund entry increases fund balance');
 assertSame('150.00', $fundAfterCloseout['source_breakdown']['month_closeout'], 'fund source breakdown tracks closeout contributions');
 
 $patchedWithFundAllocation = $closeoutService->updateCloseout(11, $pastCloseoutMonth, [
@@ -1763,12 +1779,12 @@ $patchedWithFundAllocation = $closeoutService->updateCloseout(11, $pastCloseoutM
 ]);
 assertSame('125.00', $patchedWithFundAllocation['closeout']['allocated_amount'], 'patch closeout replaces fund allocation amount');
 $fundAfterPatch = $fundService->getFund(11, $createdFund['id']);
-assertSame('675.00', $fundAfterPatch['current_balance'], 'patching closeout voids old fund-linked entry and creates replacement');
+assertSame('700.00', $fundAfterPatch['current_balance'], 'patching closeout voids old fund-linked entry and creates replacement');
 
 $reopenedWithFundEntry = $closeoutService->reopenMonth(11, $pastCloseoutMonth);
 assertSame('reopened', $reopenedWithFundEntry['status'], 'reopen still returns reopened status with fund entries present');
 $fundAfterReopen = $fundService->getFund(11, $createdFund['id']);
-assertSame('550.00', $fundAfterReopen['current_balance'], 'reopen voids closeout-linked fund entry from active balance');
+assertSame('575.00', $fundAfterReopen['current_balance'], 'reopen voids closeout-linked fund entry from active balance');
 
 $reclosedWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
     'notes' => 'Reclosed to fund.',
@@ -1782,7 +1798,7 @@ $reclosedWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMont
 ]);
 assertSame('closed', $reclosedWithFundAllocation['status'], 'reclose works with fund allocation');
 $fundAfterReclose = $fundService->getFund(11, $createdFund['id']);
-assertSame('650.00', $fundAfterReclose['current_balance'], 'reclose adds new active closeout-linked entry');
+assertSame('675.00', $fundAfterReclose['current_balance'], 'reclose adds new active closeout-linked entry');
 
 $closeoutSummary = $fundService->closeoutSummary(11, (int) substr($pastCloseoutMonth, 0, 4));
 assertSame('100.00', $closeoutSummary['total_closeout_contributed'], 'closeout summary totals active closeout-linked contributions');
@@ -1799,11 +1815,11 @@ $fundTransactionIntegrationService->syncLinkedTransactionUpdate(
     'Updated linked note'
 );
 $fundAfterTxnSync = $fundService->getFund(11, $createdFund['id']);
-assertSame('700.00', $fundAfterTxnSync['current_balance'], 'transaction sync updates linked fund entry amount');
+assertSame('725.00', $fundAfterTxnSync['current_balance'], 'transaction sync updates linked fund entry amount');
 
 $fundTransactionIntegrationService->voidLinkedTransactionDelete(11, $linkedTransactionId, gmdate('Y-m-d H:i:s'));
 $fundAfterTxnDelete = $fundService->getFund(11, $createdFund['id']);
-assertSame('450.00', $fundAfterTxnDelete['current_balance'], 'deleting linked transaction voids linked fund entry');
+assertSame('475.00', $fundAfterTxnDelete['current_balance'], 'deleting linked transaction voids linked fund entry');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

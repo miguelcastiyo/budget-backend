@@ -182,7 +182,7 @@ final class FundService
             throw new HttpException(409, 'CONFLICT', 'Archived funds cannot receive new entries');
         }
 
-        if ($sourceType === 'transaction' && $budgetTracking === 'create_transaction') {
+        if ($budgetTracking === 'create_transaction') {
             $transaction = is_array($payload['transaction'] ?? null) ? $payload['transaction'] : null;
             if ($entryType !== 'contribution' || $direction !== 'in') {
                 throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
@@ -216,7 +216,7 @@ final class FundService
             return $this->entryResponse($this->requireEntry($userId, (int) $fund['id'], $entryPublicId), $fundPublicId);
         }
 
-        if ($sourceType === 'transaction' && $budgetTracking === 'link_existing_transaction') {
+        if ($budgetTracking === 'link_existing_transaction') {
             if ($entryType !== 'contribution' || $direction !== 'in') {
                 throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                     ['field' => 'entry_type', 'message' => 'linked transactions currently support incoming contributions only'],
