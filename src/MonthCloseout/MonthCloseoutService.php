@@ -6,6 +6,7 @@ namespace App\MonthCloseout;
 
 use App\Budget\BudgetSettingsResolver;
 use App\Core\Config;
+use App\Funds\FundCloseoutIntegrationService;
 use App\Http\HttpException;
 use App\Support\Str;
 use DateTimeImmutable;
@@ -15,14 +16,15 @@ use Throwable;
 
 final class MonthCloseoutService
 {
-    private const SURPLUS_TYPES = ['savings', 'investment', 'debt', 'rollover', 'buffer', 'ignored', 'other'];
+    private const SURPLUS_TYPES = ['fund', 'savings', 'investment', 'debt', 'rollover', 'buffer', 'ignored', 'other'];
     private const DEFICIT_TYPES = ['covered_by_buffer', 'savings', 'rollover', 'ignored', 'other'];
 
     public function __construct(
         private readonly PDO $pdo,
         private readonly Config $config,
         private readonly BudgetSettingsResolver $budgetSettingsResolver,
-        private readonly MonthCloseoutRepository $repository
+        private readonly MonthCloseoutRepository $repository,
+        private readonly FundCloseoutIntegrationService $fundCloseoutIntegrationService
     ) {
     }
 
@@ -98,6 +100,8 @@ final class MonthCloseoutService
             ? $computed['computed']['surplus_amount']
             : $computed['computed']['deficit_amount'];
         $this->validateAllocations($computed['computed']['result_type'], $resultAmount, $allocations);
+        $this->fundCloseoutIntegrationService->validateFundAllocations($userId, $computed['computed']['result_type'], $allocations);
+        $allocations = $this->fundCloseoutIntegrationService->prepareAllocationsForPersistence($userId, $allocations);
 
         $existing = $this->repository->findCloseoutByUserAndMonth($userId, $this->monthStart($month));
         $snapshot = $this->snapshotFromComputed($userId, $computed['computed'], $notes);
@@ -109,6 +113,7 @@ final class MonthCloseoutService
                 $closeoutDbId = $this->repository->insertCloseout($snapshot);
             } else {
                 $closeoutDbId = (int) $existing['id'];
+                $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, $closeoutDbId, $month, 'allocation_replaced');
                 $this->repository->updateCloseoutSnapshot($closeoutDbId, $snapshot);
                 $this->repository->deleteAllocationsForCloseout($closeoutDbId);
             }
@@ -116,6 +121,7 @@ final class MonthCloseoutService
             if ($allocationRows !== []) {
                 $this->repository->insertAllocations($closeoutDbId, $userId, $allocationRows);
             }
+            $this->fundCloseoutIntegrationService->createEntriesForCloseout($userId, $closeoutDbId, $month);
 
             $this->pdo->commit();
         } catch (Throwable $e) {
@@ -143,15 +149,19 @@ final class MonthCloseoutService
         $notes = $this->normalizeNotes($payload['notes'] ?? null);
         $allocations = $this->normalizeAllocations($payload['allocations'] ?? []);
         $this->validateAllocations((string) $existing['result_type'], $this->closeoutResultAmount($existing), $allocations);
+        $this->fundCloseoutIntegrationService->validateFundAllocations($userId, (string) $existing['result_type'], $allocations);
+        $allocations = $this->fundCloseoutIntegrationService->prepareAllocationsForPersistence($userId, $allocations);
 
         $this->pdo->beginTransaction();
         try {
             $this->repository->updateCloseoutAuthoredFields((int) $existing['id'], $notes);
+            $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, (int) $existing['id'], $month, 'allocation_replaced');
             $this->repository->deleteAllocationsForCloseout((int) $existing['id']);
             $rows = $this->allocationRows($allocations);
             if ($rows !== []) {
                 $this->repository->insertAllocations((int) $existing['id'], $userId, $rows);
             }
+            $this->fundCloseoutIntegrationService->createEntriesForCloseout($userId, (int) $existing['id'], $month);
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -173,7 +183,17 @@ final class MonthCloseoutService
         }
 
         if ((string) $existing['status'] !== 'reopened') {
-            $this->repository->markCloseoutReopened((int) $existing['id'], $this->nowUtc());
+            $this->pdo->beginTransaction();
+            try {
+                $this->repository->markCloseoutReopened((int) $existing['id'], $this->nowUtc());
+                $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, (int) $existing['id'], $month, 'closeout_reopened');
+                $this->pdo->commit();
+            } catch (Throwable $e) {
+                if ($this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                throw $e;
+            }
         }
 
         return $this->getMonthCloseout($userId, $month);
@@ -443,7 +463,7 @@ final class MonthCloseoutService
         return $trimmed === '' ? null : $trimmed;
     }
 
-    /** @return list<array{allocation_type:string,label:?string,amount:string,target_month:?string,notes:?string}> */
+    /** @return list<array{allocation_type:string,fund_id:?string,label:?string,amount:string,target_month:?string,notes:?string}> */
     private function normalizeAllocations(mixed $value): array
     {
         if ($value === null) {
@@ -473,6 +493,7 @@ final class MonthCloseoutService
             $amount = $this->positiveMoneyString($allocation['amount'] ?? null, 'allocations.' . $index . '.amount');
             $label = $this->normalizeOptionalString($allocation['label'] ?? null, 'allocations.' . $index . '.label', 120);
             $notes = $this->normalizeOptionalString($allocation['notes'] ?? null, 'allocations.' . $index . '.notes');
+            $fundId = $this->normalizeOptionalString($allocation['fund_id'] ?? null, 'allocations.' . $index . '.fund_id', 64);
             $targetMonth = $allocation['target_month'] ?? null;
             if ($type === 'rollover') {
                 if (!is_string($targetMonth) || trim($targetMonth) === '') {
@@ -491,6 +512,7 @@ final class MonthCloseoutService
 
             $allocations[] = [
                 'allocation_type' => $type,
+                'fund_id' => $fundId,
                 'label' => $label,
                 'amount' => $amount,
                 'target_month' => $targetMonth,
@@ -601,17 +623,19 @@ final class MonthCloseoutService
         ];
     }
 
-    /** @param list<array{allocation_type:string,label:?string,amount:string,target_month:?string,notes:?string}> $allocations
+    /** @param list<array{allocation_type:string,fund_id:?string,label:?string,amount:string,target_month:?string,notes:?string}> $allocations
      *  @return list<array<string,mixed>>
      */
     private function allocationRows(array $allocations): array
     {
         $rows = [];
         foreach ($allocations as $allocation) {
+            $label = $allocation['allocation_type'] === 'fund' ? null : $allocation['label'];
             $rows[] = [
                 'allocation_id' => Str::randomId('cla'),
                 'allocation_type' => $allocation['allocation_type'],
-                'label' => $allocation['label'],
+                'fund_id' => $allocation['fund_id'],
+                'label' => $label,
                 'amount' => $allocation['amount'],
                 'target_month' => $allocation['target_month'] === null ? null : $this->monthStart($allocation['target_month']),
                 'notes' => $allocation['notes'],
@@ -652,6 +676,8 @@ final class MonthCloseoutService
             $allocations[] = [
                 'id' => (string) $allocation['allocation_id'],
                 'allocation_type' => (string) $allocation['allocation_type'],
+                'fund_id' => $allocation['fund_public_id'] === null ? null : (string) $allocation['fund_public_id'],
+                'fund_name' => $allocation['fund_name'] === null ? null : (string) $allocation['fund_name'],
                 'label' => $allocation['label'] === null ? null : (string) $allocation['label'],
                 'amount' => $this->moneyString((float) $allocation['amount']),
                 'target_month' => $allocation['target_month'] === null ? null : substr((string) $allocation['target_month'], 0, 7),

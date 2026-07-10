@@ -238,6 +238,7 @@ SQL;
                closeout_id,
                user_id,
                allocation_type,
+               fund_id,
                label,
                amount,
                target_month,
@@ -247,6 +248,7 @@ SQL;
                :closeout_id,
                :user_id,
                :allocation_type,
+               :fund_id,
                :label,
                :amount,
                :target_month,
@@ -260,6 +262,7 @@ SQL;
                 ':closeout_id' => $closeoutDbId,
                 ':user_id' => $userId,
                 ':allocation_type' => $allocation['allocation_type'],
+                ':fund_id' => $allocation['fund_id'],
                 ':label' => $allocation['label'],
                 ':amount' => $allocation['amount'],
                 ':target_month' => $allocation['target_month'],
@@ -272,10 +275,13 @@ SQL;
     public function listAllocationsForCloseout(int $closeoutDbId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT *
-             FROM monthly_closeout_allocations
-             WHERE closeout_id = :closeout_id
-             ORDER BY id ASC'
+            'SELECT mca.*,
+                    f.fund_id AS fund_public_id,
+                    f.name AS fund_name
+             FROM monthly_closeout_allocations mca
+             LEFT JOIN funds f ON f.id = mca.fund_id AND f.user_id = mca.user_id
+             WHERE mca.closeout_id = :closeout_id
+             ORDER BY mca.id ASC'
         );
         $stmt->execute([':closeout_id' => $closeoutDbId]);
 

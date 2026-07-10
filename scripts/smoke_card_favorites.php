@@ -6,6 +6,8 @@ use App\Auth\AuthService;
 use App\Controllers\TaxonomyController;
 use App\Controllers\TransactionController;
 use App\Core\Config;
+use App\Funds\FundRepository;
+use App\Funds\FundTransactionIntegrationService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Recurring\RecurringExpenseService;
@@ -65,6 +67,41 @@ $pdo->exec('CREATE TABLE tags (
     icon_key TEXT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     deleted_at TEXT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$pdo->exec('CREATE TABLE funds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    fund_type TEXT NOT NULL,
+    goal_amount TEXT NULL,
+    target_month TEXT NULL,
+    notes TEXT NULL,
+    status TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$pdo->exec('CREATE TABLE fund_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_entry_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    fund_id INTEGER NOT NULL,
+    entry_date TEXT NOT NULL,
+    entry_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_transaction_id INTEGER NULL,
+    source_closeout_id INTEGER NULL,
+    source_closeout_allocation_id INTEGER NULL,
+    note TEXT NULL,
+    voided_at TEXT NULL,
+    void_reason TEXT NULL,
+    deleted_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )');
 $pdo->exec('CREATE TABLE transactions (
@@ -150,7 +187,9 @@ $config = Config::load(sys_get_temp_dir());
 $auth = new AuthService($pdo, $config);
 $taxonomy = new TaxonomyController($pdo, $auth);
 $recurringStub = (new ReflectionClass(RecurringExpenseService::class))->newInstanceWithoutConstructor();
-$transactions = new TransactionController($pdo, $auth, $recurringStub);
+$fundRepository = new FundRepository($pdo);
+$fundTransactionIntegrationService = new FundTransactionIntegrationService($pdo, $fundRepository);
+$transactions = new TransactionController($pdo, $auth, $recurringStub, $fundTransactionIntegrationService);
 
 $listResponse = $taxonomy->listCards(apiKeyRequest('GET', '/me/cards', $apiKeyUser1));
 $listPayload = decodeJsonBody($listResponse->body);

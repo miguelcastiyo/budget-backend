@@ -15,6 +15,11 @@ use App\Controllers\TransactionController;
 use App\Core\App;
 use App\Core\Config;
 use App\Auth\AuthService;
+use App\Funds\FundBalanceService;
+use App\Funds\FundCloseoutIntegrationService;
+use App\Funds\FundRepository;
+use App\Funds\FundService;
+use App\Funds\FundTransactionIntegrationService;
 use App\ImportExport\CsvExportService;
 use App\ImportExport\CsvImportCommitter;
 use App\ImportExport\CsvImportMapper;
@@ -1346,6 +1351,41 @@ $closeoutPdo->exec('CREATE TABLE budget_settings_versions (
     created_at TEXT NULL,
     updated_at TEXT NULL
 )');
+$closeoutPdo->exec('CREATE TABLE tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    icon_key TEXT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    created_at TEXT NULL,
+    updated_at TEXT NULL
+)');
+$closeoutPdo->exec('CREATE TABLE cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    created_at TEXT NULL,
+    updated_at TEXT NULL
+)');
+$closeoutPdo->exec('CREATE TABLE funds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    fund_type TEXT NOT NULL,
+    goal_amount TEXT NULL,
+    target_month TEXT NULL,
+    notes TEXT NULL,
+    status TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT NULL,
+    created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
+)');
 $closeoutPdo->exec('CREATE TABLE transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -1356,6 +1396,7 @@ $closeoutPdo->exec('CREATE TABLE transactions (
     tag_id INTEGER NOT NULL DEFAULT 1,
     card_id INTEGER NULL,
     is_split INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NULL,
     source TEXT NOT NULL DEFAULT "manual",
     import_fingerprint TEXT NULL,
     csv_import_run_id INTEGER NULL,
@@ -1398,6 +1439,7 @@ $closeoutPdo->exec('CREATE TABLE monthly_closeout_allocations (
     closeout_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     allocation_type TEXT NOT NULL,
+    fund_id INTEGER NULL,
     label TEXT NULL,
     amount TEXT NOT NULL,
     target_month TEXT NULL,
@@ -1405,6 +1447,27 @@ $closeoutPdo->exec('CREATE TABLE monthly_closeout_allocations (
     created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
 )');
+$closeoutPdo->exec('CREATE TABLE fund_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_entry_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    fund_id INTEGER NOT NULL,
+    entry_date TEXT NOT NULL,
+    entry_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_transaction_id INTEGER NULL,
+    source_closeout_id INTEGER NULL,
+    source_closeout_allocation_id INTEGER NULL,
+    note TEXT NULL,
+    voided_at TEXT NULL,
+    void_reason TEXT NULL,
+    deleted_at TEXT NULL,
+    created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$closeoutPdo->exec("INSERT INTO tags (id, user_id, name, icon_key, is_active, deleted_at, created_at, updated_at) VALUES (1, 11, 'Travel', 'plane', 1, NULL, '2026-06-01 00:00:00', '2026-06-01 00:00:00')");
 
 $insertCloseoutBudgetVersion = static function (
     int $userId,
@@ -1467,10 +1530,10 @@ $insertCloseoutTransaction = static function (
     $stmt = $closeoutPdo->prepare('
         INSERT INTO transactions (
             user_id, transaction_date, expense, amount, category, tag_id, card_id,
-            is_split, source, import_fingerprint, csv_import_run_id, created_at, updated_at, deleted_at
+            is_split, notes, source, import_fingerprint, csv_import_run_id, created_at, updated_at, deleted_at
         ) VALUES (
             :user_id, :transaction_date, :expense, :amount, :category, 1, NULL,
-            0, "manual", NULL, NULL, "2026-06-01 00:00:00", "2026-06-01 00:00:00", NULL
+            0, NULL, "manual", NULL, NULL, "2026-06-01 00:00:00", "2026-06-01 00:00:00", NULL
         )
     ');
     $stmt->execute([
@@ -1486,7 +1549,12 @@ $closeoutConfig = $configReflection->newInstanceWithoutConstructor();
 $valuesProperty->setValue($closeoutConfig, ['APP_TIMEZONE' => 'UTC']);
 $closeoutResolver = new BudgetSettingsResolver($closeoutPdo);
 $closeoutRepository = new MonthCloseoutRepository($closeoutPdo);
-$closeoutService = new MonthCloseoutService($closeoutPdo, $closeoutConfig, $closeoutResolver, $closeoutRepository);
+$fundRepository = new FundRepository($closeoutPdo);
+$fundBalanceService = new FundBalanceService($fundRepository);
+$fundTransactionIntegrationService = new FundTransactionIntegrationService($closeoutPdo, $fundRepository);
+$fundCloseoutIntegrationService = new FundCloseoutIntegrationService($closeoutPdo, $fundRepository);
+$fundService = new FundService($closeoutPdo, $fundRepository, $fundBalanceService, $fundTransactionIntegrationService);
+$closeoutService = new MonthCloseoutService($closeoutPdo, $closeoutConfig, $closeoutResolver, $closeoutRepository, $fundCloseoutIntegrationService);
 
 $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 $currentCloseoutMonth = $nowUtc->format('Y-m');
@@ -1619,6 +1687,123 @@ assertSame(false, $reclosedPastCloseout['closeout']['is_stale'], 'reclose refres
 $closeoutList = $closeoutService->listMonthCloseouts(11, []);
 assertSame(1, count($closeoutList['items']), 'list closeouts returns saved closeout');
 assertSame('200.00', $closeoutList['items'][0]['allocated_amount'], 'list closeouts includes allocated amount');
+
+$createdFund = $fundService->createFund(11, [
+    'name' => 'Japan 2026',
+    'fund_type' => 'goal',
+    'goal_amount' => '5000.00',
+    'target_month' => $futureCloseoutMonth,
+    'starting_balance' => '300.00',
+]);
+assertSame('300.00', $createdFund['current_balance'], 'create fund stores starting balance as fund entry');
+assertSame('Japan 2026', $createdFund['name'], 'create fund stores name');
+assertSame(1, $createdFund['entries_count'], 'create fund exposes starting balance entry count');
+
+$manualEntry = $fundService->createEntry(11, $createdFund['id'], [
+    'entry_date' => $pastCloseoutMonth . '-15',
+    'entry_type' => 'contribution',
+    'direction' => 'in',
+    'amount' => '50.00',
+    'source_type' => 'manual',
+    'budget_tracking' => 'fund_only',
+    'note' => 'Cash saved',
+]);
+assertSame('manual', $manualEntry['source_type'], 'manual fund entry keeps manual source type');
+
+$transactionEntry = $fundService->createEntry(11, $createdFund['id'], [
+    'entry_date' => $pastCloseoutMonth . '-16',
+    'entry_type' => 'contribution',
+    'direction' => 'in',
+    'amount' => '200.00',
+    'source_type' => 'transaction',
+    'budget_tracking' => 'create_transaction',
+    'transaction' => [
+        'expense' => 'Japan 2026 contribution',
+        'tag_id' => '1',
+        'card_id' => null,
+        'notes' => 'Transfer to Japan fund',
+    ],
+]);
+assertSame('transaction', $transactionEntry['source_type'], 'create_transaction creates transaction-linked fund entry');
+assertSame(1, (int) $closeoutPdo->query("SELECT COUNT(*) AS total FROM transactions WHERE user_id = 11 AND expense = 'Japan 2026 contribution' AND category = 'savings'")->fetch()['total'], 'create_transaction inserts savings transaction');
+
+$linkedTransactionId = (int) $closeoutPdo->query("SELECT id FROM transactions WHERE user_id = 11 AND expense = 'Japan 2026 contribution' ORDER BY id DESC LIMIT 1")->fetch()['id'];
+$linkedEntryRow = $fundRepository->findActiveEntryByTransactionId(11, $linkedTransactionId);
+assertSame(true, $linkedEntryRow !== null, 'create_transaction links active fund entry to transaction');
+
+$closeWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+    'notes' => 'Funded trip.',
+    'allocations' => [
+        [
+            'allocation_type' => 'fund',
+            'fund_id' => $createdFund['id'],
+            'amount' => '150.00',
+            'notes' => 'June surplus to trip',
+        ],
+    ],
+]);
+assertSame('150.00', $closeWithFundAllocation['closeout']['allocated_amount'], 'closeout with fund allocation stores allocated amount');
+assertSame('fund', $closeWithFundAllocation['closeout']['allocations'][0]['allocation_type'], 'closeout serializes fund allocation type');
+assertSame($createdFund['id'], $closeWithFundAllocation['closeout']['allocations'][0]['fund_id'], 'closeout serializes allocated fund id');
+
+$fundAfterCloseout = $fundService->getFund(11, $createdFund['id']);
+assertSame('700.00', $fundAfterCloseout['current_balance'], 'closeout-linked fund entry increases fund balance');
+assertSame('150.00', $fundAfterCloseout['source_breakdown']['month_closeout'], 'fund source breakdown tracks closeout contributions');
+
+$patchedWithFundAllocation = $closeoutService->updateCloseout(11, $pastCloseoutMonth, [
+    'notes' => 'Retargeted surplus.',
+    'allocations' => [
+        [
+            'allocation_type' => 'fund',
+            'fund_id' => $createdFund['id'],
+            'amount' => '125.00',
+            'notes' => 'Adjusted closeout contribution',
+        ],
+    ],
+]);
+assertSame('125.00', $patchedWithFundAllocation['closeout']['allocated_amount'], 'patch closeout replaces fund allocation amount');
+$fundAfterPatch = $fundService->getFund(11, $createdFund['id']);
+assertSame('675.00', $fundAfterPatch['current_balance'], 'patching closeout voids old fund-linked entry and creates replacement');
+
+$reopenedWithFundEntry = $closeoutService->reopenMonth(11, $pastCloseoutMonth);
+assertSame('reopened', $reopenedWithFundEntry['status'], 'reopen still returns reopened status with fund entries present');
+$fundAfterReopen = $fundService->getFund(11, $createdFund['id']);
+assertSame('550.00', $fundAfterReopen['current_balance'], 'reopen voids closeout-linked fund entry from active balance');
+
+$reclosedWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMonth, [
+    'notes' => 'Reclosed to fund.',
+    'allocations' => [
+        [
+            'allocation_type' => 'fund',
+            'fund_id' => $createdFund['id'],
+            'amount' => '100.00',
+        ],
+    ],
+]);
+assertSame('closed', $reclosedWithFundAllocation['status'], 'reclose works with fund allocation');
+$fundAfterReclose = $fundService->getFund(11, $createdFund['id']);
+assertSame('650.00', $fundAfterReclose['current_balance'], 'reclose adds new active closeout-linked entry');
+
+$closeoutSummary = $fundService->closeoutSummary(11, (int) substr($pastCloseoutMonth, 0, 4));
+assertSame('100.00', $closeoutSummary['total_closeout_contributed'], 'closeout summary totals active closeout-linked contributions');
+assertSame(1, count($closeoutSummary['funds']), 'closeout summary groups contributions by fund');
+
+$closeoutPdo->prepare("UPDATE transactions SET amount = '250.00', notes = 'Updated linked note' WHERE id = :id")->execute([':id' => $linkedTransactionId]);
+$fundTransactionIntegrationService->syncLinkedTransactionUpdate(
+    11,
+    ['notes' => 'Transfer to Japan fund'],
+    $linkedEntryRow,
+    $pastCloseoutMonth . '-16',
+    '250.00',
+    'savings',
+    'Updated linked note'
+);
+$fundAfterTxnSync = $fundService->getFund(11, $createdFund['id']);
+assertSame('700.00', $fundAfterTxnSync['current_balance'], 'transaction sync updates linked fund entry amount');
+
+$fundTransactionIntegrationService->voidLinkedTransactionDelete(11, $linkedTransactionId, gmdate('Y-m-d H:i:s'));
+$fundAfterTxnDelete = $fundService->getFund(11, $createdFund['id']);
+assertSame('450.00', $fundAfterTxnDelete['current_balance'], 'deleting linked transaction voids linked fund entry');
 
 fwrite(STDOUT, "Backend core tests passed\n");
 

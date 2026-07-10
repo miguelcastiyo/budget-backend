@@ -21,6 +21,7 @@ tags:
   - name: Recurring
   - name: BudgetSettings
   - name: Transactions
+  - name: Funds
   - name: Metrics
   - name: MonthOverview
   - name: MonthCloseouts
@@ -1182,6 +1183,288 @@ paths:
           $ref: '#/components/responses/NotFoundError'
         '422':
           $ref: '#/components/responses/ValidationError'
+
+  /me/funds:
+    get:
+      tags: [Funds]
+      summary: List funds
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, all]
+        - in: query
+          name: include_entries_summary
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Funds list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundsListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Funds]
+      summary: Create fund
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFundRequest'
+      responses:
+        '201':
+          description: Fund created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/funds/closeout-summary:
+    get:
+      tags: [Funds]
+      summary: Summarize closeout contributions to funds
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Fund closeout summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundCloseoutSummaryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/funds/{fund_id}:
+    get:
+      tags: [Funds]
+      summary: Get one fund
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+      responses:
+        '200':
+          description: Fund detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags: [Funds]
+      summary: Update fund
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFundRequest'
+      responses:
+        '200':
+          description: Updated fund detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/funds/{fund_id}/archive:
+    post:
+      tags: [Funds]
+      summary: Archive fund
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '200':
+          description: Archived fund detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /me/funds/{fund_id}/restore:
+    post:
+      tags: [Funds]
+      summary: Restore archived fund
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '200':
+          description: Restored fund detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /me/funds/{fund_id}/entries:
+    get:
+      tags: [Funds]
+      summary: List fund entries
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - in: query
+          name: source_type
+          required: false
+          schema:
+            type: string
+            enum: [manual, transaction, month_closeout, starting_balance, correction]
+        - in: query
+          name: entry_type
+          required: false
+          schema:
+            type: string
+            enum: [contribution, withdrawal, adjustment, starting_balance]
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: Fund entry page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundEntriesPage'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Funds]
+      summary: Create fund entry
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFundEntryRequest'
+      responses:
+        '201':
+          description: Fund entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundEntry'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/funds/{fund_id}/entries/{entry_id}:
+    patch:
+      tags: [Funds]
+      summary: Update editable fund entry
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/FundEntryId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFundEntryRequest'
+      responses:
+        '200':
+          description: Updated fund entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundEntry'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Funds]
+      summary: Delete editable fund entry
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/FundEntryId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Fund entry deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
     delete:
       tags: [Transactions]
       summary: Delete transaction
@@ -1585,6 +1868,18 @@ components:
         type: string
     CardId:
       name: card_id
+      in: path
+      required: true
+      schema:
+        type: string
+    FundId:
+      name: fund_id
+      in: path
+      required: true
+      schema:
+        type: string
+    FundEntryId:
+      name: entry_id
       in: path
       required: true
       schema:
@@ -3895,7 +4190,7 @@ components:
 
     MonthCloseoutAllocationType:
       type: string
-      enum: [savings, investment, debt, rollover, buffer, covered_by_buffer, ignored, other]
+      enum: [fund, savings, investment, debt, rollover, buffer, covered_by_buffer, ignored, other]
 
     MonthCloseoutPlannedActual:
       type: object
@@ -3954,6 +4249,10 @@ components:
           type: string
         allocation_type:
           $ref: '#/components/schemas/MonthCloseoutAllocationType'
+        fund_id:
+          type: [string, 'null']
+        fund_name:
+          type: [string, 'null']
         label:
           type: [string, 'null']
           maxLength: 120
@@ -3964,13 +4263,15 @@ components:
           pattern: '^\\d{4}-\\d{2}$'
         notes:
           type: [string, 'null']
-      required: [id, allocation_type, label, amount, target_month, notes]
+      required: [id, allocation_type, fund_id, fund_name, label, amount, target_month, notes]
 
     MonthCloseoutAllocationInput:
       type: object
       properties:
         allocation_type:
           $ref: '#/components/schemas/MonthCloseoutAllocationType'
+        fund_id:
+          type: [string, 'null']
         label:
           type: [string, 'null']
           maxLength: 120
@@ -3982,6 +4283,331 @@ components:
         notes:
           type: [string, 'null']
       required: [allocation_type, amount]
+
+    FundStatus:
+      type: string
+      enum: [active, archived]
+
+    FundType:
+      type: string
+      enum: [goal, emergency, buffer, debt, investment, other]
+
+    Fund:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        fund_type:
+          $ref: '#/components/schemas/FundType'
+        goal_amount:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        target_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        notes:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/FundStatus'
+        sort_order:
+          type: integer
+        current_balance:
+          $ref: '#/components/schemas/Money'
+        remaining_amount:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        percent_funded:
+          oneOf:
+            - $ref: '#/components/schemas/NullableDecimalString'
+        is_goal_met:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: [string, 'null']
+          format: date-time
+      required: [id, name, fund_type, goal_amount, target_month, notes, status, sort_order, current_balance, remaining_amount, percent_funded, is_goal_met, created_at, updated_at, archived_at]
+
+    FundEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        fund_id:
+          type: string
+        entry_date:
+          type: string
+          pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+        entry_type:
+          type: string
+          enum: [contribution, withdrawal, adjustment, starting_balance]
+        direction:
+          type: string
+          enum: [in, out]
+        amount:
+          $ref: '#/components/schemas/Money'
+        source_type:
+          type: string
+          enum: [manual, transaction, month_closeout, starting_balance, correction]
+        source_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        source_transaction_id:
+          type: [string, 'null']
+        source_closeout_id:
+          type: [string, 'null']
+        note:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, fund_id, entry_date, entry_type, direction, amount, source_type, source_month, source_transaction_id, source_closeout_id, note, created_at, updated_at]
+
+    FundDetail:
+      allOf:
+        - $ref: '#/components/schemas/Fund'
+        - type: object
+          properties:
+            source_breakdown:
+              type: object
+              properties:
+                month_closeout:
+                  $ref: '#/components/schemas/Money'
+                transaction:
+                  $ref: '#/components/schemas/Money'
+                manual:
+                  $ref: '#/components/schemas/Money'
+                starting_balance:
+                  $ref: '#/components/schemas/Money'
+                correction:
+                  $ref: '#/components/schemas/Money'
+              required: [month_closeout, transaction, manual, starting_balance, correction]
+            entries_count:
+              type: integer
+            recent_entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/FundEntry'
+          required: [source_breakdown, entries_count, recent_entries]
+
+    FundsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Fund'
+              - type: object
+                properties:
+                  entries_count:
+                    type: integer
+                required: [entries_count]
+      required: [items]
+
+    FundEntriesPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundEntry'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_items:
+          type: integer
+      required: [items, page, page_size, total_items]
+
+    CreateFundRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        fund_type:
+          $ref: '#/components/schemas/FundType'
+        goal_amount:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        target_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        notes:
+          type: [string, 'null']
+        starting_balance:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        sort_order:
+          type: integer
+      required: [name]
+
+    UpdateFundRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        fund_type:
+          $ref: '#/components/schemas/FundType'
+        goal_amount:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        target_month:
+          type: [string, 'null']
+          pattern: '^\\d{4}-\\d{2}$'
+        notes:
+          type: [string, 'null']
+        sort_order:
+          type: integer
+
+    CreateFundEntryTransactionDetails:
+      type: object
+      properties:
+        expense:
+          type: string
+          maxLength: 160
+        tag_id:
+          type: string
+        card_id:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+      required: [expense, tag_id, card_id, notes]
+
+    CreateFundEntryRequest:
+      type: object
+      properties:
+        entry_date:
+          type: string
+          pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+        entry_type:
+          type: string
+          enum: [contribution, withdrawal, adjustment, starting_balance]
+        direction:
+          type: string
+          enum: [in, out]
+        amount:
+          $ref: '#/components/schemas/Money'
+        source_type:
+          type: string
+          enum: [manual, transaction, starting_balance, correction]
+        note:
+          type: [string, 'null']
+        budget_tracking:
+          type: string
+          enum: [fund_only, create_transaction, link_existing_transaction]
+        transaction_id:
+          type: [string, 'null']
+        transaction:
+          oneOf:
+            - $ref: '#/components/schemas/CreateFundEntryTransactionDetails'
+            - type: 'null'
+      required: [entry_type, direction, amount, source_type]
+
+    UpdateFundEntryRequest:
+      type: object
+      properties:
+        entry_date:
+          type: string
+          pattern: '^\\d{4}-\\d{2}-\\d{2}$'
+        entry_type:
+          type: string
+          enum: [contribution, withdrawal, adjustment, starting_balance]
+        direction:
+          type: string
+          enum: [in, out]
+        amount:
+          $ref: '#/components/schemas/Money'
+        note:
+          type: [string, 'null']
+
+    FundCloseoutSummaryFund:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        fund_type:
+          $ref: '#/components/schemas/FundType'
+        goal_amount:
+          oneOf:
+            - $ref: '#/components/schemas/NullableMoney'
+        current_balance:
+          $ref: '#/components/schemas/Money'
+        percent_funded:
+          oneOf:
+            - $ref: '#/components/schemas/NullableDecimalString'
+      required: [id, name, fund_type, goal_amount, current_balance, percent_funded]
+
+    FundCloseoutSummaryFundRow:
+      type: object
+      properties:
+        fund:
+          $ref: '#/components/schemas/FundCloseoutSummaryFund'
+        closeout_contributed:
+          $ref: '#/components/schemas/Money'
+        closeout_count:
+          type: integer
+      required: [fund, closeout_contributed, closeout_count]
+
+    FundCloseoutSummaryMonth:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\\d{4}-\\d{2}$'
+        result_type:
+          $ref: '#/components/schemas/MonthCloseoutResultType'
+        surplus_amount:
+          $ref: '#/components/schemas/Money'
+        allocated_to_funds:
+          $ref: '#/components/schemas/Money'
+        unassigned_amount:
+          $ref: '#/components/schemas/Money'
+        fund_allocations:
+          type: array
+          items:
+            type: object
+            properties:
+              fund_id:
+                type: string
+              fund_name:
+                type: string
+              amount:
+                $ref: '#/components/schemas/Money'
+            required: [fund_id, fund_name, amount]
+      required: [month, result_type, surplus_amount, allocated_to_funds, unassigned_amount, fund_allocations]
+
+    FundCloseoutSummaryResponse:
+      type: object
+      properties:
+        year:
+          type: integer
+        total_closeout_contributed:
+          $ref: '#/components/schemas/Money'
+        funds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundCloseoutSummaryFundRow'
+        unassigned_closeout_total:
+          $ref: '#/components/schemas/Money'
+        months:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundCloseoutSummaryMonth'
+      required: [year, total_closeout_contributed, funds, unassigned_closeout_total, months]
 
     MonthCloseoutSaved:
       type: object

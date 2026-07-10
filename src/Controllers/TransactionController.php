@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
+use App\Funds\FundTransactionIntegrationService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
@@ -21,7 +22,8 @@ final class TransactionController
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthService $auth,
-        private readonly RecurringExpenseService $recurring
+        private readonly RecurringExpenseService $recurring,
+        private readonly FundTransactionIntegrationService $fundTransactionIntegrationService
     ) {
     }
 
@@ -287,6 +289,7 @@ SQL;
         $transactionId = $this->parseEntityId((string) ($params['transaction_id'] ?? ''), 'transaction_id');
 
         $existing = $this->fetchRawTransaction($ctx->userId(), $transactionId);
+        $linkedFundEntry = $this->fundTransactionIntegrationService->findActiveEntryByTransactionId($ctx->userId(), $transactionId);
         $payload = $request->json();
 
         $date = array_key_exists('date', $payload)
@@ -334,6 +337,17 @@ SQL;
             ':id' => $transactionId,
             ':user_id' => $ctx->userId(),
         ]);
+        if ($linkedFundEntry !== null) {
+            $this->fundTransactionIntegrationService->syncLinkedTransactionUpdate(
+                $ctx->userId(),
+                $existing,
+                $linkedFundEntry,
+                $date,
+                $amount,
+                $category,
+                $notes
+            );
+        }
 
         return Response::json($this->fetchTransaction($ctx->userId(), $transactionId));
     }
@@ -355,6 +369,12 @@ SQL;
         if ($stmt->rowCount() === 0) {
             throw new HttpException(404, 'NOT_FOUND', 'Transaction not found');
         }
+
+        $this->fundTransactionIntegrationService->voidLinkedTransactionDelete(
+            $ctx->userId(),
+            $transactionId,
+            gmdate('Y-m-d H:i:s')
+        );
 
         return Response::noContent();
     }

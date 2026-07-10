@@ -47,6 +47,18 @@
   - `POST /api/v1/me/transactions`
   - `PATCH /api/v1/me/transactions/{transaction_id}`
   - `DELETE /api/v1/me/transactions/{transaction_id}`
+- Fund flows:
+  - `GET /api/v1/me/funds`
+  - `POST /api/v1/me/funds`
+  - `GET /api/v1/me/funds/{fund_id}`
+  - `PATCH /api/v1/me/funds/{fund_id}`
+  - `POST /api/v1/me/funds/{fund_id}/archive`
+  - `POST /api/v1/me/funds/{fund_id}/restore`
+  - `GET /api/v1/me/funds/{fund_id}/entries`
+  - `POST /api/v1/me/funds/{fund_id}/entries`
+  - `PATCH /api/v1/me/funds/{fund_id}/entries/{entry_id}`
+  - `DELETE /api/v1/me/funds/{fund_id}/entries/{entry_id}`
+  - `GET /api/v1/me/funds/closeout-summary?year=YYYY`
 - CSV flows:
   - `GET /api/v1/me/transactions/export.csv`
   - `POST /api/v1/me/transactions/import.csv` (`mode=preview|dry_run|commit`, multipart with `file`; `mapping`, `date_strategy`, `category_strategy`, `tag_strategy`, and `amount_strategy` JSON for validation/commit)
@@ -58,6 +70,13 @@
   - `GET /api/v1/me/metrics/categories?month=YYYY-MM`
   - `GET /api/v1/me/dashboard?month=YYYY-MM` (deprecated)
   - `GET /api/v1/me/metrics/insights?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+
+## Funds notes
+
+- Funds are implemented as durable goals or envelopes backed by `fund_entries`, not a mutable balance field on `funds`.
+- Transaction-linked fund contributions create or link a real `savings` transaction and keep the linked fund entry in sync on transaction update or delete.
+- Closeout fund allocations create fund entries without creating synthetic transactions.
+- Replacing closeout allocations or reopening a closeout voids the old closeout-linked fund entries so active fund balances stay correct.
 
 ## Auth modes
 - Cookie session: `sid` cookie (`session_id.secret`)

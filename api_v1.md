@@ -1799,9 +1799,47 @@ Non-goals:
 - Rollover mutating future month budgets
 - Creating normal transactions from closeout allocations
 
-## 12) CSV Export
+Funds integration:
+- Surplus closeouts can allocate to `allocation_type: "fund"` with `fund_id`.
+- Fund-backed closeout allocations create fund ledger entries without creating synthetic transactions.
+- Replacing closeout allocations voids prior closeout-linked fund entries with `void_reason = allocation_replaced`.
+- Reopening a closeout voids active closeout-linked fund entries with `void_reason = closeout_reopened`.
 
-### 12.1 Export Transactions CSV
+## 12) Funds
+
+Purpose:
+- Funds are durable savings goals or envelopes.
+- Fund balances come from the `fund_entries` ledger, not a mutable total on the fund row.
+- Manual fund-only entries, transaction-linked entries, starting balances, corrections, and closeout-linked entries all contribute to fund progress through the same ledger model.
+
+Endpoints:
+- `GET /me/funds`
+- `POST /me/funds`
+- `GET /me/funds/{fund_id}`
+- `PATCH /me/funds/{fund_id}`
+- `POST /me/funds/{fund_id}/archive`
+- `POST /me/funds/{fund_id}/restore`
+- `GET /me/funds/{fund_id}/entries`
+- `POST /me/funds/{fund_id}/entries`
+- `PATCH /me/funds/{fund_id}/entries/{entry_id}`
+- `DELETE /me/funds/{fund_id}/entries/{entry_id}`
+- `GET /me/funds/closeout-summary?year=YYYY`
+
+Rules:
+- Funds are user-scoped and use public IDs like `fund_...` and `fent_...`.
+- Fund balances exclude entries where `deleted_at IS NOT NULL` or `voided_at IS NOT NULL`.
+- Archived funds remain readable and editable, but new entries and closeout allocations require an active fund.
+- Transaction-linked contributions require `category = savings`.
+- Direct edit or delete is rejected for closeout-linked and transaction-linked fund entries; those must be changed through the source workflow.
+
+Entry modes:
+- `budget_tracking = fund_only` creates a fund-only ledger entry and does not affect the monthly budget.
+- `budget_tracking = create_transaction` creates a real `savings` transaction and a linked fund entry in one DB transaction.
+- `budget_tracking = link_existing_transaction` links an existing qualifying `savings` transaction to a fund entry.
+
+## 13) CSV Export
+
+### 13.1 Export Transactions CSV
 `GET /me/transactions/export.csv`
 
 Supports the same filters as `GET /me/transactions`.
