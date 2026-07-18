@@ -1809,6 +1809,7 @@ Funds integration:
 
 Purpose:
 - Funds are durable savings goals or envelopes.
+- A Fund is a container for intentionally saved money. A goal is an optional property of a Fund and is determined by the presence of `goal_amount`.
 - Fund balances come from the `fund_entries` ledger, not a mutable total on the fund row.
 - Manual fund-only entries, transaction-linked entries, starting balances, corrections, and closeout-linked entries all contribute to fund progress through the same ledger model.
 
@@ -1827,6 +1828,8 @@ Endpoints:
 
 Rules:
 - Funds are user-scoped and use public IDs like `fund_...` and `fent_...`.
+- `fund_type` is a deprecated compatibility field and is no longer required for new clients.
+- `target_month` is only valid when `goal_amount` is present. Clearing `goal_amount` clears goal metadata without affecting balance or contribution history.
 - Fund balances exclude entries where `deleted_at IS NOT NULL` or `voided_at IS NOT NULL`.
 - Archived funds remain readable and editable, but new entries and closeout allocations require an active fund.
 - Transaction-linked contributions require `category = savings`.

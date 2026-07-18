@@ -51,8 +51,9 @@ final class FundService
         $fundType = $this->validatedFundType($payload['fund_type'] ?? 'goal');
         $goalAmount = $this->nullableMoney($payload['goal_amount'] ?? null, 'goal_amount');
         $targetMonthStart = $this->nullableMonthStart($payload['target_month'] ?? null, 'target_month');
+        $this->validateTargetMonthRequiresGoal($goalAmount, $targetMonthStart);
         $notes = $this->nullableString($payload['notes'] ?? null, 'notes');
-        $startingBalance = $this->nullableMoney($payload['starting_balance'] ?? null, 'starting_balance');
+        $startingBalance = $this->nullableNonNegativeMoney($payload['starting_balance'] ?? null, 'starting_balance');
         $sortOrder = array_key_exists('sort_order', $payload) ? $this->validatedSortOrder($payload['sort_order']) : 0;
 
         if ($this->repository->activeNameExists($userId, $name)) {
@@ -111,6 +112,10 @@ final class FundService
         $fundType = array_key_exists('fund_type', $payload) ? $this->validatedFundType($payload['fund_type']) : (string) $fund['fund_type'];
         $goalAmount = array_key_exists('goal_amount', $payload) ? $this->nullableMoney($payload['goal_amount'], 'goal_amount') : ($fund['goal_amount'] === null ? null : $this->fmt((string) $fund['goal_amount']));
         $targetMonthStart = array_key_exists('target_month', $payload) ? $this->nullableMonthStart($payload['target_month'], 'target_month') : ($fund['target_month'] === null ? null : (string) $fund['target_month']);
+        if (array_key_exists('goal_amount', $payload) && $goalAmount === null && !array_key_exists('target_month', $payload)) {
+            $targetMonthStart = null;
+        }
+        $this->validateTargetMonthRequiresGoal($goalAmount, $targetMonthStart);
         $notes = array_key_exists('notes', $payload) ? $this->nullableString($payload['notes'], 'notes') : ($fund['notes'] === null ? null : (string) $fund['notes']);
         $sortOrder = array_key_exists('sort_order', $payload) ? $this->validatedSortOrder($payload['sort_order']) : (int) $fund['sort_order'];
 
@@ -399,6 +404,15 @@ final class FundService
         return $value;
     }
 
+    private function validateTargetMonthRequiresGoal(?string $goalAmount, ?string $targetMonthStart): void
+    {
+        if ($goalAmount === null && $targetMonthStart !== null) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'target_month', 'message' => 'requires goal_amount'],
+            ]);
+        }
+    }
+
     private function validatedSourceType(mixed $value): string
     {
         if (!is_string($value) || !in_array($value, self::ALLOWED_SOURCE_TYPES, true)) {
@@ -484,6 +498,26 @@ final class FundService
         }
 
         return $this->validatedMoney($value, $field);
+    }
+
+    private function nullableNonNegativeMoney(mixed $value, string $field): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => $field, 'message' => 'must be a decimal amount'],
+            ]);
+        }
+        $string = trim((string) $value);
+        if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $string)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => $field, 'message' => 'must be a decimal amount with at most 2 decimal places'],
+            ]);
+        }
+
+        return $this->fmt($string);
     }
 
     private function validatedDate(mixed $value, string $field): string

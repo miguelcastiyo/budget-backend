@@ -74,6 +74,8 @@
 ## Funds notes
 
 - Funds are implemented as durable goals or envelopes backed by `fund_entries`, not a mutable balance field on `funds`.
+- A Fund is a container for intentionally saved money; a goal is optional and derived from `goal_amount`.
+- `fund_type` is a deprecated compatibility field. New clients can omit it, and `target_month` is only valid when `goal_amount` is present.
 - Transaction-linked fund contributions create or link a real `savings` transaction and keep the linked fund entry in sync on transaction update or delete.
 - Closeout fund allocations create fund entries without creating synthetic transactions.
 - Replacing closeout allocations or reopening a closeout voids the old closeout-linked fund entries so active fund balances stay correct.

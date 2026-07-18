@@ -1690,7 +1690,6 @@ assertSame('200.00', $closeoutList['items'][0]['allocated_amount'], 'list closeo
 
 $createdFund = $fundService->createFund(11, [
     'name' => 'Japan 2026',
-    'fund_type' => 'goal',
     'goal_amount' => '5000.00',
     'target_month' => $futureCloseoutMonth,
     'starting_balance' => '300.00',
@@ -1698,6 +1697,44 @@ $createdFund = $fundService->createFund(11, [
 assertSame('300.00', $createdFund['current_balance'], 'create fund stores starting balance as fund entry');
 assertSame('Japan 2026', $createdFund['name'], 'create fund stores name');
 assertSame(1, $createdFund['entries_count'], 'create fund exposes starting balance entry count');
+assertSame('goal', $createdFund['fund_type'], 'create fund keeps default internal fund type for compatibility');
+
+$openEndedFund = $fundService->createFund(11, [
+    'name' => 'Open Ended',
+    'starting_balance' => '25.00',
+]);
+assertSame(null, $openEndedFund['goal_amount'], 'create fund supports open-ended funds without goal amount');
+assertSame(null, $openEndedFund['target_month'], 'open-ended fund has no target month');
+
+$zeroStartingBalanceFund = $fundService->createFund(11, [
+    'name' => 'Zero Balance',
+    'starting_balance' => '0.00',
+]);
+assertSame('0.00', $zeroStartingBalanceFund['current_balance'], 'create fund accepts explicit zero starting balance');
+assertSame(0, $zeroStartingBalanceFund['entries_count'], 'zero starting balance does not create a ledger entry');
+
+expectHttpException(
+    fn() => $fundService->createFund(11, [
+        'name' => 'Invalid Target',
+        'target_month' => $futureCloseoutMonth,
+    ]),
+    422,
+    'VALIDATION_ERROR',
+    'create fund rejects target month without goal amount'
+);
+
+$goalRemovedFund = $fundService->updateFund(11, $createdFund['id'], [
+    'goal_amount' => null,
+]);
+assertSame(null, $goalRemovedFund['goal_amount'], 'update fund removes goal amount');
+assertSame(null, $goalRemovedFund['target_month'], 'update fund clears target month when removing goal');
+
+$createdFund = $fundService->updateFund(11, $createdFund['id'], [
+    'goal_amount' => '5000.00',
+    'target_month' => $futureCloseoutMonth,
+]);
+assertSame('5000.00', $createdFund['goal_amount'], 'update fund can restore goal amount');
+assertSame($futureCloseoutMonth, $createdFund['target_month'], 'update fund can restore target month with goal');
 
 $manualEntry = $fundService->createEntry(11, $createdFund['id'], [
     'entry_date' => $pastCloseoutMonth . '-15',

@@ -4300,8 +4300,10 @@ components:
         name:
           type: string
         fund_type:
+          description: Deprecated compatibility field. New UI derives goal-oriented presentation from goal_amount.
           $ref: '#/components/schemas/FundType'
         goal_amount:
+          description: Optional savings goal amount. Null means the Fund is open-ended; non-null values must be greater than 0.00.
           oneOf:
             - $ref: '#/components/schemas/NullableMoney'
         target_month:
@@ -4436,16 +4438,21 @@ components:
           type: string
           maxLength: 120
         fund_type:
+          description: Deprecated optional compatibility field. New clients should omit it.
+          deprecated: true
           $ref: '#/components/schemas/FundType'
         goal_amount:
+          description: Optional savings goal amount. Null means the Fund is open-ended; non-null values must be greater than 0.00.
           oneOf:
             - $ref: '#/components/schemas/NullableMoney'
         target_month:
+          description: Optional target month. Must be null or omitted when goal_amount is null.
           type: [string, 'null']
           pattern: '^\\d{4}-\\d{2}$'
         notes:
           type: [string, 'null']
         starting_balance:
+          description: Optional non-negative amount already set aside. Zero is accepted and does not create a ledger entry.
           oneOf:
             - $ref: '#/components/schemas/NullableMoney'
         sort_order:
@@ -4459,11 +4466,15 @@ components:
           type: string
           maxLength: 120
         fund_type:
+          description: Deprecated optional compatibility field. New clients should omit it.
+          deprecated: true
           $ref: '#/components/schemas/FundType'
         goal_amount:
+          description: Optional savings goal amount. Null removes goal behavior; non-null values must be greater than 0.00.
           oneOf:
             - $ref: '#/components/schemas/NullableMoney'
         target_month:
+          description: Optional target month. Must be null or omitted when goal_amount is null.
           type: [string, 'null']
           pattern: '^\\d{4}-\\d{2}$'
         notes:
@@ -4540,6 +4551,7 @@ components:
         name:
           type: string
         fund_type:
+          description: Deprecated compatibility field. New UI derives goal-oriented presentation from goal_amount.
           $ref: '#/components/schemas/FundType'
         goal_amount:
           oneOf:
