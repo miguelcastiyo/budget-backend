@@ -88,6 +88,7 @@ $pdo->exec('CREATE TABLE contexts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
+    icon_key TEXT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     deleted_at TEXT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
