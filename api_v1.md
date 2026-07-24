@@ -888,6 +888,7 @@ Generation behavior:
 - Rules are materialized into normal transactions once per month.
 - Generation is month-based (not due-date-triggered) so committed spend appears early in the dashboard.
 - Transaction date is set to the rule's billing date for that month.
+- `generated_for_month` indicates that the occurrence was materialized into the transaction ledger for the requested month. It does not indicate that the billing date has passed or that an external payment has posted.
 - Future months are not pre-generated.
 - Day clamp behavior:
   - `billing_type=day_of_month` with `billing_day=31` becomes the last valid day for shorter months.

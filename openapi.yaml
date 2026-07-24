@@ -2772,6 +2772,7 @@ components:
           type: boolean
         generated_for_month:
           type: boolean
+          description: Indicates that the recurring occurrence was materialized into the transaction ledger for the requested month; it does not indicate that the billing date has passed or that an external payment has posted.
         created_at:
           type: string
           format: date-time
