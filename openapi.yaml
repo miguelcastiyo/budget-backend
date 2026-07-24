@@ -2823,7 +2823,11 @@ components:
           type: string
         name:
           type: string
-      required: [id, name]
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
+      required: [id, name, icon_key]
 
     ContextsResponse:
       type: object
@@ -2841,6 +2845,10 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        icon_key:
+          anyOf:
+            - $ref: '#/components/schemas/TagIconKey'
+            - type: 'null'
       required: [name]
 
     UpdateCardRequest:
@@ -3290,6 +3298,10 @@ components:
                   type: string
                   minLength: 1
                   maxLength: 120
+                icon_key:
+                  anyOf:
+                    - $ref: '#/components/schemas/TagIconKey'
+                    - type: 'null'
               required: [name]
           required: [context]
 
@@ -3392,6 +3404,10 @@ components:
               type: string
               minLength: 1
               maxLength: 120
+            icon_key:
+              anyOf:
+                - $ref: '#/components/schemas/TagIconKey'
+                - type: 'null'
           required: [name]
 
     Transaction:

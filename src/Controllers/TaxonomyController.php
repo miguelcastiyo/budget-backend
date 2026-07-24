@@ -13,7 +13,7 @@ use PDOException;
 
 final class TaxonomyController
 {
-    private const ALLOWED_TAG_ICON_KEYS = [
+    private const ALLOWED_ICON_KEYS = [
         'home',
         'shopping_cart',
         'car',
@@ -166,7 +166,7 @@ final class TaxonomyController
     /** @return array<int,array<string,mixed>> */
     private function listByTable(string $table, int $userId): array
     {
-        $selectCols = $table === 'tags' ? 'id, name, icon_key' : 'id, name';
+        $selectCols = $this->tableSupportsIcons($table) ? 'id, name, icon_key' : 'id, name';
         $stmt = $this->pdo->prepare(
             "SELECT {$selectCols} FROM {$table} WHERE user_id = :user_id AND is_active = 1 AND deleted_at IS NULL ORDER BY name ASC"
         );
@@ -178,7 +178,7 @@ final class TaxonomyController
                 'id' => (string) $row['id'],
                 'name' => (string) $row['name'],
             ];
-            if ($table === 'tags') {
+            if ($this->tableSupportsIcons($table)) {
                 $item['icon_key'] = $row['icon_key'] === null ? null : (string) $row['icon_key'];
             }
             $items[] = $item;
@@ -285,11 +285,12 @@ final class TaxonomyController
     private function createInTable(string $table, int $userId, Request $request): array
     {
         $name = $this->validatedName($request);
-        $iconKey = $table === 'tags' ? $this->validatedTagIconKey($request) : null;
-        $iconFromPayload = $table === 'tags' && array_key_exists('icon_key', $request->json());
+        $supportsIcons = $this->tableSupportsIcons($table);
+        $iconKey = $supportsIcons ? $this->validatedIconKey($request) : null;
+        $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $request->json());
 
         $existingSelect = match ($table) {
-            'tags' => "SELECT id, is_active, deleted_at, icon_key FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
+            'tags', 'contexts' => "SELECT id, is_active, deleted_at, icon_key FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
             'cards' => "SELECT id, is_active, deleted_at, is_favorite FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
             default => "SELECT id, is_active, deleted_at FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
         };
@@ -305,7 +306,7 @@ final class TaxonomyController
                 throw new HttpException(409, 'CONFLICT', ucfirst(rtrim($table, 's')) . ' already exists');
             }
 
-            $reactivateSql = $table === 'tags'
+            $reactivateSql = $supportsIcons
                 ? "UPDATE {$table} SET is_active = 1, deleted_at = NULL, icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
                 : "UPDATE {$table} SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id";
             $reactivate = $this->pdo->prepare($reactivateSql);
@@ -313,7 +314,7 @@ final class TaxonomyController
                 ':id' => $existing['id'],
                 ':user_id' => $userId,
             ];
-            if ($table === 'tags') {
+            if ($supportsIcons) {
                 $reactivateParams[':icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] ?? null);
             }
             $reactivate->execute($reactivateParams);
@@ -322,7 +323,7 @@ final class TaxonomyController
                 'id' => (string) $existing['id'],
                 'name' => $name,
             ];
-            if ($table === 'tags') {
+            if ($supportsIcons) {
                 $response['icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] === null ? null : (string) $existing['icon_key']);
             } elseif ($table === 'cards') {
                 $response['is_favorite'] = ((int) ($existing['is_favorite'] ?? 0)) === 1;
@@ -333,7 +334,7 @@ final class TaxonomyController
 
         try {
             $stmt = $this->pdo->prepare(
-                $table === 'tags'
+                $supportsIcons
                     ? "INSERT INTO {$table} (user_id, name, icon_key, is_active) VALUES (:user_id, :name, :icon_key, 1)"
                     : "INSERT INTO {$table} (user_id, name, is_active) VALUES (:user_id, :name, 1)"
             );
@@ -341,7 +342,7 @@ final class TaxonomyController
                 ':user_id' => $userId,
                 ':name' => $name,
             ];
-            if ($table === 'tags') {
+            if ($supportsIcons) {
                 $insertParams[':icon_key'] = $iconKey;
             }
             $stmt->execute($insertParams);
@@ -356,7 +357,7 @@ final class TaxonomyController
             'id' => (string) $this->pdo->lastInsertId(),
             'name' => $name,
         ];
-        if ($table === 'tags') {
+        if ($supportsIcons) {
             $response['icon_key'] = $iconKey;
         } elseif ($table === 'cards') {
             $response['is_favorite'] = false;
@@ -370,11 +371,12 @@ final class TaxonomyController
     {
         $name = $this->validatedName($request);
         $payload = $request->json();
-        $iconFromPayload = $table === 'tags' && array_key_exists('icon_key', $payload);
-        $iconKey = $table === 'tags' && $iconFromPayload ? $this->validatedTagIconKey($request) : null;
+        $supportsIcons = $this->tableSupportsIcons($table);
+        $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $payload);
+        $iconKey = $supportsIcons && $iconFromPayload ? $this->validatedIconKey($request) : null;
 
         $exists = $this->pdo->prepare(
-            $table === 'tags'
+            $supportsIcons
                 ? "SELECT id, icon_key FROM {$table} WHERE id = :id AND user_id = :user_id AND is_active = 1 AND deleted_at IS NULL LIMIT 1"
                 : "SELECT id FROM {$table} WHERE id = :id AND user_id = :user_id AND is_active = 1 AND deleted_at IS NULL LIMIT 1"
         );
@@ -390,7 +392,7 @@ final class TaxonomyController
 
         try {
             $stmt = $this->pdo->prepare(
-                $table === 'tags'
+                $supportsIcons
                     ? "UPDATE {$table} SET name = :name, icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
                     : "UPDATE {$table} SET name = :name, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
             );
@@ -399,7 +401,7 @@ final class TaxonomyController
                 ':id' => $id,
                 ':user_id' => $userId,
             ];
-            if ($table === 'tags') {
+            if ($supportsIcons) {
                 $params[':icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] ?? null);
             }
             $stmt->execute($params);
@@ -414,7 +416,7 @@ final class TaxonomyController
             'id' => (string) $id,
             'name' => $name,
         ];
-        if ($table === 'tags') {
+        if ($supportsIcons) {
             $response['icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] === null ? null : (string) $existing['icon_key']);
         }
 
@@ -571,7 +573,7 @@ final class TaxonomyController
         return $value;
     }
 
-    private function validatedTagIconKey(Request $request): ?string
+    private function validatedIconKey(Request $request): ?string
     {
         $payload = $request->json();
 
@@ -590,13 +592,18 @@ final class TaxonomyController
             return null;
         }
 
-        if (!in_array($iconKey, self::ALLOWED_TAG_ICON_KEYS, true)) {
+        if (!in_array($iconKey, self::ALLOWED_ICON_KEYS, true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'icon_key', 'message' => 'unsupported icon key'],
             ]);
         }
 
         return $iconKey;
+    }
+
+    private function tableSupportsIcons(string $table): bool
+    {
+        return in_array($table, ['tags', 'contexts'], true);
     }
 
     private function parseEntityId(string $raw, string $field): int

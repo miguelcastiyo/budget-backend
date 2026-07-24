@@ -17,6 +17,12 @@ use PDOException;
 final class TransactionController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
+    private const ALLOWED_CONTEXT_ICON_KEYS = [
+        'home', 'shopping_cart', 'car', 'plane', 'receipt', 'coffee', 'smartphone',
+        'credit_card', 'piggy_bank', 'trending_up', 'briefcase', 'heart', 'dumbbell',
+        'book_open', 'film', 'gamepad', 'gift', 'shield', 'lightbulb', 'wrench',
+        'wallet', 'tag',
+    ];
     private const SUGGESTION_CANDIDATE_LIMIT = 300;
 
     public function __construct(
@@ -157,6 +163,7 @@ SELECT
   tg.icon_key AS tag_icon_key,
   cx.id AS context_id,
   cx.name AS context_name,
+  cx.icon_key AS context_icon_key,
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
@@ -448,6 +455,7 @@ SELECT
   tg.icon_key AS tag_icon_key,
   cx.id AS context_id,
   cx.name AS context_name,
+  cx.icon_key AS context_icon_key,
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
@@ -504,6 +512,7 @@ SQL;
                 : [
                     'id' => (string) $row['context_id'],
                     'name' => (string) $row['context_name'],
+                    'icon_key' => $row['context_icon_key'] === null ? null : (string) $row['context_icon_key'],
                 ],
             'card' => $row['card_id'] === null
                 ? null
@@ -841,7 +850,9 @@ SQL;
                     ['field' => 'context.name', 'message' => 'must be <= 120 characters'],
                 ]);
             }
-            return $this->findOrCreateContext($userId, $name);
+            $iconProvided = array_key_exists('icon_key', $payload['context']);
+            $iconKey = $iconProvided ? $this->validatedContextIconKey($payload['context']['icon_key']) : null;
+            return $this->findOrCreateContext($userId, $name, $iconKey, $iconProvided);
         }
 
         return null;
@@ -962,22 +973,33 @@ SQL;
         }
     }
 
-    private function findOrCreateContext(int $userId, string $name): int
+    private function findOrCreateContext(int $userId, string $name, ?string $iconKey = null, bool $iconProvided = false): int
     {
-        $select = $this->pdo->prepare('SELECT id, is_active, deleted_at FROM contexts WHERE user_id = :user_id AND name = :name LIMIT 1');
+        $select = $this->pdo->prepare('SELECT id, is_active, deleted_at, icon_key FROM contexts WHERE user_id = :user_id AND name = :name LIMIT 1');
         $select->execute([':user_id' => $userId, ':name' => $name]);
         $row = $select->fetch();
         if ($row) {
             if ((int) $row['is_active'] === 0 || $row['deleted_at'] !== null) {
-                $reactivate = $this->pdo->prepare('UPDATE contexts SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id');
-                $reactivate->execute([':id' => $row['id'], ':user_id' => $userId]);
+                $reactivate = $this->pdo->prepare(
+                    'UPDATE contexts SET is_active = 1, deleted_at = NULL, icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id'
+                );
+                $reactivate->execute([
+                    ':id' => $row['id'],
+                    ':user_id' => $userId,
+                    ':icon_key' => $iconProvided ? $iconKey : ($row['icon_key'] ?? null),
+                ]);
+            } elseif ($iconProvided) {
+                $updateIcon = $this->pdo->prepare(
+                    'UPDATE contexts SET icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id'
+                );
+                $updateIcon->execute([':id' => $row['id'], ':user_id' => $userId, ':icon_key' => $iconKey]);
             }
             return (int) $row['id'];
         }
 
         try {
-            $insert = $this->pdo->prepare('INSERT INTO contexts (user_id, name, is_active) VALUES (:user_id, :name, 1)');
-            $insert->execute([':user_id' => $userId, ':name' => $name]);
+            $insert = $this->pdo->prepare('INSERT INTO contexts (user_id, name, icon_key, is_active) VALUES (:user_id, :name, :icon_key, 1)');
+            $insert->execute([':user_id' => $userId, ':name' => $name, ':icon_key' => $iconKey]);
             return (int) $this->pdo->lastInsertId();
         } catch (PDOException $e) {
             if (($e->errorInfo[0] ?? '') === '23000') {
@@ -985,6 +1007,28 @@ SQL;
             }
             throw $e;
         }
+    }
+
+    private function validatedContextIconKey(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (!is_string($value)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'context.icon_key', 'message' => 'must be a string or null'],
+            ]);
+        }
+
+        $iconKey = trim($value);
+        if ($iconKey === '' || in_array($iconKey, self::ALLOWED_CONTEXT_ICON_KEYS, true)) {
+            return $iconKey === '' ? null : $iconKey;
+        }
+
+        throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+            ['field' => 'context.icon_key', 'message' => 'unsupported icon key'],
+        ]);
     }
 
     /** @param array<string,mixed> $query */

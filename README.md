@@ -278,6 +278,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Backend server errors use structured JSON logs and can send optional webhook alerts when `ERROR_ALERT_WEBHOOK_URL` is configured.
 - In local development with `MAIL_TRANSPORT=log`, check `storage/mail.log` for invite tokens and verification codes.
 - Tag payloads/responses include optional `icon_key` (`null` allowed) with an allow-list enforced by backend validation.
+- Context payloads/responses include the same optional `icon_key` (`null` allowed), allow-list, and name-based fallback behavior as tags.
 - Transaction payloads/responses include `is_split` (boolean, default `false`); list/export support `is_split=split|not_split`.
 - `GET /me/transactions` returns paginated rows plus `summary` aggregates for the full filtered result set so clients do not need to load every page for stats.
 - Google sign-in/accept stores Google `picture` claim into `users.avatar_url` when available, and returns `avatar_url` on auth + `/me` responses.
