@@ -1552,6 +1552,7 @@ Response:
       "is_split": false,
       "tag": { "id": "12", "name": "Groceries", "icon_key": "shopping_cart" },
       "card": { "id": "4", "name": "Chase Sapphire" },
+      "context": { "id": "7", "name": "Chicago 2/26", "icon_key": "map_pinned" },
       "created_at": "2026-03-25T20:14:00Z",
       "updated_at": "2026-03-25T20:14:00Z"
     }

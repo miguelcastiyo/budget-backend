@@ -315,12 +315,16 @@ SELECT
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
+  cx.id AS context_id,
+  cx.name AS context_name,
+  cx.icon_key AS context_icon_key,
   reo.recurring_expense_id,
   t.created_at,
   t.updated_at
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
 LEFT JOIN (
   SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
   FROM recurring_expense_occurrences
@@ -363,6 +367,13 @@ SQL;
                         'id' => (string) $row['card_id'],
                         'name' => (string) $row['card_name'],
                         'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
+                    ],
+                'context' => $row['context_id'] === null
+                    ? null
+                    : [
+                        'id' => (string) $row['context_id'],
+                        'name' => (string) $row['context_name'],
+                        'icon_key' => $row['context_icon_key'] === null ? null : (string) $row['context_icon_key'],
                     ],
                 'created_at' => $this->formatTimestamp((string) $row['created_at']),
                 'updated_at' => $this->formatTimestamp((string) $row['updated_at']),

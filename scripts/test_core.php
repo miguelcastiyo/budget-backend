@@ -338,6 +338,15 @@ $overviewPdo->exec('CREATE TABLE cards (
     deleted_at TEXT NULL,
     updated_at TEXT NOT NULL
 )');
+$overviewPdo->exec('CREATE TABLE contexts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    icon_key TEXT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    updated_at TEXT NOT NULL
+)');
 $overviewPdo->exec('CREATE TABLE transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -349,6 +358,7 @@ $overviewPdo->exec('CREATE TABLE transactions (
     notes TEXT NULL,
     tag_id INTEGER NOT NULL,
     card_id INTEGER NULL,
+    context_id INTEGER NULL,
     source TEXT NOT NULL DEFAULT "manual",
     recurring_expense_id INTEGER NULL,
     deleted_at TEXT NULL,
@@ -409,6 +419,13 @@ $overviewPdo->prepare('INSERT INTO master_api_keys (key_id, user_id, name, key_p
         ':key_id' => 'mak_test',
         ':key_hash' => Str::hashSha256($apiKey),
     ]);
+$overviewPdo->prepare('INSERT INTO contexts (user_id, name, icon_key, is_active, deleted_at, updated_at) VALUES (1, :name, :icon_key, 1, NULL, :updated_at)')
+    ->execute([
+        ':name' => 'Chicago 2/26',
+        ':icon_key' => 'map_pinned',
+        ':updated_at' => '2026-06-01T00:00:00Z',
+    ]);
+$overviewContextId = (int) $overviewPdo->lastInsertId();
 
 $insertTag = static function (int $userId, string $name, string $iconKey) use ($overviewPdo): int {
     $stmt = $overviewPdo->prepare('INSERT INTO tags (user_id, name, icon_key, is_active, deleted_at, updated_at) VALUES (:user_id, :name, :icon_key, 1, NULL, :updated_at)');
@@ -430,9 +447,10 @@ $insertTransaction = static function (
     string $category,
     int $tagId,
     ?int $cardId = null,
-    string $source = 'manual'
+    string $source = 'manual',
+    ?int $contextId = null
 ) use ($overviewPdo): int {
-    $stmt = $overviewPdo->prepare('INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, source, recurring_expense_id, deleted_at, created_at, updated_at) VALUES (:user_id, :transaction_date, :expense, :amount, :category, 0, NULL, :tag_id, :card_id, :source, NULL, NULL, :created_at, :updated_at)');
+    $stmt = $overviewPdo->prepare('INSERT INTO transactions (user_id, transaction_date, expense, amount, category, is_split, notes, tag_id, card_id, context_id, source, recurring_expense_id, deleted_at, created_at, updated_at) VALUES (:user_id, :transaction_date, :expense, :amount, :category, 0, NULL, :tag_id, :card_id, :context_id, :source, NULL, NULL, :created_at, :updated_at)');
     $stmt->execute([
         ':user_id' => $userId,
         ':transaction_date' => $date,
@@ -441,6 +459,7 @@ $insertTransaction = static function (
         ':category' => $category,
         ':tag_id' => $tagId,
         ':card_id' => $cardId,
+        ':context_id' => $contextId,
         ':source' => $source,
         ':created_at' => $date . 'T12:00:00Z',
         ':updated_at' => $date . 'T12:00:00Z',
@@ -495,7 +514,7 @@ $insertVersion(1, $currentMonth . '-01', '1000.00', 'amount', null, null, null, 
 
 $currentTx1 = $insertTransaction(1, $currentMonth . '-01', 'Groceries', '400.00', 'needs', $needsTag);
 $currentTx2 = $insertTransaction(1, $currentMonth . '-02', 'Utilities', '100.00', 'needs', $needsTag);
-$currentTx3 = $insertTransaction(1, $currentMonth . '-03', 'Dining Out', '250.00', 'wants', $wantsTag);
+$currentTx3 = $insertTransaction(1, $currentMonth . '-03', 'Dining Out', '250.00', 'wants', $wantsTag, null, 'manual', $overviewContextId);
 $currentTx4 = $insertTransaction(1, $currentMonth . '-04', 'Shopping', '100.00', 'wants', $wantsTag);
 $currentTx5 = $insertTransaction(1, $currentMonth . '-05', 'Emergency Fund', '50.00', 'savings', $savingsTag);
 $currentTx6 = $insertTransaction(1, $currentMonth . '-06', 'Rainy Day', '10.00', 'savings', $savingsTag);
@@ -559,6 +578,11 @@ assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview
 assertSame('90.00', $currentOverview['summary']['left_this_month'], 'month overview totals remaining');
 assertSame('91.00', $currentOverview['summary']['percent_spent'], 'month overview totals percent spent');
 assertSame('current', $currentOverview['month_progress']['status'], 'month overview current month status');
+$overviewContextTransaction = array_values(array_filter(
+    $currentOverview['recent_transactions'],
+    static fn(array $item): bool => $item['id'] === (string) $currentTx3
+))[0] ?? null;
+assertSame('Chicago 2/26', $overviewContextTransaction['context']['name'] ?? null, 'month overview recent transactions include context');
 $currentDaysRemaining = $currentMonthDays - $currentDaysElapsed;
 $currentPercentElapsed = number_format(($currentDaysElapsed / $currentMonthDays) * 100.0, 2, '.', '');
 $currentDailyAvailable = number_format(90.0 / max($currentDaysRemaining, 1), 2, '.', '');
