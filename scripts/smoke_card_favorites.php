@@ -84,6 +84,16 @@ $pdo->exec('CREATE TABLE funds (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )');
+$pdo->exec('CREATE TABLE contexts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)');
+$pdo->exec('CREATE UNIQUE INDEX uq_contexts_user_name ON contexts (user_id, name)');
 $pdo->exec('CREATE TABLE fund_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fund_entry_id TEXT NOT NULL,
@@ -114,6 +124,7 @@ $pdo->exec('CREATE TABLE transactions (
     is_split INTEGER NOT NULL DEFAULT 0,
     notes TEXT NULL,
     tag_id INTEGER NOT NULL,
+    context_id INTEGER NULL,
     card_id INTEGER NULL,
     source TEXT NOT NULL DEFAULT "manual",
     recurring_expense_id INTEGER NULL,

@@ -155,6 +155,11 @@ final class App
         $add('PATCH', '/me/cards/{card_id}', fn(Request $request, array $params) => $taxonomyController->updateCard($request, $params));
         $add('DELETE', '/me/cards/{card_id}', fn(Request $request, array $params) => $taxonomyController->deleteCard($request, $params));
 
+        $add('GET', '/me/contexts', fn(Request $request) => $taxonomyController->listContexts($request));
+        $add('POST', '/me/contexts', fn(Request $request) => $taxonomyController->createContext($request));
+        $add('PATCH', '/me/contexts/{context_id}', fn(Request $request, array $params) => $taxonomyController->updateContext($request, $params));
+        $add('DELETE', '/me/contexts/{context_id}', fn(Request $request, array $params) => $taxonomyController->deleteContext($request, $params));
+
         $add('GET', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->list($request));
         $add('POST', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->create($request));
         $add('GET', '/me/recurring-expenses/{recurring_expense_id}/series', fn(Request $request, array $params) => $recurringExpenseController->series($request, $params));

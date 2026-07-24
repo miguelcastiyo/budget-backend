@@ -134,6 +134,35 @@ final class TaxonomyController
         return Response::noContent();
     }
 
+    public function listContexts(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        return Response::json(['items' => $this->listByTable('contexts', $ctx->userId())]);
+    }
+
+    public function createContext(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        return Response::json($this->createInTable('contexts', $ctx->userId(), $request), 201);
+    }
+
+    /** @param array{context_id:string} $params */
+    public function updateContext(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $id = $this->parseEntityId($params['context_id'] ?? '', 'context_id');
+        return Response::json($this->updateInTable('contexts', $ctx->userId(), $id, $request));
+    }
+
+    /** @param array{context_id:string} $params */
+    public function deleteContext(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $id = $this->parseEntityId($params['context_id'] ?? '', 'context_id');
+        $this->softDeleteInTable('contexts', $ctx->userId(), $id);
+        return Response::noContent();
+    }
+
     /** @return array<int,array<string,mixed>> */
     private function listByTable(string $table, int $userId): array
     {
@@ -259,11 +288,12 @@ final class TaxonomyController
         $iconKey = $table === 'tags' ? $this->validatedTagIconKey($request) : null;
         $iconFromPayload = $table === 'tags' && array_key_exists('icon_key', $request->json());
 
-        $existingStmt = $this->pdo->prepare(
-            $table === 'tags'
-                ? "SELECT id, is_active, deleted_at, icon_key FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1"
-                : "SELECT id, is_active, deleted_at, is_favorite FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1"
-        );
+        $existingSelect = match ($table) {
+            'tags' => "SELECT id, is_active, deleted_at, icon_key FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
+            'cards' => "SELECT id, is_active, deleted_at, is_favorite FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
+            default => "SELECT id, is_active, deleted_at FROM {$table} WHERE user_id = :user_id AND name = :name LIMIT 1",
+        };
+        $existingStmt = $this->pdo->prepare($existingSelect);
         $existingStmt->execute([
             ':user_id' => $userId,
             ':name' => $name,
@@ -275,11 +305,10 @@ final class TaxonomyController
                 throw new HttpException(409, 'CONFLICT', ucfirst(rtrim($table, 's')) . ' already exists');
             }
 
-            $reactivate = $this->pdo->prepare(
-                $table === 'tags'
-                    ? "UPDATE {$table} SET is_active = 1, deleted_at = NULL, icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
-                    : "UPDATE {$table} SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
-            );
+            $reactivateSql = $table === 'tags'
+                ? "UPDATE {$table} SET is_active = 1, deleted_at = NULL, icon_key = :icon_key, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id"
+                : "UPDATE {$table} SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id";
+            $reactivate = $this->pdo->prepare($reactivateSql);
             $reactivateParams = [
                 ':id' => $existing['id'],
                 ':user_id' => $userId,
@@ -295,7 +324,7 @@ final class TaxonomyController
             ];
             if ($table === 'tags') {
                 $response['icon_key'] = $iconFromPayload ? $iconKey : ($existing['icon_key'] === null ? null : (string) $existing['icon_key']);
-            } else {
+            } elseif ($table === 'cards') {
                 $response['is_favorite'] = ((int) ($existing['is_favorite'] ?? 0)) === 1;
             }
 
@@ -329,7 +358,7 @@ final class TaxonomyController
         ];
         if ($table === 'tags') {
             $response['icon_key'] = $iconKey;
-        } else {
+        } elseif ($table === 'cards') {
             $response['is_favorite'] = false;
         }
 

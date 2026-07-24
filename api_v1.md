@@ -880,7 +880,33 @@ Rules:
 - Favoriting one card clears favorite status from any other active favorite card for that user.
 - Clearing favorite uses `is_favorite: false` on the target card.
 
-## 7) Recurring Expenses
+## 7) Contexts
+
+Contexts are optional, user-owned transaction dimensions such as `Chicago 2/26` or `New Apartment`. They are independent of categories, tags, and cards.
+
+### 7.1 List Contexts
+`GET /me/contexts`
+
+Returns active, non-deleted contexts ordered by name.
+
+### 7.2 Create Context
+`POST /me/contexts`
+
+Request: `{ "name": "Chicago 2/26" }`
+
+Names are trimmed, required, limited to 120 characters, and unique per user. Creating a previously deleted name reactivates the same row; an active duplicate returns `409 CONFLICT`.
+
+### 7.3 Update Context
+`PATCH /me/contexts/{context_id}`
+
+Only renaming is supported. The context must belong to the authenticated user and be active.
+
+### 7.4 Delete Context
+`DELETE /me/contexts/{context_id}`
+
+Deletion is soft; existing transaction relationships remain available for historical responses.
+
+## 8) Recurring Expenses
 
 Recurring rules are used for committed monthly expenses (rent, subscriptions, insurance, etc.).
 
@@ -1114,7 +1140,7 @@ Rules:
 - `seed_transaction_id` is optional and can link the current month occurrence to an already-created transaction to avoid duplicates.
 - `series_id` groups multiple versions of the same commitment.
 
-## 8) Budget Settings (Monthly Income + 3 Buckets)
+## 9) Budget Settings (Monthly Income + 3 Buckets)
 
 ### 8.1 Get Budget Settings
 `GET /me/budget-settings`
@@ -1259,7 +1285,7 @@ Notes:
 - The last version in the timeline uses `null` for `applies_until_month`.
 - `resolved_amounts` is always present for frontend convenience.
 
-## 9) Transactions (Expenses)
+## 10) Transactions (Expenses)
 
 `transaction` fields:
 - `id`
@@ -1269,6 +1295,7 @@ Notes:
 - `category` (required enum)
 - `is_split` (optional boolean, default `false`)
 - `tag_id` (required)
+- `context_id` (optional)
 - `card_id` (optional)
 - `notes` (`string | null`, optional on write, always present on read)
 - `created_at`, `updated_at`
@@ -1285,6 +1312,7 @@ Request (existing tag/card):
   "category": "needs",
   "is_split": false,
   "tag_id": "12",
+  "context_id": "7",
   "card_id": "4",
   "notes": "Bought snacks for movie night"
 }
@@ -1306,9 +1334,11 @@ Request (Notion-style inline create for tag and optional card):
 Rules:
 - `tag_id` or `tag.name` required.
 - `card_id` or `card.name` optional.
+- `context_id` or `context.name` optional; these forms are mutually exclusive.
 - `notes` accepts `string`, `null`, or blank string. Blank and whitespace-only values are stored as `null`.
 - `notes` is trimmed and must be 255 characters or fewer.
 - When inline name does not exist, backend creates it and links it.
+- Inline Context creation reactivates a matching deleted Context and is atomic with the transaction write.
 
 ### 9.2 Update Transaction
 `PATCH /me/transactions/{transaction_id}`
@@ -1330,6 +1360,7 @@ Query params:
 - `categories=needs,wants`
 - `tag_ids=1,2`
 - `card_ids=1,4`
+- `context_ids=7,12`
 - `is_split=split|not_split`
 - `page=1`
 - `page_size=50`
@@ -1340,7 +1371,7 @@ Rules:
 - Preset and custom range cannot be used together.
 - Filters are AND-ed together.
 - Within one filter type, values are OR-ed.
-- `q` matches `expense`, `tag.name`, and `card.name`.
+- `q` matches `expense`, `tag.name`, `context.name`, and `card.name`.
 - `summary` is calculated across the full filtered result set, not just the returned page.
 
 Response `200`:
@@ -1356,6 +1387,7 @@ Response `200`:
       "is_split": false,
       "notes": null,
       "tag": { "id": "12", "name": "Groceries" },
+      "context": { "id": "7", "name": "Chicago 2/26" },
       "card": { "id": "4", "name": "Chase Sapphire" }
     }
   ],
@@ -1410,7 +1442,7 @@ Response `200`:
 }
 ```
 
-## 10) Metrics
+## 11) Metrics
 
 `GET /me/months/{month}/overview` is the primary endpoint for the homepage/month overview UI.
 The older monthly metrics endpoints below remain available for compatibility but are deprecated for new frontend work.
@@ -1670,7 +1702,7 @@ Response:
 }
 ```
 
-## 11) Month Closeouts
+## 12) Month Closeouts
 
 Purpose:
 - Month closeouts compare the resolved budget plan for a month against actual recorded transactions.
@@ -1806,7 +1838,7 @@ Funds integration:
 - Replacing closeout allocations voids prior closeout-linked fund entries with `void_reason = allocation_replaced`.
 - Reopening a closeout voids active closeout-linked fund entries with `void_reason = closeout_reopened`.
 
-## 12) Funds
+## 13) Funds
 
 Purpose:
 - Funds are durable savings goals or envelopes.
@@ -1841,7 +1873,7 @@ Entry modes:
 - `budget_tracking = create_transaction` creates a real `savings` transaction and a linked fund entry in one DB transaction.
 - `budget_tracking = link_existing_transaction` links an existing qualifying `savings` transaction to a fund entry.
 
-## 13) CSV Export
+## 14) CSV Export
 
 ### 13.1 Export Transactions CSV
 `GET /me/transactions/export.csv`
@@ -1860,7 +1892,7 @@ Examples:
 Response:
 - `200 text/csv` file download.
 
-## 13) CSV Import
+## 14) CSV Import
 
 ### 13.1 Import Transactions CSV
 `POST /me/transactions/import.csv`
@@ -2035,7 +2067,7 @@ Dry-run/commit response `200`:
 }
 ```
 
-## 13) Data Runs
+## 14) Data Runs
 
 ### 13.1 List Recent Data Runs
 `GET /me/data-runs?limit=50`
@@ -2115,7 +2147,7 @@ Response `200`:
 }
 ```
 
-## 14) Standard Errors
+## 15) Standard Errors
 
 Error shape:
 ```json
@@ -2139,7 +2171,7 @@ Common codes:
 - `RATE_LIMITED` (`429`)
 - `INTERNAL_ERROR` (`500`)
 
-## 15) Rate Limits
+## 16) Rate Limits
 
 Rate limited endpoints return `429 RATE_LIMITED`.
 
@@ -2170,7 +2202,7 @@ Sensitive authenticated flows are limited by credential/session identity plus a 
 
 Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in `.env.example`.
 
-## 16) Authorization Rules
+## 17) Authorization Rules
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
@@ -2178,7 +2210,7 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 - Only owner/admin can list audit logs.
 - Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 
-## 16) Non-Goals (v1)
+## 17) Non-Goals (v1)
 - Public self-signup
 - Bank aggregation integrations
 - Shared household budgets

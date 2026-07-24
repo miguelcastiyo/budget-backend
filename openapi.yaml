@@ -18,6 +18,7 @@ tags:
   - name: AuditLogs
   - name: Tags
   - name: Cards
+  - name: Contexts
   - name: Recurring
   - name: BudgetSettings
   - name: Transactions
@@ -858,6 +859,92 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
+  /me/contexts:
+    get:
+      tags: [Contexts]
+      summary: List contexts
+      responses:
+        '200':
+          description: Active contexts ordered by name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Contexts]
+      summary: Create or reactivate a context
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContextRequest'
+      responses:
+        '201':
+          description: Context created or reactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Context'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/contexts/{context_id}:
+    patch:
+      tags: [Contexts]
+      summary: Rename context
+      parameters:
+        - $ref: '#/components/parameters/ContextId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContextRequest'
+      responses:
+        '200':
+          description: Context updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Context'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Contexts]
+      summary: Soft delete context
+      parameters:
+        - $ref: '#/components/parameters/ContextId'
+        - $ref: '#/components/parameters/XCsrfToken'
+      responses:
+        '204':
+          description: Context deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /me/recurring-expenses:
     get:
       tags: [Recurring]
@@ -1078,6 +1165,7 @@ paths:
         - $ref: '#/components/parameters/Categories'
         - $ref: '#/components/parameters/TagIds'
         - $ref: '#/components/parameters/CardIds'
+        - $ref: '#/components/parameters/ContextIds'
         - $ref: '#/components/parameters/IsSplit'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -1872,6 +1960,12 @@ components:
       required: true
       schema:
         type: string
+    ContextId:
+      name: context_id
+      in: path
+      required: true
+      schema:
+        type: string
     FundId:
       name: fund_id
       in: path
@@ -1958,7 +2052,7 @@ components:
       schema:
         type: string
         maxLength: 120
-      description: Case-insensitive substring match against expense, tag name, and card name.
+      description: Case-insensitive substring match against expense, tag name, context name, and card name.
     Categories:
       name: categories
       in: query
@@ -1980,6 +2074,13 @@ components:
       schema:
         type: string
       description: Comma-separated card IDs.
+    ContextIds:
+      name: context_ids
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Comma-separated Context IDs.
     IsSplit:
       name: is_split
       in: query
@@ -2715,6 +2816,33 @@ components:
           type: boolean
       required: [id, name, is_favorite]
 
+    Context:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required: [id, name]
+
+    ContextsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Context'
+      required: [items]
+
+    CreateContextRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [name]
+
     UpdateCardRequest:
       type: object
       properties:
@@ -3144,6 +3272,27 @@ components:
               required: [name]
           required: [card]
 
+    TransactionRefContext:
+      oneOf:
+        - type: object
+          properties:
+            context_id:
+              anyOf:
+                - type: string
+                - type: 'null'
+          required: [context_id]
+        - type: object
+          properties:
+            context:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+              required: [name]
+          required: [context]
+
     CreateTransactionRequest:
       allOf:
         - type: object
@@ -3170,6 +3319,16 @@ components:
         - $ref: '#/components/schemas/TransactionRefTag'
         - type: object
           properties:
+            context_id:
+              type: string
+            context:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+              required: [name]
             card_id:
               type: string
             card:
@@ -3222,6 +3381,18 @@ components:
               minLength: 1
               maxLength: 120
           required: [name]
+        context_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        context:
+          type: object
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 120
+          required: [name]
 
     Transaction:
       type: object
@@ -3248,6 +3419,10 @@ components:
         card:
           anyOf:
             - $ref: '#/components/schemas/Card'
+            - type: 'null'
+        context:
+          anyOf:
+            - $ref: '#/components/schemas/Context'
             - type: 'null'
         created_at:
           type: string

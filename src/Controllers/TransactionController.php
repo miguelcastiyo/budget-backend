@@ -77,6 +77,17 @@ final class TransactionController
             $where[] = 't.card_id IN (' . implode(', ', $holders) . ')';
         }
 
+        $contextIds = $this->parseIdCsv((string) ($query['context_ids'] ?? ''), 'context_ids');
+        if ($contextIds !== []) {
+            $holders = [];
+            foreach ($contextIds as $i => $id) {
+                $key = ':context_' . $i;
+                $holders[] = $key;
+                $params[$key] = $id;
+            }
+            $where[] = 't.context_id IN (' . implode(', ', $holders) . ')';
+        }
+
         $splitFilter = $this->parseSplitFilter($query['is_split'] ?? null, 'is_split');
         if ($splitFilter !== null) {
             $where[] = 't.is_split = :is_split';
@@ -85,9 +96,10 @@ final class TransactionController
 
         $searchQuery = $this->validatedSearchQuery($query['q'] ?? null, 'q');
         if ($searchQuery !== null) {
-            $where[] = '(LOWER(t.expense) LIKE :search_expense_query OR LOWER(tg.name) LIKE :search_tag_query OR LOWER(COALESCE(c.name, \'\')) LIKE :search_card_query)';
+            $where[] = '(LOWER(t.expense) LIKE :search_expense_query OR LOWER(tg.name) LIKE :search_tag_query OR LOWER(COALESCE(cx.name, \'\')) LIKE :search_context_query OR LOWER(COALESCE(c.name, \'\')) LIKE :search_card_query)';
             $params[':search_expense_query'] = '%' . $searchQuery . '%';
             $params[':search_tag_query'] = '%' . $searchQuery . '%';
+            $params[':search_context_query'] = '%' . $searchQuery . '%';
             $params[':search_card_query'] = '%' . $searchQuery . '%';
         }
 
@@ -119,6 +131,7 @@ final class TransactionController
              FROM transactions t
              JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
              LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+             LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
              WHERE ' . $whereSql
         );
         foreach ($params as $k => $v) {
@@ -142,6 +155,8 @@ SELECT
   tg.id AS tag_id,
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
+  cx.id AS context_id,
+  cx.name AS context_name,
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
@@ -151,6 +166,7 @@ SELECT
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
 LEFT JOIN (
   SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
   FROM recurring_expense_occurrences
@@ -199,7 +215,10 @@ SQL;
         $amount = $this->validatedMoney($payload['amount'] ?? null, 'amount');
         $category = $this->validatedCategory($payload['category'] ?? null);
         $tagId = $this->resolveTagIdFromPayload($payload, $ctx->userId(), required: true);
-        $cardId = $this->resolveCardIdFromPayload($payload, $ctx->userId(), required: false, allowClear: false);
+        $this->pdo->beginTransaction();
+        try {
+            $contextId = $this->resolveContextIdFromPayload($payload, $ctx->userId(), allowClear: false);
+            $cardId = $this->resolveCardIdFromPayload($payload, $ctx->userId(), required: false, allowClear: false);
         $isSplit = array_key_exists('is_split', $payload)
             ? $this->validatedBoolean($payload['is_split'], 'is_split')
             : false;
@@ -207,22 +226,31 @@ SQL;
             ? TransactionNotes::normalize($payload['notes'])
             : null;
 
-        $stmt = $this->pdo->prepare(
-            "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, card_id, is_split, notes, source) VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :card_id, :is_split, :notes, 'manual')"
-        );
-        $stmt->execute([
+            $stmt = $this->pdo->prepare(
+                "INSERT INTO transactions (user_id, transaction_date, expense, amount, category, tag_id, context_id, card_id, is_split, notes, source) VALUES (:user_id, :transaction_date, :expense, :amount, :category, :tag_id, :context_id, :card_id, :is_split, :notes, 'manual')"
+            );
+            $stmt->execute([
             ':user_id' => $ctx->userId(),
             ':transaction_date' => $date,
             ':expense' => $expense,
             ':amount' => $amount,
             ':category' => $category,
             ':tag_id' => $tagId,
-            ':card_id' => $cardId,
+            ':context_id' => $contextId,
+                ':card_id' => $cardId,
             ':is_split' => $isSplit ? 1 : 0,
-            ':notes' => $notes,
-        ]);
+                ':notes' => $notes,
+            ]);
+            $transactionId = (int) $this->pdo->lastInsertId();
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
 
-        return Response::json($this->fetchTransaction($ctx->userId(), (int) $this->pdo->lastInsertId()), 201);
+        return Response::json($this->fetchTransaction($ctx->userId(), $transactionId), 201);
     }
 
     public function suggestions(Request $request): Response
@@ -315,6 +343,9 @@ SQL;
         $cardId = (array_key_exists('card_id', $payload) || array_key_exists('card', $payload))
             ? $this->resolveCardIdFromPayload($payload, $ctx->userId(), required: false, allowClear: true)
             : ($existing['card_id'] === null ? null : (int) $existing['card_id']);
+        $contextId = (array_key_exists('context_id', $payload) || array_key_exists('context', $payload))
+            ? $this->resolveContextIdFromPayload($payload, $ctx->userId(), allowClear: true)
+            : ($existing['context_id'] === null ? null : (int) $existing['context_id']);
         $isSplit = array_key_exists('is_split', $payload)
             ? $this->validatedBoolean($payload['is_split'], 'is_split')
             : ((int) $existing['is_split'] === 1);
@@ -323,7 +354,7 @@ SQL;
             : ($existing['notes'] === null ? null : (string) $existing['notes']);
 
         $stmt = $this->pdo->prepare(
-            'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, card_id = :card_id, is_split = :is_split, notes = :notes, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
+            'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, context_id = :context_id, card_id = :card_id, is_split = :is_split, notes = :notes, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
         );
         $stmt->execute([
             ':transaction_date' => $date,
@@ -331,6 +362,7 @@ SQL;
             ':amount' => $amount,
             ':category' => $category,
             ':tag_id' => $tagId,
+            ':context_id' => $contextId,
             ':card_id' => $cardId,
             ':is_split' => $isSplit ? 1 : 0,
             ':notes' => $notes,
@@ -383,7 +415,7 @@ SQL;
     private function fetchRawTransaction(int $userId, int $transactionId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, transaction_date, expense, amount, category, tag_id, card_id, is_split, notes FROM transactions WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL LIMIT 1'
+            'SELECT id, transaction_date, expense, amount, category, tag_id, context_id, card_id, is_split, notes FROM transactions WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([
             ':id' => $transactionId,
@@ -414,6 +446,8 @@ SELECT
   tg.id AS tag_id,
   tg.name AS tag_name,
   tg.icon_key AS tag_icon_key,
+  cx.id AS context_id,
+  cx.name AS context_name,
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
@@ -423,6 +457,7 @@ SELECT
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
+LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
 LEFT JOIN (
   SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
   FROM recurring_expense_occurrences
@@ -464,6 +499,12 @@ SQL;
                 'name' => (string) $row['tag_name'],
                 'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
             ],
+            'context' => $row['context_id'] === null
+                ? null
+                : [
+                    'id' => (string) $row['context_id'],
+                    'name' => (string) $row['context_name'],
+                ],
             'card' => $row['card_id'] === null
                 ? null
                 : [
@@ -757,6 +798,55 @@ SQL;
         return null;
     }
 
+    /** @param array<string,mixed> $payload */
+    private function resolveContextIdFromPayload(array $payload, int $userId, bool $allowClear): ?int
+    {
+        if (array_key_exists('context_id', $payload) && array_key_exists('context', $payload)) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'context', 'message' => 'context_id and context are mutually exclusive'],
+            ]);
+        }
+
+        if (array_key_exists('context_id', $payload)) {
+            if ($payload['context_id'] === null) {
+                if ($allowClear) {
+                    return null;
+                }
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'context_id', 'message' => 'cannot be null here'],
+                ]);
+            }
+            $id = $this->parseEntityId((string) $payload['context_id'], 'context_id');
+            $this->assertContextExists($userId, $id);
+            return $id;
+        }
+
+        if (array_key_exists('context', $payload)) {
+            if ($payload['context'] === null && $allowClear) {
+                return null;
+            }
+            if (!is_array($payload['context'])) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'context', 'message' => 'must be an object with name or null'],
+                ]);
+            }
+            $name = trim((string) (($payload['context']['name'] ?? '') ?: ''));
+            if ($name === '') {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'context.name', 'message' => 'is required'],
+                ]);
+            }
+            if (mb_strlen($name) > 120) {
+                throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                    ['field' => 'context.name', 'message' => 'must be <= 120 characters'],
+                ]);
+            }
+            return $this->findOrCreateContext($userId, $name);
+        }
+
+        return null;
+    }
+
     private function assertTagExists(int $userId, int $tagId): void
     {
         $stmt = $this->pdo->prepare(
@@ -784,6 +874,15 @@ SQL;
 
         if (!$stmt->fetch()) {
             throw new HttpException(404, 'NOT_FOUND', 'Card not found');
+        }
+    }
+
+    private function assertContextExists(int $userId, int $contextId): void
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM contexts WHERE id = :id AND user_id = :user_id AND is_active = 1 AND deleted_at IS NULL LIMIT 1');
+        $stmt->execute([':id' => $contextId, ':user_id' => $userId]);
+        if (!$stmt->fetch()) {
+            throw new HttpException(404, 'NOT_FOUND', 'Context not found');
         }
     }
 
@@ -858,6 +957,31 @@ SQL;
         } catch (PDOException $e) {
             if (($e->errorInfo[0] ?? '') === '23000') {
                 throw new HttpException(409, 'CONFLICT', 'Card already exists');
+            }
+            throw $e;
+        }
+    }
+
+    private function findOrCreateContext(int $userId, string $name): int
+    {
+        $select = $this->pdo->prepare('SELECT id, is_active, deleted_at FROM contexts WHERE user_id = :user_id AND name = :name LIMIT 1');
+        $select->execute([':user_id' => $userId, ':name' => $name]);
+        $row = $select->fetch();
+        if ($row) {
+            if ((int) $row['is_active'] === 0 || $row['deleted_at'] !== null) {
+                $reactivate = $this->pdo->prepare('UPDATE contexts SET is_active = 1, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id');
+                $reactivate->execute([':id' => $row['id'], ':user_id' => $userId]);
+            }
+            return (int) $row['id'];
+        }
+
+        try {
+            $insert = $this->pdo->prepare('INSERT INTO contexts (user_id, name, is_active) VALUES (:user_id, :name, 1)');
+            $insert->execute([':user_id' => $userId, ':name' => $name]);
+            return (int) $this->pdo->lastInsertId();
+        } catch (PDOException $e) {
+            if (($e->errorInfo[0] ?? '') === '23000') {
+                throw new HttpException(409, 'CONFLICT', 'Context already exists');
             }
             throw $e;
         }
