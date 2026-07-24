@@ -1271,6 +1271,52 @@ $tieSuggestions = $buildTransactionSuggestions->invoke($transactionController, [
 assertSame('wants', $tieSuggestions[0]['category'], 'suggestions break equal-count category ties by recency');
 assertSame('Shopping', $tieSuggestions[0]['tag']['name'], 'suggestions break equal-count tag ties by recency');
 
+$suggestionRow = static function (int $id, string $date, string $cardId, string $cardName, string $category = 'needs', string $tagId = '12', string $tagName = 'Groceries', string $expense = 'Target'): array {
+    return [
+        'id' => (string) $id,
+        'expense' => $expense,
+        'category' => $category,
+        'is_split' => '0',
+        'transaction_date' => $date,
+        'tag_id' => $tagId,
+        'tag_name' => $tagName,
+        'tag_icon_key' => null,
+        'card_id' => $cardId,
+        'card_name' => $cardName,
+    ];
+};
+$frequencySuggestions = $buildTransactionSuggestions->invoke($transactionController, [
+    $suggestionRow(20, '2026-05-01', '1', 'Apple Card'),
+    $suggestionRow(21, '2026-05-02', '2', 'Chase'),
+    $suggestionRow(22, '2026-05-03', '2', 'Chase'),
+    $suggestionRow(23, '2026-05-04', '2', 'Chase'),
+], 'target');
+assertSame('Chase', $frequencySuggestions[0]['card']['name'], 'suggestions preserve most-common setup behavior');
+assertSame(3, $frequencySuggestions[0]['usage_count'], 'suggestion usage count is for the winning setup');
+
+$oneOffSuggestions = $buildTransactionSuggestions->invoke($transactionController, [
+    $suggestionRow(30, '2026-05-01', '1', 'Apple Card'),
+    $suggestionRow(31, '2026-05-02', '1', 'Apple Card'),
+    $suggestionRow(32, '2026-05-03', '1', 'Apple Card'),
+    $suggestionRow(33, '2026-05-04', '1', 'Apple Card'),
+    $suggestionRow(34, '2026-05-05', '2', 'Chase'),
+], 'target');
+assertSame('Apple Card', $oneOffSuggestions[0]['card']['name'], 'one recent setup deviation does not retrain suggestions');
+assertSame(4, $oneOffSuggestions[0]['usage_count'], 'one-off suggestion uses recent-window setup count');
+
+$switchedSuggestions = $buildTransactionSuggestions->invoke($transactionController, array_merge(
+    array_map(fn(int $id): array => $suggestionRow($id, '2026-01-' . str_pad((string) ($id - 99), 2, '0', STR_PAD_LEFT), '1', 'Apple Card'), range(100, 119)),
+    [
+        $suggestionRow(120, '2026-06-01', '1', 'Apple Card'),
+        $suggestionRow(121, '2026-06-02', '1', 'Apple Card'),
+        $suggestionRow(122, '2026-06-03', '2', 'Chase'),
+        $suggestionRow(123, '2026-06-04', '2', 'Chase'),
+        $suggestionRow(124, '2026-06-05', '2', 'Chase'),
+    ]
+), 'target');
+assertSame('Chase', $switchedSuggestions[0]['card']['name'], 'recent consistent setup changes over stale lifetime frequency');
+assertSame(3, $switchedSuggestions[0]['usage_count'], 'switched suggestion counts only the recent history window');
+
 $auditReflection = new ReflectionClass(AuditLogger::class);
 $auditLogger = $auditReflection->newInstanceWithoutConstructor();
 $redactMetadata = $auditReflection->getMethod('redactMetadata');

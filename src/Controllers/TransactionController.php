@@ -24,6 +24,7 @@ final class TransactionController
         'bookmark', 'tag', 'box',
     ];
     private const SUGGESTION_CANDIDATE_LIMIT = 300;
+    private const RECENT_SUGGESTION_HISTORY_LIMIT = 5;
 
     public function __construct(
         private readonly PDO $pdo,
@@ -567,7 +568,7 @@ SQL;
     private function buildTransactionSuggestions(array $rows, string $query): array
     {
         $normalizedQuery = $this->normalizeSuggestionText($query);
-        $groups = [];
+        $expenseCandidates = [];
 
         foreach ($rows as $row) {
             $normalizedExpense = $this->normalizeSuggestionText((string) ($row['expense'] ?? ''));
@@ -575,70 +576,100 @@ SQL;
                 continue;
             }
 
-            if (!isset($groups[$normalizedExpense])) {
-                $groups[$normalizedExpense] = [
-                    'expense' => (string) $row['expense'],
-                    'usage_count' => 0,
-                    'last_used_at' => (string) $row['transaction_date'],
-                    'last_id' => (int) $row['id'],
-                    'match_rank' => $this->suggestionMatchRank($normalizedExpense, $normalizedQuery),
-                    'categories' => [],
-                    'tags' => [],
-                    'cards' => [],
-                    'splits' => [],
-                ];
+            $expenseCandidates[$normalizedExpense] ??= [];
+            $expenseCandidates[$normalizedExpense][] = $row;
+        }
+
+        $groups = [];
+        foreach ($expenseCandidates as $normalizedExpense => $candidateRows) {
+            usort($candidateRows, static fn(array $a, array $b): int => [
+                (string) $b['transaction_date'],
+                -(int) $b['id'],
+            ] <=> [
+                (string) $a['transaction_date'],
+                -(int) $a['id'],
+            ]);
+            $recentRows = array_slice($candidateRows, 0, self::RECENT_SUGGESTION_HISTORY_LIMIT);
+
+            $group = [
+                'expense' => (string) $recentRows[0]['expense'],
+                'match_rank' => $this->suggestionMatchRank($normalizedExpense, $normalizedQuery),
+                'setups' => [],
+            ];
+
+            foreach ($recentRows as $row) {
+                $usedAt = (string) $row['transaction_date'];
+                $rowId = (int) $row['id'];
+                $setupKey = implode('|', [
+                    (string) $row['category'],
+                    (string) $row['tag_id'],
+                    $row['card_id'] === null ? 'null' : (string) $row['card_id'],
+                    ((int) $row['is_split']) === 1 ? '1' : '0',
+                ]);
+
+                if (!isset($group['setups'][$setupKey])) {
+                    $group['setups'][$setupKey] = [
+                        'count' => 0,
+                        'last_used_at' => $usedAt,
+                        'last_id' => $rowId,
+                        'category' => (string) $row['category'],
+                        'tag' => [
+                            'id' => (string) $row['tag_id'],
+                            'name' => (string) $row['tag_name'],
+                            'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
+                        ],
+                        'card' => $row['card_id'] === null ? null : [
+                            'id' => (string) $row['card_id'],
+                            'name' => (string) $row['card_name'],
+                            'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
+                        ],
+                        'is_split' => ((int) $row['is_split']) === 1,
+                    ];
+                }
+
+                $setup = &$group['setups'][$setupKey];
+                $setup['count']++;
+                if ($usedAt > $setup['last_used_at'] || ($usedAt === $setup['last_used_at'] && $rowId > $setup['last_id'])) {
+                    $setup['last_used_at'] = $usedAt;
+                    $setup['last_id'] = $rowId;
+                }
+                unset($setup);
             }
 
-            $group = &$groups[$normalizedExpense];
-            $usedAt = (string) $row['transaction_date'];
-            $rowId = (int) $row['id'];
-            if ($usedAt > $group['last_used_at'] || ($usedAt === $group['last_used_at'] && $rowId > $group['last_id'])) {
-                $group['expense'] = (string) $row['expense'];
-                $group['last_used_at'] = $usedAt;
-                $group['last_id'] = $rowId;
-            }
-
-            $group['usage_count']++;
-            $this->countSuggestionValue($group['categories'], (string) $row['category'], $usedAt, $rowId);
-            $this->countSuggestionValue($group['tags'], (string) $row['tag_id'], $usedAt, $rowId, [
-                'id' => (string) $row['tag_id'],
-                'name' => (string) $row['tag_name'],
-                'icon_key' => $row['tag_icon_key'] === null ? null : (string) $row['tag_icon_key'],
-            ]);
-            $this->countSuggestionValue($group['cards'], $row['card_id'] === null ? '' : (string) $row['card_id'], $usedAt, $rowId, $row['card_id'] === null ? null : [
-                'id' => (string) $row['card_id'],
-                'name' => (string) $row['card_name'],
-                'is_favorite' => ((int) ($row['card_is_favorite'] ?? 0)) === 1,
-            ]);
-            $this->countSuggestionValue($group['splits'], ((int) $row['is_split']) === 1 ? '1' : '0', $usedAt, $rowId);
-            unset($group);
+            $groups[$normalizedExpense] = $group;
         }
 
         $suggestions = [];
         foreach ($groups as $group) {
-            $category = $this->bestSuggestionValue($group['categories']);
-            $tag = $this->bestSuggestionValue($group['tags']);
-            $card = $this->bestSuggestionValue($group['cards']);
-            $split = $this->bestSuggestionValue($group['splits']);
-
-            if ($category === null || $tag === null || $split === null) {
+            $setups = array_values($group['setups']);
+            usort($setups, static fn(array $a, array $b): int => [
+                -$a['count'],
+                $b['last_used_at'],
+                -$a['last_id'],
+            ] <=> [
+                -$b['count'],
+                $a['last_used_at'],
+                -$b['last_id'],
+            ]);
+            $setup = $setups[0] ?? null;
+            if ($setup === null) {
                 continue;
             }
 
             $suggestions[] = [
                 'expense' => $group['expense'],
-                'category' => $category['value'],
-                'tag' => $tag['payload'],
-                'card' => $card['payload'],
-                'is_split' => $split['value'] === '1',
-                'confidence' => $this->suggestionConfidence((int) $group['match_rank'], (int) $group['usage_count'], max((int) $category['count'], (int) $tag['count'])),
-                'last_used_at' => $group['last_used_at'],
-                'usage_count' => (int) $group['usage_count'],
+                'category' => $setup['category'],
+                'tag' => $setup['tag'],
+                'card' => $setup['card'],
+                'is_split' => $setup['is_split'],
+                'confidence' => $this->suggestionConfidence((int) $group['match_rank'], (int) $setup['count'], (int) $setup['count']),
+                'last_used_at' => $setup['last_used_at'],
+                'usage_count' => (int) $setup['count'],
                 '_rank' => [
                     'match' => (int) $group['match_rank'],
-                    'usage' => (int) $group['usage_count'],
-                    'last_used_at' => $group['last_used_at'],
-                    'last_id' => (int) $group['last_id'],
+                    'usage' => (int) $setup['count'],
+                    'last_used_at' => $setup['last_used_at'],
+                    'last_id' => (int) $setup['last_id'],
                 ],
             ];
         }
@@ -674,47 +705,6 @@ SQL;
         }
 
         return 2;
-    }
-
-    /** @param array<string,array{value:string,count:int,last_used_at:string,last_id:int,payload:mixed}> $bucket */
-    private function countSuggestionValue(array &$bucket, string $value, string $usedAt, int $rowId, mixed $payload = null): void
-    {
-        if (!isset($bucket[$value])) {
-            $bucket[$value] = [
-                'value' => $value,
-                'count' => 0,
-                'last_used_at' => $usedAt,
-                'last_id' => $rowId,
-                'payload' => $payload ?? $value,
-            ];
-        }
-
-        $bucket[$value]['count']++;
-        if ($usedAt > $bucket[$value]['last_used_at'] || ($usedAt === $bucket[$value]['last_used_at'] && $rowId > $bucket[$value]['last_id'])) {
-            $bucket[$value]['last_used_at'] = $usedAt;
-            $bucket[$value]['last_id'] = $rowId;
-            $bucket[$value]['payload'] = $payload ?? $value;
-        }
-    }
-
-    /** @param array<string,array{value:string,count:int,last_used_at:string,last_id:int,payload:mixed}> $bucket */
-    private function bestSuggestionValue(array $bucket): ?array
-    {
-        if ($bucket === []) {
-            return null;
-        }
-
-        usort($bucket, static fn(array $a, array $b): int => [
-            -$a['count'],
-            $b['last_used_at'],
-            -$a['last_id'],
-        ] <=> [
-            -$b['count'],
-            $a['last_used_at'],
-            -$b['last_id'],
-        ]);
-
-        return $bucket[0];
     }
 
     private function suggestionConfidence(int $matchRank, int $usageCount, int $strongestSetupCount): string
