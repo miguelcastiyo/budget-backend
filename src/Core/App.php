@@ -19,6 +19,7 @@ use App\Controllers\MonthOverviewController;
 use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
 use App\Controllers\RecurringExpenseController;
+use App\Controllers\SavingsPlanController;
 use App\Controllers\TaxonomyController;
 use App\Controllers\TransactionController;
 use App\Database\Connection;
@@ -47,6 +48,7 @@ use App\Overview\MonthOverviewService;
 use App\Security\AuditLogger;
 use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
+use App\Savings\SavingsPlanService;
 use Throwable;
 
 final class App
@@ -68,7 +70,8 @@ final class App
         $auth = new AuthService($pdo, $config);
         $recurring = new RecurringExpenseService($pdo);
         $budgetSettingsResolver = new BudgetSettingsResolver($pdo);
-        $monthOverviewService = new MonthOverviewService($pdo, $budgetSettingsResolver);
+        $savingsPlanService = new SavingsPlanService($pdo, $budgetSettingsResolver);
+        $monthOverviewService = new MonthOverviewService($pdo, $budgetSettingsResolver, $savingsPlanService);
         $monthCloseoutRepository = new MonthCloseoutRepository($pdo);
         $fundRepository = new FundRepository($pdo);
         $fundBalanceService = new FundBalanceService($fundRepository);
@@ -95,6 +98,7 @@ final class App
         $budgetSettingsController = new BudgetSettingsController($pdo, $auth, $budgetSettingsResolver);
         $importExportController = new ImportExportController($auth, $auditLogger, $csvImportService, $csvExportService, $dataRunRepository, $csvImportMapper);
         $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
+        $savingsPlanController = new SavingsPlanController($auth, $savingsPlanService);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $budgetSettingsResolver);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $taxonomyController = new TaxonomyController($pdo, $auth);
@@ -172,6 +176,9 @@ final class App
         $add('POST', '/me/transactions', fn(Request $request) => $transactionController->create($request));
         $add('PATCH', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->update($request, $params));
         $add('DELETE', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->delete($request, $params));
+
+        $add('GET', '/me/months/{month}/savings-plan', fn(Request $request, array $params) => $savingsPlanController->get($request, $params));
+        $add('PUT', '/me/months/{month}/savings-plan', fn(Request $request, array $params) => $savingsPlanController->replace($request, $params));
 
         $add('GET', '/me/funds', fn(Request $request) => $fundController->list($request));
         $add('POST', '/me/funds', fn(Request $request) => $fundController->create($request));

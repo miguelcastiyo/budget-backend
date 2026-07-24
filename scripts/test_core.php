@@ -572,6 +572,7 @@ assertSame($currentMonth, $currentOverview['month'], 'month overview returns the
 assertSame($currentMonth, $currentOverview['budget']['resolved_effective_month'], 'month overview resolves exact budget month');
 assertSame(true, $currentOverview['budget']['is_exact_match'], 'month overview reports exact budget month');
 assertSame(true, $currentOverview['budget']['has_budget'], 'month overview reports that a budget exists');
+assertSame(true, is_array($currentOverview['savings_plan']), 'month overview always returns a savings plan object');
 assertSame('1000.00', $currentOverview['budget']['monthly_income'], 'month overview reports monthly income');
 assertSame('1000.00', $currentOverview['summary']['total_budget'], 'month overview totals budget');
 assertSame('910.00', $currentOverview['summary']['total_spent'], 'month overview totals spend');
@@ -659,6 +660,8 @@ $noBudgetRequest = new Request(
 );
 $noBudgetOverview = json_decode($monthOverviewController->overview($noBudgetRequest, ['month' => $noBudgetMonth])->body, true);
 assertSame(false, $noBudgetOverview['budget']['has_budget'], 'month overview reports no budget exists');
+assertSame(true, is_array($noBudgetOverview['savings_plan']), 'no-budget month overview returns a savings plan object');
+assertSame(false, $noBudgetOverview['savings_plan']['has_budget'], 'no-budget savings plan reports no budget');
 assertSame(null, $noBudgetOverview['budget']['resolved_effective_month'], 'month overview keeps no budget resolved month null');
 assertSame(false, $noBudgetOverview['budget']['is_exact_match'], 'month overview reports no exact match when no budget exists');
 assertSame(null, $noBudgetOverview['budget']['monthly_income'], 'month overview returns null monthly income when no budget exists');

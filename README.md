@@ -66,6 +66,8 @@
   - `GET /api/v1/me/data-runs?limit=50`
 - Metrics flows:
   - `GET /api/v1/me/months/{month}/overview` (primary homepage/month endpoint)
+  - `GET /api/v1/me/months/{month}/savings-plan`
+  - `PUT /api/v1/me/months/{month}/savings-plan`
   - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
   - `GET /api/v1/me/metrics/categories?month=YYYY-MM`
   - `GET /api/v1/me/dashboard?month=YYYY-MM` (deprecated)
@@ -79,6 +81,13 @@
 - Transaction-linked fund contributions create or link a real `savings` transaction and keep the linked fund entry in sync on transaction update or delete.
 - Closeout fund allocations create fund entries without creating synthetic transactions.
 - Replacing closeout allocations or reopening a closeout voids the old closeout-linked fund entries so active fund balances stay correct.
+
+## Savings Plan notes
+
+- Savings Plans persist only monthly allocation intent in `monthly_savings_allocations`; they do not move money or mutate budgets, transactions, Funds, or closeouts.
+- Plan progress is derived from qualifying transaction-linked and closeout-linked Fund entries. Fund balances remain ledger-backed.
+- Closeout Fund allocations count toward Fund-plan progress but do not increase monthly Savings transaction totals.
+- A closed month is read-only for Savings Plan replacement; reopening the closeout makes it editable again.
 
 ## Auth modes
 - Cookie session: `sid` cookie (`session_id.secret`)

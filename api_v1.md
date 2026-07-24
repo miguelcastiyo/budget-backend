@@ -1874,7 +1874,57 @@ Entry modes:
 - `budget_tracking = create_transaction` creates a real `savings` transaction and a linked fund entry in one DB transaction.
 - `budget_tracking = link_existing_transaction` links an existing qualifying `savings` transaction to a fund entry.
 
-## 14) CSV Export
+## 14) Savings Plans
+
+Savings Plans persist only monthly allocation intent: how much of the resolved Savings budget the user intends to direct to specific Funds. They never create transactions, Fund entries, transfers, budget changes, or closeout changes.
+
+### 14.1 Read a Savings Plan
+`GET /me/months/{month}/savings-plan`
+
+The month must be `YYYY-MM`. The response derives the Savings budget from effective-dated budget settings, actual Savings from non-deleted Savings transactions, Fund balances from active ledger entries, and plan progress from qualifying transaction- and closeout-linked Fund contributions.
+
+When no budget resolves, the response uses `status: "missing_budget"`. A closed closeout returns `status: "closed"` and makes the plan read-only. Archived Funds referenced by the month remain visible as historical allocations.
+
+Fund pace status values are:
+- `unavailable`: the Fund is archived and cannot be paced.
+- `no_goal`: the Fund has no goal amount.
+- `no_target`: the Fund has no target month.
+- `overdue`: the target month has passed.
+- `goal_met`: the goal is already met.
+- `on_track_calculable`: a current-month recommendation can be calculated.
+
+Goal-pacing summary status values are:
+- `unavailable`: no Savings budget is available.
+- `historical`: the requested month is not the current month.
+- `available`: current-month pacing recommendations are available.
+
+### 14.2 Replace a Savings Plan
+`PUT /me/months/{month}/savings-plan`
+
+Request:
+```json
+{
+  "allocations": [
+    { "fund_id": "fund_japan", "amount": "460.00" },
+    { "fund_id": "fund_emergency", "amount": "300.00" }
+  ]
+}
+```
+
+PUT replaces the complete allocation set. Sending an empty `allocations` array clears the plan. Amounts must be positive two-decimal strings, Funds must belong to the user and be active, duplicate Funds are rejected, and the total cannot exceed the resolved Savings budget. Writes to closed months return `409 CONFLICT`.
+
+### 14.3 Derived values and progress
+
+- `saved_amount` comes only from Savings-category transactions in the selected month.
+- Fund-linked Savings transactions contribute to `transaction_contributed` and `transaction_directed_to_funds`.
+- Closeout-linked Fund contributions contribute to plan progress but not `saved_amount`.
+- Manual, starting-balance, correction, and withdrawal entries do not reverse plan progress.
+- A Fund may show progress without a persisted allocation; unplanned activity remains visible.
+- Goal pacing is current-month-only advice based on active Fund goal metadata and ledger balances. It never changes allocations.
+
+The Month Overview always includes a compact `savings_plan` object with the same derived totals and a deterministic `needs_attention` flag for later budget over-allocation or archived planned Funds. When no budget resolves, it reports `has_budget: false`, `has_plan: false`, `budget_amount: null`, and zero-valued money totals.
+
+## 15) CSV Export
 
 ### 13.1 Export Transactions CSV
 `GET /me/transactions/export.csv`
@@ -1893,7 +1943,7 @@ Examples:
 Response:
 - `200 text/csv` file download.
 
-## 14) CSV Import
+## 15) CSV Import
 
 ### 13.1 Import Transactions CSV
 `POST /me/transactions/import.csv`
@@ -2068,7 +2118,7 @@ Dry-run/commit response `200`:
 }
 ```
 
-## 14) Data Runs
+## 16) Data Runs
 
 ### 13.1 List Recent Data Runs
 `GET /me/data-runs?limit=50`
@@ -2148,7 +2198,7 @@ Response `200`:
 }
 ```
 
-## 15) Standard Errors
+## 17) Standard Errors
 
 Error shape:
 ```json
@@ -2172,7 +2222,7 @@ Common codes:
 - `RATE_LIMITED` (`429`)
 - `INTERNAL_ERROR` (`500`)
 
-## 16) Rate Limits
+## 18) Rate Limits
 
 Rate limited endpoints return `429 RATE_LIMITED`.
 
@@ -2203,7 +2253,7 @@ Sensitive authenticated flows are limited by credential/session identity plus a 
 
 Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in `.env.example`.
 
-## 17) Authorization Rules
+## 19) Authorization Rules
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
@@ -2211,7 +2261,7 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 - Only owner/admin can list audit logs.
 - Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 
-## 17) Non-Goals (v1)
+## 20) Non-Goals (v1)
 - Public self-signup
 - Bank aggregation integrations
 - Shared household budgets

@@ -6,6 +6,7 @@ namespace App\Overview;
 
 use App\Budget\BudgetSettingsResolver;
 use App\Http\HttpException;
+use App\Savings\SavingsPlanService;
 use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
@@ -16,7 +17,8 @@ final class MonthOverviewService
 
     public function __construct(
         private readonly PDO $pdo,
-        private readonly BudgetSettingsResolver $budgetSettingsResolver
+        private readonly BudgetSettingsResolver $budgetSettingsResolver,
+        private readonly ?SavingsPlanService $savingsPlanService = null
     ) {
     }
 
@@ -48,6 +50,8 @@ final class MonthOverviewService
         [, $recentTransactionsDateTo] = $this->recentTransactionsDateRange($month, $dateFrom, $dateTo, $currentMonth, $now);
         $recentTransactions = $this->queryRecentTransactions($userId, $dateFrom, $recentTransactionsDateTo, 5);
         $monthProgress = $this->monthProgress($month, $currentMonth, $now, $summary['total_spent'], $leftThisMonth, $hasBudget);
+        $savingsPlan = $this->savingsPlanService?->getSummaryForMonth($userId, $month)
+            ?? $this->emptySavingsPlanSummary();
 
         return [
             'month' => $month,
@@ -67,6 +71,7 @@ final class MonthOverviewService
             'categories' => $categories,
             'tags' => $tags,
             'recurring' => $recurring,
+            'savings_plan' => $savingsPlan,
             'recent_transactions' => $recentTransactions,
             'status_cards' => $this->statusCards(
                 $month,
@@ -76,6 +81,26 @@ final class MonthOverviewService
                 $categories,
                 $recurring
             ),
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private function emptySavingsPlanSummary(): array
+    {
+        return [
+            'has_budget' => false,
+            'has_plan' => false,
+            'budget_amount' => null,
+            'saved_amount' => '0.00',
+            'remaining_to_save' => '0.00',
+            'over_saved_amount' => '0.00',
+            'planned_to_funds' => '0.00',
+            'unassigned_budget' => '0.00',
+            'transaction_directed_to_funds' => '0.00',
+            'saved_outside_funds' => '0.00',
+            'is_overallocated' => false,
+            'overallocation_amount' => '0.00',
+            'needs_attention' => false,
         ];
     }
 
