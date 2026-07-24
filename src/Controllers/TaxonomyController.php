@@ -39,15 +39,28 @@ final class TaxonomyController
     ];
     private const ALLOWED_CONTEXT_ICON_KEYS = [
         'map_pinned',
+        'plane',
         'calendar_days',
         'party_popper',
+        'gift',
+        'heart',
+        'luggage',
+        'home',
+        'car',
         'building',
-        'folder_kanban',
-        'tent_tree',
-        'mountain',
         'landmark',
+        'mountain',
+        'beach',
         'globe',
-        'milestone',
+        'route',
+        'briefcase',
+        'users',
+        'star',
+        'flag',
+        'ticket',
+        'bookmark',
+        'tag',
+        'box',
     ];
 
     public function __construct(

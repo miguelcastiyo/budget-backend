@@ -18,8 +18,10 @@ final class TransactionController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
     private const ALLOWED_CONTEXT_ICON_KEYS = [
-        'map_pinned', 'calendar_days', 'party_popper', 'building', 'folder_kanban',
-        'tent_tree', 'mountain', 'landmark', 'globe', 'milestone',
+        'map_pinned', 'plane', 'calendar_days', 'party_popper', 'gift', 'heart',
+        'luggage', 'home', 'car', 'building', 'landmark', 'mountain', 'beach',
+        'globe', 'route', 'briefcase', 'users', 'star', 'flag', 'ticket',
+        'bookmark', 'tag', 'box',
     ];
     private const SUGGESTION_CANDIDATE_LIMIT = 300;
 

@@ -882,7 +882,7 @@ Rules:
 
 ## 7) Contexts
 
-Contexts are optional, user-owned transaction dimensions such as `Chicago 2/26` or `New Apartment`. They are independent of categories, tags, and cards. Contexts use a separate icon vocabulary so context and tag icons never overlap: `map_pinned`, `calendar_days`, `party_popper`, `building`, `folder_kanban`, `tent_tree`, `mountain`, `landmark`, `globe`, and `milestone`. A null icon key uses automatic name-based fallback.
+Contexts are optional, user-owned transaction dimensions such as `Chicago 2/26` or `New Apartment`. They are independent of categories, tags, and cards. Contexts use a separate curated icon vocabulary with intentional overlap for semantically useful icons: `map_pinned`, `plane`, `calendar_days`, `party_popper`, `gift`, `heart`, `luggage`, `home`, `car`, `building`, `landmark`, `mountain`, `beach`, `globe`, `route`, `briefcase`, `users`, `star`, `flag`, `ticket`, `bookmark`, `tag`, and `box`. A null icon key uses automatic name-based fallback.
 
 ### 7.1 List Contexts
 `GET /me/contexts`
@@ -899,7 +899,7 @@ Names are trimmed, required, limited to 120 characters, and unique per user. Cre
 ### 7.3 Update Context
 `PATCH /me/contexts/{context_id}`
 
-Renaming and optional `icon_key` updates are supported. The context must belong to the authenticated user and be active. `icon_key` may be `null` to restore automatic name-based icon selection. Allowed context values are `map_pinned`, `calendar_days`, `party_popper`, `building`, `folder_kanban`, `tent_tree`, `mountain`, `landmark`, `globe`, and `milestone`.
+Renaming and optional `icon_key` updates are supported. The context must belong to the authenticated user and be active. `icon_key` may be `null` to restore automatic name-based icon selection. Allowed context values are `map_pinned`, `plane`, `calendar_days`, `party_popper`, `gift`, `heart`, `luggage`, `home`, `car`, `building`, `landmark`, `mountain`, `beach`, `globe`, `route`, `briefcase`, `users`, `star`, `flag`, `ticket`, `bookmark`, `tag`, and `box`.
 
 ### 7.4 Delete Context
 `DELETE /me/contexts/{context_id}`
