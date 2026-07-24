@@ -2770,6 +2770,20 @@ components:
         - wallet
         - tag
 
+    ContextIconKey:
+      type: string
+      enum:
+        - map_pinned
+        - calendar_days
+        - party_popper
+        - building
+        - folder_kanban
+        - tent_tree
+        - mountain
+        - landmark
+        - globe
+        - milestone
+
     CreateTagRequest:
       type: object
       properties:
@@ -2825,7 +2839,7 @@ components:
           type: string
         icon_key:
           anyOf:
-            - $ref: '#/components/schemas/TagIconKey'
+            - $ref: '#/components/schemas/ContextIconKey'
             - type: 'null'
       required: [id, name, icon_key]
 
@@ -2847,7 +2861,7 @@ components:
           maxLength: 120
         icon_key:
           anyOf:
-            - $ref: '#/components/schemas/TagIconKey'
+            - $ref: '#/components/schemas/ContextIconKey'
             - type: 'null'
       required: [name]
 
@@ -3300,7 +3314,7 @@ components:
                   maxLength: 120
                 icon_key:
                   anyOf:
-                    - $ref: '#/components/schemas/TagIconKey'
+                    - $ref: '#/components/schemas/ContextIconKey'
                     - type: 'null'
               required: [name]
           required: [context]
@@ -3406,7 +3420,7 @@ components:
               maxLength: 120
             icon_key:
               anyOf:
-                - $ref: '#/components/schemas/TagIconKey'
+                - $ref: '#/components/schemas/ContextIconKey'
                 - type: 'null'
           required: [name]
 

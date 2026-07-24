@@ -37,6 +37,18 @@ final class TaxonomyController
         'wallet',
         'tag',
     ];
+    private const ALLOWED_CONTEXT_ICON_KEYS = [
+        'map_pinned',
+        'calendar_days',
+        'party_popper',
+        'building',
+        'folder_kanban',
+        'tent_tree',
+        'mountain',
+        'landmark',
+        'globe',
+        'milestone',
+    ];
 
     public function __construct(
         private readonly PDO $pdo,
@@ -286,7 +298,9 @@ final class TaxonomyController
     {
         $name = $this->validatedName($request);
         $supportsIcons = $this->tableSupportsIcons($table);
-        $iconKey = $supportsIcons ? $this->validatedIconKey($request) : null;
+        $iconKey = $supportsIcons
+            ? $this->validatedIconKey($request, $table === 'contexts' ? self::ALLOWED_CONTEXT_ICON_KEYS : self::ALLOWED_ICON_KEYS)
+            : null;
         $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $request->json());
 
         $existingSelect = match ($table) {
@@ -373,7 +387,9 @@ final class TaxonomyController
         $payload = $request->json();
         $supportsIcons = $this->tableSupportsIcons($table);
         $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $payload);
-        $iconKey = $supportsIcons && $iconFromPayload ? $this->validatedIconKey($request) : null;
+        $iconKey = $supportsIcons && $iconFromPayload
+            ? $this->validatedIconKey($request, $table === 'contexts' ? self::ALLOWED_CONTEXT_ICON_KEYS : self::ALLOWED_ICON_KEYS)
+            : null;
 
         $exists = $this->pdo->prepare(
             $supportsIcons
@@ -573,7 +589,8 @@ final class TaxonomyController
         return $value;
     }
 
-    private function validatedIconKey(Request $request): ?string
+    /** @param list<string> $allowedKeys */
+    private function validatedIconKey(Request $request, array $allowedKeys): ?string
     {
         $payload = $request->json();
 
@@ -592,7 +609,7 @@ final class TaxonomyController
             return null;
         }
 
-        if (!in_array($iconKey, self::ALLOWED_ICON_KEYS, true)) {
+        if (!in_array($iconKey, $allowedKeys, true)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'icon_key', 'message' => 'unsupported icon key'],
             ]);

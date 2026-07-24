@@ -882,7 +882,7 @@ Rules:
 
 ## 7) Contexts
 
-Contexts are optional, user-owned transaction dimensions such as `Chicago 2/26` or `New Apartment`. They are independent of categories, tags, and cards. Contexts support the same optional icon keys and automatic name-based fallback used by tags.
+Contexts are optional, user-owned transaction dimensions such as `Chicago 2/26` or `New Apartment`. They are independent of categories, tags, and cards. Contexts use a separate icon vocabulary so context and tag icons never overlap: `map_pinned`, `calendar_days`, `party_popper`, `building`, `folder_kanban`, `tent_tree`, `mountain`, `landmark`, `globe`, and `milestone`. A null icon key uses automatic name-based fallback.
 
 ### 7.1 List Contexts
 `GET /me/contexts`
@@ -892,14 +892,14 @@ Returns active, non-deleted contexts ordered by name.
 ### 7.2 Create Context
 `POST /me/contexts`
 
-Request: `{ "name": "Chicago 2/26", "icon_key": "home" }`
+Request: `{ "name": "Chicago 2/26", "icon_key": "map_pinned" }`
 
 Names are trimmed, required, limited to 120 characters, and unique per user. Creating a previously deleted name reactivates the same row; an active duplicate returns `409 CONFLICT`.
 
 ### 7.3 Update Context
 `PATCH /me/contexts/{context_id}`
 
-Renaming and optional `icon_key` updates are supported. The context must belong to the authenticated user and be active. `icon_key` may be `null` to restore automatic name-based icon selection. Allowed values are the same as tag icons: `home`, `shopping_cart`, `car`, `plane`, `receipt`, `coffee`, `smartphone`, `credit_card`, `piggy_bank`, `trending_up`, `briefcase`, `heart`, `dumbbell`, `book_open`, `film`, `gamepad`, `gift`, `shield`, `lightbulb`, `wrench`, `wallet`, and `tag`.
+Renaming and optional `icon_key` updates are supported. The context must belong to the authenticated user and be active. `icon_key` may be `null` to restore automatic name-based icon selection. Allowed context values are `map_pinned`, `calendar_days`, `party_popper`, `building`, `folder_kanban`, `tent_tree`, `mountain`, `landmark`, `globe`, and `milestone`.
 
 ### 7.4 Delete Context
 `DELETE /me/contexts/{context_id}`
@@ -1387,7 +1387,7 @@ Response `200`:
       "is_split": false,
       "notes": null,
       "tag": { "id": "12", "name": "Groceries" },
-      "context": { "id": "7", "name": "Chicago 2/26", "icon_key": "home" },
+      "context": { "id": "7", "name": "Chicago 2/26", "icon_key": "map_pinned" },
       "card": { "id": "4", "name": "Chase Sapphire" }
     }
   ],
