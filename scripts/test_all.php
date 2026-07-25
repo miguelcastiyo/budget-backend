@@ -11,6 +11,7 @@ $scripts = [
     'scripts/smoke_recurring_schedule_change_validation.php',
     'scripts/smoke_google_verifier.php',
     'scripts/smoke_transaction_atomicity.php',
+    'scripts/test_privacy_parity.php',
 ];
 
 foreach ($scripts as $script) {

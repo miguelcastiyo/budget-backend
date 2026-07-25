@@ -1,0 +1,101 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TAX-001-case-002",
+    "scenario_id": "taxonomy.historical-relationships-after-delete",
+    "domain": "taxonomy",
+    "description": "Historical transaction relationships survive taxonomy deletion",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "taxonomy.historical-relationships-after-delete",
+                "input": {
+                    "duplicate_name_case_insensitive": true,
+                    "soft_delete_reactivate": true,
+                    "allowed_icon": "box",
+                    "foreign_ownership": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "created_transaction": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "date": "2026-01-15",
+                        "expense": "Historical expense",
+                        "amount": "25.00",
+                        "category": "needs",
+                        "is_split": false,
+                        "notes": null,
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Historical",
+                            "icon_key": "shopping_cart"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                }
+            },
+            "invariant_checks": {
+                "deleted_taxonomy_preserves_relationship": true,
+                "deleted_tag_is_soft_deleted": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "tag_id": "record_2",
+                    "taxonomy_id": "record_2",
+                    "taxonomy_deleted": 1
+                }
+            ],
+            "tombstones": [
+                {
+                    "id": "record_2",
+                    "is_deleted": 1
+                }
+            ],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TAX-007"
+    ]
+}

@@ -18,7 +18,8 @@ final class MonthOverviewService
     public function __construct(
         private readonly PDO $pdo,
         private readonly BudgetSettingsResolver $budgetSettingsResolver,
-        private readonly ?SavingsPlanService $savingsPlanService = null
+        private readonly ?SavingsPlanService $savingsPlanService = null,
+        private readonly ?DateTimeImmutable $clockNow = null
     ) {
     }
 
@@ -27,7 +28,7 @@ final class MonthOverviewService
     {
         $month = BudgetSettingsResolver::normalizeMonth($month, 'month');
         [$dateFrom, $dateTo] = $this->monthDateRange($month);
-        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $now = $this->clockNow ?? new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $currentMonth = $now->format('Y-m');
 
         $budgetResolution = $this->budgetSettingsResolver->getEffectiveSettingsForMonth($userId, $month);

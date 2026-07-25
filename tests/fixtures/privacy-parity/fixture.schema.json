@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://budget.example.test/privacy-parity/fixture.schema.json",
+  "type": "object",
+  "required": ["fixture_version", "fixture_id", "scenario_id", "domain", "description", "clock", "input", "expected", "normalization", "invariants"],
+  "properties": {
+    "fixture_version": {"type": "string", "const": "1.0"},
+    "fixture_id": {"type": "string", "pattern": "^FIX-[A-Z0-9-]+-case-[0-9]{3}$"},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "domain": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "clock": {
+      "type": "object",
+      "required": ["now", "timezone", "month"],
+      "properties": {
+        "now": {"type": "string", "format": "date-time"},
+        "timezone": {"type": "string", "const": "UTC"},
+        "month": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"}
+      },
+      "additionalProperties": false
+    },
+    "input": {"type": "object", "required": ["before", "steps"]},
+    "expected": {"type": "object", "required": ["result", "state"]},
+    "normalization": {
+      "type": "object",
+      "required": ["money", "dates", "datetimes", "ids", "ordering", "ignored_fields"],
+      "properties": {
+        "money": {"const": "decimal_string"},
+        "dates": {"const": "iso_date"},
+        "datetimes": {"const": "iso_utc_datetime"},
+        "ids": {"const": "symbolic_fixture_ids"},
+        "ordering": {"const": "declared_stable_order"},
+        "ignored_fields": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "invariants": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  },
+  "additionalProperties": false
+}

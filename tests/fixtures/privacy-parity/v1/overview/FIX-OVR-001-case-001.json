@@ -1,0 +1,469 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-OVR-001-case-001",
+    "scenario_id": "overview.month-summary",
+    "domain": "overview",
+    "description": "Month overview totals and progress",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "overview.month-summary",
+                "input": {
+                    "selected_month_boundaries": true,
+                    "inherited_budget": true,
+                    "categories": true,
+                    "tags": true,
+                    "progress": true,
+                    "status_cards": true,
+                    "recurring": true,
+                    "recent_limit": 5,
+                    "empty_month": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "selected_month": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "budget": {
+                            "monthly_income": "1000.00",
+                            "resolved_effective_month": "2026-01",
+                            "is_exact_match": true,
+                            "has_budget": true
+                        },
+                        "summary": {
+                            "total_spent": "425.00",
+                            "total_budget": "1000.00",
+                            "left_this_month": "575.00",
+                            "percent_spent": "42.50"
+                        },
+                        "month_progress": {
+                            "status": "past",
+                            "days_in_month": 31,
+                            "day_of_month": 31,
+                            "days_elapsed": 31,
+                            "days_remaining": 0,
+                            "percent_elapsed": "100.00",
+                            "daily_available_remaining": null,
+                            "projected_month_end_spend": null
+                        },
+                        "categories": [
+                            {
+                                "category": "needs",
+                                "budget_amount": "500.00",
+                                "actual_spend": "185.00",
+                                "remaining_amount": "315.00",
+                                "percent_used": "37.00",
+                                "status": "under"
+                            },
+                            {
+                                "category": "wants",
+                                "budget_amount": "300.00",
+                                "actual_spend": "240.00",
+                                "remaining_amount": "60.00",
+                                "percent_used": "80.00",
+                                "status": "near"
+                            },
+                            {
+                                "category": "savings",
+                                "budget_amount": "200.00",
+                                "actual_spend": "0.00",
+                                "remaining_amount": "200.00",
+                                "percent_used": "0.00",
+                                "status": "under"
+                            }
+                        ],
+                        "tags": [
+                            {
+                                "tag_id": "record_2",
+                                "tag_name": "Wants",
+                                "icon_key": "shopping_cart",
+                                "spend": "240.00",
+                                "percent_of_monthly_spend": "56.47"
+                            },
+                            {
+                                "tag_id": "record_3",
+                                "tag_name": "Needs",
+                                "icon_key": "receipt",
+                                "spend": "185.00",
+                                "percent_of_monthly_spend": "43.53"
+                            }
+                        ],
+                        "recurring": {
+                            "committed_total": "25.00",
+                            "generated_total": "25.00",
+                            "upcoming_total": "0.00",
+                            "items_count": 1,
+                            "generated_count": 1,
+                            "upcoming_count": 0
+                        },
+                        "savings_plan": {
+                            "has_budget": false,
+                            "has_plan": false,
+                            "budget_amount": null,
+                            "saved_amount": "0.00",
+                            "remaining_to_save": "0.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "0.00",
+                            "unassigned_budget": "0.00",
+                            "transaction_directed_to_funds": "0.00",
+                            "saved_outside_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00",
+                            "needs_attention": false
+                        },
+                        "recent_transactions": [
+                            {
+                                "id": "record_4",
+                                "date": "2026-01-31",
+                                "expense": "Rent recurring",
+                                "amount": "25.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": "record_3",
+                                "tag": {
+                                    "id": "record_3",
+                                    "name": "Needs",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "context": null
+                            },
+                            {
+                                "id": "record_5",
+                                "date": "2026-01-10",
+                                "expense": "Coffee",
+                                "amount": "10.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_3",
+                                    "name": "Needs",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "context": null
+                            },
+                            {
+                                "id": "record_6",
+                                "date": "2026-01-09",
+                                "expense": "Lunch",
+                                "amount": "15.00",
+                                "category": "wants",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Wants",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "context": null
+                            },
+                            {
+                                "id": "record_7",
+                                "date": "2026-01-08",
+                                "expense": "Books",
+                                "amount": "25.00",
+                                "category": "wants",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Wants",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "context": null
+                            },
+                            {
+                                "id": "record_8",
+                                "date": "2026-01-07",
+                                "expense": "Fuel",
+                                "amount": "50.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_3",
+                                    "name": "Needs",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "context": null
+                            }
+                        ],
+                        "status_cards": [
+                            {
+                                "id": "largest_category",
+                                "tone": "neutral",
+                                "title": "Largest category",
+                                "value": "Wants \u00b7 240.00",
+                                "detail": "Highest spending category this month."
+                            },
+                            {
+                                "id": "recurring",
+                                "tone": "neutral",
+                                "title": "Recurring",
+                                "value": "25.00",
+                                "detail": "0.00 upcoming this month."
+                            },
+                            {
+                                "id": "budget_source",
+                                "tone": "good",
+                                "title": "Exact budget",
+                                "value": "Exact budget",
+                                "detail": "Budget applies to January 2026."
+                            }
+                        ]
+                    }
+                },
+                "empty_month": {
+                    "status": 200,
+                    "body": {
+                        "month": "2025-01",
+                        "budget": {
+                            "monthly_income": null,
+                            "resolved_effective_month": null,
+                            "is_exact_match": false,
+                            "has_budget": false
+                        },
+                        "summary": {
+                            "total_spent": "0.00",
+                            "total_budget": null,
+                            "left_this_month": null,
+                            "percent_spent": null
+                        },
+                        "month_progress": {
+                            "status": "past",
+                            "days_in_month": 31,
+                            "day_of_month": 31,
+                            "days_elapsed": 31,
+                            "days_remaining": 0,
+                            "percent_elapsed": "100.00",
+                            "daily_available_remaining": null,
+                            "projected_month_end_spend": null
+                        },
+                        "categories": [
+                            {
+                                "category": "needs",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "remaining_amount": "0.00",
+                                "percent_used": "0.00",
+                                "status": "under"
+                            },
+                            {
+                                "category": "wants",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "remaining_amount": "0.00",
+                                "percent_used": "0.00",
+                                "status": "under"
+                            },
+                            {
+                                "category": "savings",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "remaining_amount": "0.00",
+                                "percent_used": "0.00",
+                                "status": "under"
+                            }
+                        ],
+                        "tags": [],
+                        "recurring": {
+                            "committed_total": "0.00",
+                            "generated_total": "0.00",
+                            "upcoming_total": "0.00",
+                            "items_count": 0,
+                            "generated_count": 0,
+                            "upcoming_count": 0
+                        },
+                        "savings_plan": {
+                            "has_budget": false,
+                            "has_plan": false,
+                            "budget_amount": null,
+                            "saved_amount": "0.00",
+                            "remaining_to_save": "0.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "0.00",
+                            "unassigned_budget": "0.00",
+                            "transaction_directed_to_funds": "0.00",
+                            "saved_outside_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00",
+                            "needs_attention": false
+                        },
+                        "recent_transactions": [],
+                        "status_cards": [
+                            {
+                                "id": "no_budget",
+                                "tone": "neutral",
+                                "title": "No budget set",
+                                "value": "No budget set",
+                                "detail": "Create a budget to compare spending against monthly targets."
+                            },
+                            {
+                                "id": "largest_category",
+                                "tone": "good",
+                                "title": "Largest category",
+                                "value": "Needs \u00b7 0.00",
+                                "detail": "Highest spending category this month."
+                            },
+                            {
+                                "id": "recurring",
+                                "tone": "neutral",
+                                "title": "Recurring",
+                                "value": "0.00",
+                                "detail": "0.00 upcoming this month."
+                            }
+                        ]
+                    }
+                },
+                "recurring_rule": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_3",
+                        "series_id": "record_9",
+                        "expense": "Rent recurring",
+                        "amount": "25.00",
+                        "category": "needs",
+                        "tag": {
+                            "id": "record_3",
+                            "name": "Needs",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "last_day",
+                        "billing_day": null,
+                        "projected_date_for_month": "2026-02-28",
+                        "starts_month": "2026-01",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                }
+            },
+            "invariant_checks": {
+                "selected_month_and_inherited_budget": true,
+                "category_and_tag_totals": true,
+                "progress_and_status_cards_present": true,
+                "recurring_total_included": true,
+                "recent_transactions_bounded_and_ordered": true,
+                "empty_month_zero_safe": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_3",
+                    "transaction_date": "2026-01-05",
+                    "expense": "Rent",
+                    "amount": "100.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_2",
+                    "transaction_date": "2026-01-06",
+                    "expense": "Food",
+                    "amount": "200.00",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_8",
+                    "transaction_date": "2026-01-07",
+                    "expense": "Fuel",
+                    "amount": "50.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_7",
+                    "transaction_date": "2026-01-08",
+                    "expense": "Books",
+                    "amount": "25.00",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_6",
+                    "transaction_date": "2026-01-09",
+                    "expense": "Lunch",
+                    "amount": "15.00",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_5",
+                    "transaction_date": "2026-01-10",
+                    "expense": "Coffee",
+                    "amount": "10.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_4",
+                    "transaction_date": "2026-01-31",
+                    "expense": "Rent recurring",
+                    "amount": "25.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_10",
+                    "transaction_date": "2026-02-28",
+                    "expense": "Rent recurring",
+                    "amount": "25.00",
+                    "category": "needs"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-OVR-001",
+        "INV-OVR-002",
+        "INV-OVR-003"
+    ]
+}

@@ -1,0 +1,393 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-CLOSE-002-case-001",
+    "scenario_id": "closeout.allocation-reopen-stale",
+    "domain": "closeouts",
+    "description": "Allocation, reopen, and stale behavior",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "closeout.allocation-reopen-stale",
+                "input": {
+                    "replacement": true,
+                    "reopen": true,
+                    "voided_entries": true,
+                    "source_relationships": true,
+                    "balances": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "closed": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "100.00",
+                                "wants": "0.00",
+                                "savings": "0.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "700.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_2"
+                        },
+                        "closeout": {
+                            "id": "record_3",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_4",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_5",
+                                    "fund_name": "Close A",
+                                    "label": null,
+                                    "amount": "500.00",
+                                    "target_month": null,
+                                    "notes": null
+                                },
+                                {
+                                    "id": "record_6",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_7",
+                                    "fund_name": "Close B",
+                                    "label": null,
+                                    "amount": "400.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "repeated": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "100.00",
+                                "wants": "0.00",
+                                "savings": "0.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "700.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_2"
+                        },
+                        "closeout": {
+                            "id": "record_3",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_8",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_5",
+                                    "fund_name": "Close A",
+                                    "label": null,
+                                    "amount": "500.00",
+                                    "target_month": null,
+                                    "notes": null
+                                },
+                                {
+                                    "id": "record_9",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_7",
+                                    "fund_name": "Close B",
+                                    "label": null,
+                                    "amount": "400.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "updated": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "100.00",
+                                "wants": "0.00",
+                                "savings": "0.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "700.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_2"
+                        },
+                        "closeout": {
+                            "id": "record_3",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_10",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_5",
+                                    "fund_name": "Close A",
+                                    "label": null,
+                                    "amount": "900.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "reopened": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "reopened",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "100.00",
+                                "wants": "0.00",
+                                "savings": "0.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "700.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_2"
+                        },
+                        "closeout": {
+                            "id": "record_3",
+                            "status": "reopened",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_10",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_5",
+                                    "fund_name": "Close A",
+                                    "label": null,
+                                    "amount": "900.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "multi_fund_allocation_persisted": true,
+                "repeated_closeout_replaces_entries": true,
+                "replacement_voids_prior_entries": true,
+                "reopen_voids_active_entries": true,
+                "source_relationships_preserved": true,
+                "fund_balance_after_reopen_excludes_voided": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_11",
+                    "fund_id": "record_11",
+                    "amount": "500.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_11",
+                    "source_closeout_allocation_id": "record_11"
+                },
+                {
+                    "id": "record_12",
+                    "fund_id": "record_12",
+                    "amount": "400.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_11",
+                    "source_closeout_allocation_id": "record_12"
+                },
+                {
+                    "id": "record_13",
+                    "fund_id": "record_11",
+                    "amount": "500.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_11",
+                    "source_closeout_allocation_id": "record_13"
+                },
+                {
+                    "id": "record_14",
+                    "fund_id": "record_12",
+                    "amount": "400.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_11",
+                    "source_closeout_allocation_id": "record_14"
+                },
+                {
+                    "id": "record_15",
+                    "fund_id": "record_11",
+                    "amount": "900.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_11",
+                    "source_closeout_allocation_id": "record_15"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [
+                {
+                    "id": "record_11",
+                    "void_reason": "allocation_replaced",
+                    "is_voided": 1
+                },
+                {
+                    "id": "record_12",
+                    "void_reason": "allocation_replaced",
+                    "is_voided": 1
+                },
+                {
+                    "id": "record_13",
+                    "void_reason": "allocation_replaced",
+                    "is_voided": 1
+                },
+                {
+                    "id": "record_14",
+                    "void_reason": "allocation_replaced",
+                    "is_voided": 1
+                },
+                {
+                    "id": "record_15",
+                    "void_reason": "closeout_reopened",
+                    "is_voided": 1
+                }
+            ],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-CLOSEOUT-007",
+        "INV-CLOSEOUT-008",
+        "INV-CLOSEOUT-009",
+        "INV-CLOSEOUT-010",
+        "INV-CLOSEOUT-011",
+        "INV-CLOSEOUT-012"
+    ]
+}

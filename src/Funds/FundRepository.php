@@ -520,6 +520,7 @@ final class FundRepository
              JOIN funds f ON f.id = mca.fund_id AND f.user_id = mca.user_id
              WHERE mca.closeout_id = :closeout_id
                AND mca.allocation_type = \'fund\'
+               AND mca.superseded_at IS NULL
              ORDER BY mca.id ASC'
         );
         $stmt->execute([':closeout_id' => $closeoutDbId]);
@@ -604,7 +605,7 @@ final class FundRepository
                     mc.surplus_amount,
                     COALESCE(SUM(CASE WHEN mca.allocation_type = \'fund\' THEN mca.amount ELSE 0 END), 0.00) AS allocated_to_funds
              FROM monthly_closeouts mc
-             LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id
+             LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id AND mca.superseded_at IS NULL
              WHERE mc.user_id = :user_id
                AND mc.status = \'closed\'
                AND mc.month BETWEEN :year_start AND :year_end
@@ -631,6 +632,7 @@ final class FundRepository
                  JOIN funds f ON f.id = mca.fund_id AND f.user_id = mca.user_id
                  WHERE mca.closeout_id = :closeout_id
                    AND mca.allocation_type = \'fund\'
+                   AND mca.superseded_at IS NULL
                  ORDER BY mca.id ASC'
             );
             $fundAllocationsStmt->execute([':closeout_id' => $row['id']]);

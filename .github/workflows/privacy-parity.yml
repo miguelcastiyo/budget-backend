@@ -1,0 +1,67 @@
+name: Privacy Parity (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_full_parity:
+        description: Run the MariaDB-backed parity gate
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  privacy-parity:
+    if: ${{ inputs.run_full_parity == true }}
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: budget_privacy_parity_test
+          MARIADB_USER: parity
+          MARIADB_PASSWORD: parity_test_only
+          MARIADB_ROOT_PASSWORD: parity_root_test_only
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: openssl, mbstring, curl, pdo_mysql
+          coverage: none
+      - name: Bootstrap parity schema
+        env:
+          PRIVACY_PARITY_TEST: "1"
+          PRIVACY_PARITY_DB_HOST: 127.0.0.1
+          PRIVACY_PARITY_DB_PORT: "3307"
+          PRIVACY_PARITY_DB_USER: parity
+          PRIVACY_PARITY_DB_PASS: parity_test_only
+          PRIVACY_PARITY_DB_NAME: budget_privacy_parity_test
+        run: |
+          php scripts/setup_privacy_parity_database.php
+          php scripts/verify_privacy_parity_database.php
+      - name: Run parity gate
+        env:
+          PRIVACY_PARITY_TEST: "1"
+          PRIVACY_PARITY_DB_HOST: 127.0.0.1
+          PRIVACY_PARITY_DB_PORT: "3307"
+          PRIVACY_PARITY_DB_USER: parity
+          PRIVACY_PARITY_DB_PASS: parity_test_only
+          PRIVACY_PARITY_DB_NAME: budget_privacy_parity_test
+          DB_DSN: mysql:host=127.0.0.1;port=3307;dbname=budget_privacy_parity_test;charset=utf8mb4
+          DB_USER: parity
+          DB_PASS: parity_test_only
+        run: |
+          php scripts/generate_privacy_parity_fixtures.php --write --update-verified
+          php scripts/check_privacy_parity_fixtures.php
+          php scripts/validate_privacy_parity_coverage.php
+          php scripts/test_privacy_parity.php
+          php scripts/test_core.php
+          php scripts/test_all.php
+          git diff --check

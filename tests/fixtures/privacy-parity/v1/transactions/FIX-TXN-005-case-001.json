@@ -1,0 +1,122 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TXN-005-case-001",
+    "scenario_id": "transaction.fund-linked-mutation",
+    "domain": "transactions",
+    "description": "Fund-linked transaction mutation",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "transaction.fund-linked-mutation",
+                "input": {
+                    "create_linked_transaction": true,
+                    "update_transaction": true,
+                    "delete_transaction": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "fund_entry_create": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "fund_id": "record_3",
+                        "entry_date": "2026-01-15",
+                        "entry_type": "contribution",
+                        "direction": "in",
+                        "amount": "100.00",
+                        "source_type": "transaction",
+                        "source_month": null,
+                        "source_transaction_id": "record_4",
+                        "source_closeout_id": null,
+                        "note": "Initial"
+                    }
+                },
+                "transaction_update": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_4",
+                        "date": "2026-01-15",
+                        "expense": "Emergency saving",
+                        "amount": "125.00",
+                        "category": "savings",
+                        "is_split": false,
+                        "notes": "Updated",
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_4",
+                            "name": "Savings",
+                            "icon_key": "shopping_cart"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                },
+                "transaction_delete": {
+                    "status": 204,
+                    "body": null
+                }
+            },
+            "invariant_checks": {
+                "create_linked_transaction": true,
+                "update_syncs_entry": true,
+                "delete_voids_entry": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_4",
+                    "fund_id": "record_4",
+                    "amount": "125.00",
+                    "source_type": "transaction",
+                    "source_transaction_id": "record_4"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [
+                {
+                    "id": "record_4",
+                    "void_reason": "transaction_deleted"
+                }
+            ],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-013"
+    ]
+}

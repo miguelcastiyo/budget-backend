@@ -1,0 +1,206 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-BUD-001-case-001",
+    "scenario_id": "budget.allocation-validation",
+    "domain": "budgets",
+    "description": "Percent and amount allocation validation",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "budget.allocation-validation",
+                "input": {
+                    "valid_percent": true,
+                    "invalid_percent_total": true,
+                    "valid_amount": true,
+                    "invalid_amount_total": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "valid_percent": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "5000.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "5000.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "none",
+                        "side_income_label": null,
+                        "side_monthly_income": null,
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "percent",
+                        "needs_percent": "50.00",
+                        "wants_percent": "30.00",
+                        "savings_percent": "20.00",
+                        "needs_amount": null,
+                        "wants_amount": null,
+                        "savings_amount": null
+                    }
+                },
+                "invalid_percent": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed",
+                        "details": [
+                            {
+                                "field": "allocation_mode",
+                                "message": "percent values must total 100.00"
+                            }
+                        ]
+                    }
+                },
+                "valid_amount": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "5000.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "5000.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "none",
+                        "side_income_label": null,
+                        "side_monthly_income": null,
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "amount",
+                        "needs_percent": null,
+                        "wants_percent": null,
+                        "savings_percent": null,
+                        "needs_amount": "2500.00",
+                        "wants_amount": "1500.00",
+                        "savings_amount": "1000.00"
+                    }
+                },
+                "invalid_amount": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed",
+                        "details": [
+                            {
+                                "field": "allocation_mode",
+                                "message": "amount values must total monthly_income"
+                            }
+                        ]
+                    }
+                },
+                "resolved": {
+                    "status": 200,
+                    "body": {
+                        "requested_month": "2026-02",
+                        "resolved_effective_month": "2026-02",
+                        "is_exact_match": true,
+                        "settings": {
+                            "monthly_income": "5000.00",
+                            "income_source_type": "monthly",
+                            "primary_monthly_income": "5000.00",
+                            "primary_hourly_rate": null,
+                            "primary_weekly_hours": null,
+                            "side_income_type": "none",
+                            "side_income_label": null,
+                            "side_monthly_income": null,
+                            "side_hourly_rate": null,
+                            "side_weekly_hours": null,
+                            "allocation_mode": "amount",
+                            "needs_percent": null,
+                            "wants_percent": null,
+                            "savings_percent": null,
+                            "needs_amount": "2500.00",
+                            "wants_amount": "1500.00",
+                            "savings_amount": "1000.00"
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "percent_validation_succeeded": true,
+                "invalid_percent_rejected": true,
+                "amount_validation_succeeded": true,
+                "invalid_amount_rejected": true,
+                "resolved_amount_mode_preserved": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "user_id": "record_2",
+                    "monthly_income": "5000.00",
+                    "allocation_mode": "amount",
+                    "needs_percent": null,
+                    "wants_percent": null,
+                    "savings_percent": null,
+                    "needs_amount": "2500.00",
+                    "wants_amount": "1500.00",
+                    "savings_amount": "1000.00"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [
+                {
+                    "user_id": "record_2",
+                    "effective_month": "2026-01-01",
+                    "monthly_income": "5000.00",
+                    "allocation_mode": "percent",
+                    "needs_percent": "50.00",
+                    "wants_percent": "30.00",
+                    "savings_percent": "20.00",
+                    "needs_amount": null,
+                    "wants_amount": null,
+                    "savings_amount": null
+                },
+                {
+                    "user_id": "record_2",
+                    "effective_month": "2026-02-01",
+                    "monthly_income": "5000.00",
+                    "allocation_mode": "amount",
+                    "needs_percent": null,
+                    "wants_percent": null,
+                    "savings_percent": null,
+                    "needs_amount": "2500.00",
+                    "wants_amount": "1500.00",
+                    "savings_amount": "1000.00"
+                }
+            ],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-BUDGET-001",
+        "INV-BUDGET-002"
+    ]
+}

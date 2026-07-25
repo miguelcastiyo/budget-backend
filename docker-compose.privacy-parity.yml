@@ -1,0 +1,18 @@
+services:
+  privacy-parity-mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: budget_privacy_parity_test
+      MARIADB_USER: parity
+      MARIADB_PASSWORD: parity_test_only
+      MARIADB_ROOT_PASSWORD: parity_root_test_only
+      MARIADB_INITDB_SKIP_TZINFO: "1"
+    ports:
+      - "127.0.0.1:3307:3306"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes: []

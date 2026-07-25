@@ -24,7 +24,8 @@ final class MonthCloseoutService
         private readonly Config $config,
         private readonly BudgetSettingsResolver $budgetSettingsResolver,
         private readonly MonthCloseoutRepository $repository,
-        private readonly FundCloseoutIntegrationService $fundCloseoutIntegrationService
+        private readonly FundCloseoutIntegrationService $fundCloseoutIntegrationService,
+        private readonly ?DateTimeImmutable $clockNow = null
     ) {
     }
 
@@ -115,7 +116,7 @@ final class MonthCloseoutService
                 $closeoutDbId = (int) $existing['id'];
                 $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, $closeoutDbId, $month, 'allocation_replaced');
                 $this->repository->updateCloseoutSnapshot($closeoutDbId, $snapshot);
-                $this->repository->deleteAllocationsForCloseout($closeoutDbId);
+                $this->repository->supersedeAllocationsForCloseout($closeoutDbId);
             }
 
             if ($allocationRows !== []) {
@@ -156,7 +157,7 @@ final class MonthCloseoutService
         try {
             $this->repository->updateCloseoutAuthoredFields((int) $existing['id'], $notes);
             $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, (int) $existing['id'], $month, 'allocation_replaced');
-            $this->repository->deleteAllocationsForCloseout((int) $existing['id']);
+            $this->repository->supersedeAllocationsForCloseout((int) $existing['id']);
             $rows = $this->allocationRows($allocations);
             if ($rows !== []) {
                 $this->repository->insertAllocations((int) $existing['id'], $userId, $rows);
@@ -407,7 +408,7 @@ final class MonthCloseoutService
     {
         $timezoneName = $this->config->get('APP_TIMEZONE', 'America/Los_Angeles') ?: 'America/Los_Angeles';
         $tz = new DateTimeZone($timezoneName);
-        $currentMonth = (new DateTimeImmutable('now', $tz))->format('Y-m');
+        $currentMonth = ($this->clockNow ?? new DateTimeImmutable('now', $tz))->format('Y-m');
 
         if ($month < $currentMonth) {
             return 'past';
@@ -589,7 +590,7 @@ final class MonthCloseoutService
 
     private function nowUtc(): string
     {
-        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        return ($this->clockNow ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
     }
 
     /** @return array<string,mixed> */

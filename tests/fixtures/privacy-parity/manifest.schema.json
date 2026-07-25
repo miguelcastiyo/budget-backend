@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://budget.example.test/privacy-parity/manifest.schema.json",
+  "type": "object",
+  "required": ["manifest_version", "fixture_version", "entries"],
+  "properties": {
+    "manifest_version": {"type": "string", "const": "1.0"},
+    "fixture_version": {"type": "string", "const": "1.0"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fixture_path", "fixture_version", "fixture_id", "scenario_id", "group_id", "domain", "source_implementation", "future_consumer", "covered_invariant_ids", "status", "source_commit", "notes", "blocker_code", "blocker_owner", "required_action"],
+        "properties": {
+          "fixture_path": {"type": "string"},
+          "fixture_version": {"const": "1.0"},
+          "fixture_id": {"type": "string"},
+          "scenario_id": {"type": "string"},
+          "group_id": {"type": "string"},
+          "domain": {"type": "string"},
+          "source_implementation": {"type": "string"},
+          "future_consumer": {"type": "string"},
+          "covered_invariant_ids": {"type": "array", "items": {"type": "string"}},
+          "status": {"enum": ["planned", "generated", "verified", "blocked"]},
+          "source_commit": {"type": "string"},
+          "notes": {"type": "string"},
+          "blocker_code": {"type": "string"},
+          "blocker_owner": {"type": "string"},
+          "required_action": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

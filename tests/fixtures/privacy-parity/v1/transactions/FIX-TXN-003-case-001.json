@@ -1,0 +1,202 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TXN-003-case-001",
+    "scenario_id": "transaction.suggestion-ranking",
+    "domain": "transactions",
+    "description": "Suggestion ranking and tie behavior",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "transaction.suggestion-ranking",
+                "input": {
+                    "queries": [
+                        "target",
+                        "target e",
+                        "town"
+                    ],
+                    "ranking": {
+                        "exact": 0,
+                        "prefix": 1,
+                        "contains": 2,
+                        "frequency": true,
+                        "recency": true,
+                        "tie_breaking": true
+                    }
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "exact": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "expense": "Target",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "is_split": false,
+                                "confidence": "high",
+                                "last_used_at": "2026-01-02",
+                                "usage_count": 2
+                            },
+                            {
+                                "expense": "Target Express",
+                                "category": "wants",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "is_split": false,
+                                "confidence": "medium",
+                                "last_used_at": "2026-01-04",
+                                "usage_count": 1
+                            },
+                            {
+                                "expense": "Downtown Target Market",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "is_split": false,
+                                "confidence": "low",
+                                "last_used_at": "2026-01-05",
+                                "usage_count": 1
+                            }
+                        ]
+                    }
+                },
+                "prefix": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "expense": "Target Express",
+                                "category": "wants",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "is_split": false,
+                                "confidence": "medium",
+                                "last_used_at": "2026-01-04",
+                                "usage_count": 1
+                            }
+                        ]
+                    }
+                },
+                "contains": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "expense": "Downtown Target Market",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "card": null,
+                                "is_split": false,
+                                "confidence": "low",
+                                "last_used_at": "2026-01-05",
+                                "usage_count": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "exact_before_prefix_before_contains": true,
+                "frequency_and_recency_applied": true,
+                "prefix_ranked": true,
+                "contains_ranked": true,
+                "deterministic_tie_breaking": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "transaction_date": "2026-01-01",
+                    "expense": "Target",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_3",
+                    "transaction_date": "2026-01-02",
+                    "expense": "Target",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_4",
+                    "transaction_date": "2026-01-03",
+                    "expense": "Target",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_5",
+                    "transaction_date": "2026-01-04",
+                    "expense": "Target Express",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_6",
+                    "transaction_date": "2026-01-05",
+                    "expense": "Downtown Target Market",
+                    "category": "needs"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-011"
+    ]
+}

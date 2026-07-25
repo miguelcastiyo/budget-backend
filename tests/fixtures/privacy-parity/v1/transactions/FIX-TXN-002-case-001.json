@@ -1,0 +1,185 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TXN-002-case-001",
+    "scenario_id": "transaction.filter-summary-pagination",
+    "domain": "transactions",
+    "description": "Filter, search, summary, and pagination",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "transaction.filter-summary-pagination",
+                "input": {
+                    "search": "coffee",
+                    "date_range": {
+                        "from": "2026-01-10",
+                        "to": "2026-01-12"
+                    },
+                    "page_size": 2,
+                    "summary_over_full_filter": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "page_one": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "id": "record_2",
+                                "date": "2026-01-10",
+                                "expense": "Coffee beans",
+                                "amount": "10.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "context": null,
+                                "card": null
+                            },
+                            {
+                                "id": "record_3",
+                                "date": "2026-01-11",
+                                "expense": "Coffee shop",
+                                "amount": "20.00",
+                                "category": "wants",
+                                "is_split": true,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "context": null,
+                                "card": null
+                            }
+                        ],
+                        "page": 1,
+                        "page_size": 2,
+                        "total_items": 3,
+                        "summary": {
+                            "total_spent": "60.00",
+                            "count": 3,
+                            "avg_transaction": "20.00",
+                            "split_count": 1
+                        }
+                    }
+                },
+                "page_two": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "id": "record_4",
+                                "date": "2026-01-12",
+                                "expense": "Coffee subscription",
+                                "amount": "30.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "context": null,
+                                "card": null
+                            }
+                        ],
+                        "page": 2,
+                        "page_size": 2,
+                        "total_items": 3,
+                        "summary": {
+                            "total_spent": "60.00",
+                            "count": 3,
+                            "avg_transaction": "20.00",
+                            "split_count": 1
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "filter_applied": true,
+                "pagination_stable": true,
+                "summary_uses_full_collection": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "transaction_date": "2026-01-10",
+                    "expense": "Coffee beans",
+                    "amount": "10.00",
+                    "category": "needs",
+                    "is_split": 0
+                },
+                {
+                    "id": "record_3",
+                    "transaction_date": "2026-01-11",
+                    "expense": "Coffee shop",
+                    "amount": "20.00",
+                    "category": "wants",
+                    "is_split": 1
+                },
+                {
+                    "id": "record_4",
+                    "transaction_date": "2026-01-12",
+                    "expense": "Coffee subscription",
+                    "amount": "30.00",
+                    "category": "needs",
+                    "is_split": 0
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-008",
+        "INV-TXN-009",
+        "INV-TXN-010"
+    ]
+}

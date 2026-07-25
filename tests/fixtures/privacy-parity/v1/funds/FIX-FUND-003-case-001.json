@@ -1,0 +1,175 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-FUND-003-case-001",
+    "scenario_id": "fund.transaction-closeout-linkage",
+    "domain": "funds",
+    "description": "Transaction and closeout linkage",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "fund.transaction-closeout-linkage",
+                "input": {
+                    "closeout_source": true,
+                    "fund_balance": true,
+                    "summary": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "closeout": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "100.00",
+                                "wants": "0.00",
+                                "savings": "0.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "700.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_2"
+                        },
+                        "closeout": {
+                            "id": "record_3",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_4",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_5",
+                                    "fund_name": "Closeout fund",
+                                    "label": null,
+                                    "amount": "900.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "fund_summary": {
+                    "status": 200,
+                    "body": {
+                        "year": 2026,
+                        "total_closeout_contributed": "900.00",
+                        "funds": [
+                            {
+                                "fund": {
+                                    "id": "record_5",
+                                    "name": "Closeout fund",
+                                    "fund_type": "goal",
+                                    "goal_amount": null,
+                                    "current_balance": "900.00",
+                                    "percent_funded": null
+                                },
+                                "closeout_contributed": "900.00",
+                                "closeout_count": 1
+                            }
+                        ],
+                        "unassigned_closeout_total": "0.00",
+                        "months": [
+                            {
+                                "month": "2026-01",
+                                "result_type": "surplus",
+                                "surplus_amount": "900.00",
+                                "allocated_to_funds": "900.00",
+                                "unassigned_amount": "0.00",
+                                "fund_allocations": [
+                                    {
+                                        "fund_id": "record_5",
+                                        "fund_name": "Closeout fund",
+                                        "amount": "900.00"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "closeout_entry_source_linked": true,
+                "fund_balance_includes_closeout": true,
+                "fund_closeout_summary_includes_month": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_6",
+                    "fund_id": "record_6",
+                    "amount": "900.00",
+                    "source_type": "month_closeout",
+                    "source_closeout_id": "record_6",
+                    "source_closeout_allocation_id": "record_6"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-FUND-009",
+        "INV-FUND-010",
+        "INV-FUND-011",
+        "INV-FUND-013"
+    ]
+}

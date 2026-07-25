@@ -1,0 +1,237 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-BUD-003-case-001",
+    "scenario_id": "budget.effective-month-inheritance",
+    "domain": "budgets",
+    "description": "Effective-month inheritance and history",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "budget.effective-month-inheritance",
+                "input": {
+                    "inheritance": true,
+                    "edit_inherited_month": true,
+                    "prior_version_preservation": true,
+                    "resolved_amounts": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "january": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "4000.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "4000.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "none",
+                        "side_income_label": null,
+                        "side_monthly_income": null,
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "percent",
+                        "needs_percent": "50.00",
+                        "wants_percent": "30.00",
+                        "savings_percent": "20.00",
+                        "needs_amount": null,
+                        "wants_amount": null,
+                        "savings_amount": null
+                    }
+                },
+                "march": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "6000.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "6000.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "none",
+                        "side_income_label": null,
+                        "side_monthly_income": null,
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "amount",
+                        "needs_percent": null,
+                        "wants_percent": null,
+                        "savings_percent": null,
+                        "needs_amount": "3000.00",
+                        "wants_amount": "1800.00",
+                        "savings_amount": "1200.00"
+                    }
+                },
+                "inherited_february": {
+                    "status": 200,
+                    "body": {
+                        "requested_month": "2026-02",
+                        "resolved_effective_month": "2026-01",
+                        "is_exact_match": false,
+                        "settings": {
+                            "monthly_income": "4000.00",
+                            "income_source_type": "monthly",
+                            "primary_monthly_income": "4000.00",
+                            "primary_hourly_rate": null,
+                            "primary_weekly_hours": null,
+                            "side_income_type": "none",
+                            "side_income_label": null,
+                            "side_monthly_income": null,
+                            "side_hourly_rate": null,
+                            "side_weekly_hours": null,
+                            "allocation_mode": "percent",
+                            "needs_percent": "50.00",
+                            "wants_percent": "30.00",
+                            "savings_percent": "20.00",
+                            "needs_amount": null,
+                            "wants_amount": null,
+                            "savings_amount": null
+                        }
+                    }
+                },
+                "edited_february": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "4500.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "4500.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "none",
+                        "side_income_label": null,
+                        "side_monthly_income": null,
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "percent",
+                        "needs_percent": "50.00",
+                        "wants_percent": "25.00",
+                        "savings_percent": "25.00",
+                        "needs_amount": null,
+                        "wants_amount": null,
+                        "savings_amount": null
+                    }
+                },
+                "resolved_after_edit": {
+                    "status": 200,
+                    "body": {
+                        "requested_month": "2026-02",
+                        "resolved_effective_month": "2026-02",
+                        "is_exact_match": true,
+                        "settings": {
+                            "monthly_income": "4500.00",
+                            "income_source_type": "monthly",
+                            "primary_monthly_income": "4500.00",
+                            "primary_hourly_rate": null,
+                            "primary_weekly_hours": null,
+                            "side_income_type": "none",
+                            "side_income_label": null,
+                            "side_monthly_income": null,
+                            "side_hourly_rate": null,
+                            "side_weekly_hours": null,
+                            "allocation_mode": "percent",
+                            "needs_percent": "50.00",
+                            "wants_percent": "25.00",
+                            "savings_percent": "25.00",
+                            "needs_amount": null,
+                            "wants_amount": null,
+                            "savings_amount": null
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "inheritance_resolves_prior_version": true,
+                "inherited_month_edit_creates_version": true,
+                "prior_version_preserved": true,
+                "resolved_allocation_amounts": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "monthly_income": "6000.00",
+                    "allocation_mode": "amount",
+                    "needs_percent": null,
+                    "wants_percent": null,
+                    "savings_percent": null,
+                    "needs_amount": "3000.00",
+                    "wants_amount": "1800.00",
+                    "savings_amount": "1200.00"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [
+                {
+                    "effective_month": "2026-01-01",
+                    "monthly_income": "4000.00",
+                    "allocation_mode": "percent",
+                    "needs_percent": "50.00",
+                    "wants_percent": "30.00",
+                    "savings_percent": "20.00",
+                    "needs_amount": null,
+                    "wants_amount": null,
+                    "savings_amount": null
+                },
+                {
+                    "effective_month": "2026-02-01",
+                    "monthly_income": "4500.00",
+                    "allocation_mode": "percent",
+                    "needs_percent": "50.00",
+                    "wants_percent": "25.00",
+                    "savings_percent": "25.00",
+                    "needs_amount": null,
+                    "wants_amount": null,
+                    "savings_amount": null
+                },
+                {
+                    "effective_month": "2026-03-01",
+                    "monthly_income": "6000.00",
+                    "allocation_mode": "amount",
+                    "needs_percent": null,
+                    "wants_percent": null,
+                    "savings_percent": null,
+                    "needs_amount": "3000.00",
+                    "wants_amount": "1800.00",
+                    "savings_amount": "1200.00"
+                }
+            ],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-BUDGET-005",
+        "INV-BUDGET-006",
+        "INV-BUDGET-008"
+    ]
+}

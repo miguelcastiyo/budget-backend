@@ -1,0 +1,224 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TXN-001-case-001",
+    "scenario_id": "transaction.crud-validation",
+    "domain": "transactions",
+    "description": "CRUD validation and normalized notes",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "transaction.crud-validation",
+                "input": {
+                    "valid_create_update_delete": true,
+                    "invalid_money": "0.00",
+                    "invalid_category": "other",
+                    "cross_user_tag": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "create": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "date": "2026-01-15",
+                        "expense": "Coffee",
+                        "amount": "12.50",
+                        "category": "needs",
+                        "is_split": true,
+                        "notes": "Morning coffee",
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Groceries",
+                            "icon_key": "shopping_cart"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                },
+                "invalid_create": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed",
+                        "details": [
+                            {
+                                "field": "amount",
+                                "message": "must be greater than 0"
+                            }
+                        ]
+                    }
+                },
+                "invalid_category": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed",
+                        "details": [
+                            {
+                                "field": "category",
+                                "message": "must be one of needs,wants,savings"
+                            }
+                        ]
+                    }
+                },
+                "missing_required": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request validation failed",
+                        "details": [
+                            {
+                                "field": "expense",
+                                "message": "is required"
+                            }
+                        ]
+                    }
+                },
+                "cross_user_tag": {
+                    "status": 404,
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Tag not found",
+                        "details": []
+                    }
+                },
+                "update": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "date": "2026-01-15",
+                        "expense": "Coffee",
+                        "amount": "12.50",
+                        "category": "needs",
+                        "is_split": true,
+                        "notes": "Updated note",
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Groceries",
+                            "icon_key": "shopping_cart"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                },
+                "list": {
+                    "status": 200,
+                    "body": {
+                        "items": [
+                            {
+                                "id": "record_2",
+                                "date": "2026-01-15",
+                                "expense": "Coffee",
+                                "amount": "12.50",
+                                "category": "needs",
+                                "is_split": true,
+                                "notes": "Updated note",
+                                "source": "manual",
+                                "recurring_expense_id": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Groceries",
+                                    "icon_key": "shopping_cart"
+                                },
+                                "context": null,
+                                "card": null
+                            }
+                        ],
+                        "page": 1,
+                        "page_size": 1,
+                        "total_items": 1,
+                        "summary": {
+                            "total_spent": "12.50",
+                            "count": 1,
+                            "avg_transaction": "12.50",
+                            "split_count": 1
+                        }
+                    }
+                },
+                "delete": {
+                    "status": 204,
+                    "body": null
+                }
+            },
+            "invariant_checks": {
+                "positive_money_accepted": true,
+                "invalid_money_rejected": true,
+                "invalid_category_rejected": true,
+                "missing_required_rejected": true,
+                "cross_user_tag_rejected": true,
+                "notes_trimmed": true,
+                "split_preserved": true,
+                "delete_is_soft": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "user_id": "record_2",
+                    "transaction_date": "2026-01-15",
+                    "expense": "Coffee",
+                    "amount": "12.50",
+                    "category": "needs",
+                    "is_split": 1,
+                    "notes": "Updated note",
+                    "is_deleted": 1
+                }
+            ],
+            "tombstones": [
+                {
+                    "id": "record_2",
+                    "is_deleted": 1
+                }
+            ],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-001",
+        "INV-TXN-002",
+        "INV-TXN-003",
+        "INV-TXN-004",
+        "INV-TXN-005",
+        "INV-TXN-006",
+        "INV-TXN-007"
+    ]
+}

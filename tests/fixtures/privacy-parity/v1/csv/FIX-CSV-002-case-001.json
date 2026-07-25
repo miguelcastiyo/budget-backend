@@ -1,0 +1,101 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-CSV-002-case-001",
+    "scenario_id": "csv.commit-rollback-export",
+    "domain": "csv",
+    "description": "Commit, duplicates, rollback, and export",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "csv.commit-rollback-export",
+                "input": {
+                    "commit": true,
+                    "duplicates": true,
+                    "rollback": true,
+                    "export_filters": true,
+                    "formula_injection": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "import": {
+                    "status": "completed",
+                    "message": "Imported 1 row(s); skipped 0 duplicate row(s).",
+                    "mode": "commit",
+                    "total_rows": 1,
+                    "valid_rows": 1,
+                    "imported_rows": 1,
+                    "duplicate_rows": 0,
+                    "invalid_rows": 0,
+                    "skipped_rows": 0,
+                    "skipped_blank_amount_rows": 0,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [],
+                    "new_tags": [],
+                    "new_cards": []
+                },
+                "rollback": {
+                    "status": "rolled_back",
+                    "import_run_id": "record_2",
+                    "deleted_rows": 1
+                },
+                "export": {
+                    "status": 200,
+                    "headers": {
+                        "Content-Type": "text/csv; charset=utf-8"
+                    },
+                    "csv": "date,expense,amount,category,is_split,tag,card,created_at,updated_at,notes\n2026-01-12,'=SUM(A1),12.50,needs,false,Formula,,\"2026-01-15 10:00:00\",\"2026-01-15 10:00:00\",\n2026-01-11,\"Plain export\",5.00,wants,false,Formula,,\"2026-01-15 10:00:00\",\"2026-01-15 10:00:00\",\n"
+                }
+            },
+            "invariant_checks": {
+                "rollback_leaves_taxonomy": true,
+                "export_header_and_filter": true,
+                "export_order_and_formula_escape": true,
+                "export_money_dates_and_nulls": true
+            }
+        },
+        "state": {
+            "records": [],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-CSV-011",
+        "INV-CSV-012"
+    ]
+}

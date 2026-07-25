@@ -1,0 +1,169 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TAX-001-case-001",
+    "scenario_id": "taxonomy.lifecycle-and-icons",
+    "domain": "taxonomy",
+    "description": "Uniqueness, reactivation, favorites, and icons",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "taxonomy.lifecycle-and-icons",
+                "input": {
+                    "duplicate_name_case_insensitive": true,
+                    "soft_delete_reactivate": true,
+                    "allowed_icon": "box",
+                    "foreign_ownership": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "tag": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Travel",
+                        "icon_key": "plane"
+                    }
+                },
+                "duplicate_tag": {
+                    "status": 409,
+                    "error": {
+                        "code": "CONFLICT",
+                        "message": "Tag already exists",
+                        "details": []
+                    }
+                },
+                "foreign_ownership": {
+                    "status": 404,
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Tag not found",
+                        "details": []
+                    }
+                },
+                "context": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Trip",
+                        "icon_key": "map_pinned"
+                    }
+                },
+                "reactivated_context": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Trip",
+                        "icon_key": "box"
+                    }
+                },
+                "card": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Visa",
+                        "is_favorite": false
+                    }
+                },
+                "favorited_card": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Visa",
+                        "is_favorite": true
+                    }
+                }
+            },
+            "invariant_checks": {
+                "case_insensitive_duplicate_rejected": true,
+                "ownership_rejected": true,
+                "context_reactivated_same_id": true,
+                "allowed_icon_preserved": true,
+                "favorite_update_succeeded": true
+            }
+        },
+        "state": {
+            "records": {
+                "tags": [
+                    {
+                        "id": "record_2",
+                        "user_id": "record_2",
+                        "name": "Travel",
+                        "icon_key": "plane",
+                        "is_active": 1,
+                        "is_deleted": 0
+                    },
+                    {
+                        "id": "record_3",
+                        "user_id": "record_3",
+                        "name": "Other User Tag",
+                        "icon_key": null,
+                        "is_active": 1,
+                        "is_deleted": 0
+                    }
+                ],
+                "contexts": [
+                    {
+                        "id": "record_2",
+                        "user_id": "record_2",
+                        "name": "Trip",
+                        "icon_key": "box",
+                        "is_active": 1,
+                        "is_deleted": 0
+                    }
+                ],
+                "cards": [
+                    {
+                        "id": "record_2",
+                        "user_id": "record_2",
+                        "name": "Visa",
+                        "is_favorite": 1,
+                        "is_active": 1,
+                        "is_deleted": 0
+                    }
+                ]
+            },
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TAX-001",
+        "INV-TAX-002",
+        "INV-TAX-003",
+        "INV-TAX-005"
+    ]
+}

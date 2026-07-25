@@ -1,0 +1,252 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-REC-002-case-001",
+    "scenario_id": "recurring.version-change-delete",
+    "domain": "recurring",
+    "description": "Version overlap, change, and delete",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "recurring.version-change-delete",
+                "input": {
+                    "overlap": true,
+                    "open_ended_versions": true,
+                    "future_change": true,
+                    "deletion": true,
+                    "prior_history": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "base": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "series_id": "record_3",
+                        "expense": "Versioned bill",
+                        "amount": "50.00",
+                        "category": "needs",
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Versions",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "day_of_month",
+                        "billing_day": 31,
+                        "projected_date_for_month": "2026-04-30",
+                        "starts_month": "2026-01",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                },
+                "scheduled": {
+                    "status": 200,
+                    "body": {
+                        "status": "scheduled",
+                        "series_id": "record_3",
+                        "ended_rule": {
+                            "id": "record_2",
+                            "series_id": "record_3",
+                            "expense": "Versioned bill",
+                            "amount": "50.00",
+                            "category": "needs",
+                            "tag": {
+                                "id": "record_2",
+                                "name": "Versions",
+                                "icon_key": "receipt"
+                            },
+                            "card": null,
+                            "billing_type": "day_of_month",
+                            "billing_day": 31,
+                            "projected_date_for_month": "2026-04-30",
+                            "starts_month": "2026-01",
+                            "ends_month": "2026-05",
+                            "is_active": true,
+                            "generated_for_month": false
+                        },
+                        "new_rule": {
+                            "id": "record_4",
+                            "series_id": "record_3",
+                            "expense": "Versioned bill",
+                            "amount": "75.00",
+                            "category": "needs",
+                            "tag": {
+                                "id": "record_2",
+                                "name": "Versions",
+                                "icon_key": "receipt"
+                            },
+                            "card": null,
+                            "billing_type": "day_of_month",
+                            "billing_day": 31,
+                            "projected_date_for_month": "2026-04-30",
+                            "starts_month": "2026-06",
+                            "ends_month": null,
+                            "is_active": true,
+                            "generated_for_month": false
+                        },
+                        "series_items": [
+                            {
+                                "id": "record_2",
+                                "series_id": "record_3",
+                                "expense": "Versioned bill",
+                                "amount": "50.00",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Versions",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "billing_type": "day_of_month",
+                                "billing_day": 31,
+                                "projected_date_for_month": "2026-04-30",
+                                "starts_month": "2026-01",
+                                "ends_month": "2026-05",
+                                "is_active": true,
+                                "generated_for_month": true
+                            },
+                            {
+                                "id": "record_4",
+                                "series_id": "record_3",
+                                "expense": "Versioned bill",
+                                "amount": "75.00",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Versions",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "billing_type": "day_of_month",
+                                "billing_day": 31,
+                                "projected_date_for_month": "2026-04-30",
+                                "starts_month": "2026-06",
+                                "ends_month": null,
+                                "is_active": true,
+                                "generated_for_month": false
+                            }
+                        ]
+                    }
+                },
+                "overlap_rejection": {
+                    "status": 409,
+                    "error": {
+                        "code": "CONFLICT",
+                        "message": "Recurring series contains overlapping month windows.",
+                        "details": [
+                            {
+                                "field": "effective_month",
+                                "message": "Recurring series versions must not overlap."
+                            }
+                        ]
+                    }
+                },
+                "stopped_delete": {
+                    "status": 204
+                }
+            },
+            "invariant_checks": {
+                "future_version_created": true,
+                "overlap_rejected": true,
+                "prior_version_preserved": true,
+                "deletion_stops_future_generation": true,
+                "existing_transaction_preserved_after_delete": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "series_id": "record_3",
+                    "expense": "Versioned bill",
+                    "amount": "50.00",
+                    "starts_month": "2026-01-01",
+                    "ends_month": "2026-05-01",
+                    "is_active": 1,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_4",
+                    "series_id": "record_3",
+                    "expense": "Versioned bill",
+                    "amount": "75.00",
+                    "starts_month": "2026-06-01",
+                    "ends_month": null,
+                    "is_active": 1,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_5",
+                    "series_id": "record_6",
+                    "expense": "Stopped bill",
+                    "amount": "20.00",
+                    "starts_month": "2026-01-01",
+                    "ends_month": null,
+                    "is_active": 0,
+                    "is_deleted": 1
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": [
+                {
+                    "recurring_expense_id": "record_2",
+                    "occurrence_month": "2026-04-01",
+                    "due_date": "2026-04-30",
+                    "transaction_id": "record_2"
+                },
+                {
+                    "recurring_expense_id": "record_5",
+                    "occurrence_month": "2026-04-01",
+                    "due_date": "2026-04-10",
+                    "transaction_id": "record_4"
+                },
+                {
+                    "recurring_expense_id": "record_2",
+                    "occurrence_month": "2026-03-01",
+                    "due_date": "2026-03-31",
+                    "transaction_id": "record_5"
+                }
+            ]
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-REC-001",
+        "INV-REC-008",
+        "INV-REC-009"
+    ]
+}

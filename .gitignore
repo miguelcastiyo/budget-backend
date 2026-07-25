@@ -5,4 +5,7 @@ storage/rate-limit/
 project_info.md
 /postman
 /storage
-/docs
+/docs/*
+!/docs/
+!/docs/phase-0d-parity-discrepancies.md
+!/docs/phase-0d-parity-record.md

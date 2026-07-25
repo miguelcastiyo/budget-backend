@@ -1,5 +1,9 @@
 # Budget API
 
+## Phase 0D parity
+
+Phase 0D is complete and `parity_baseline_ready`: [coverage](docs/phase-0d-parity-coverage.md), [fixture summary](docs/phase-0d-parity-fixture-summary.md), [harness](docs/phase-0d-parity-harness.md), [record](docs/phase-0d-parity-record.md), and [discrepancies](docs/phase-0d-parity-discrepancies.md).
+
 ## What is implemented
 - Invite-only auth flows:
   - `GET /api/v1/auth/invitations`

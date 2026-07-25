@@ -1,0 +1,311 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-SAV-001-case-001",
+    "scenario_id": "savings-plan.allocation-state",
+    "domain": "savings-plan",
+    "description": "Plan, no-plan, and over-allocation state",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "savings-plan.allocation-state",
+                "input": {
+                    "goal_configuration": true,
+                    "monthly_allocations": true,
+                    "over_allocation": true,
+                    "multiple_funds": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "funds": [
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_2",
+                            "name": "Travel goal",
+                            "fund_type": "goal",
+                            "goal_amount": "200.00",
+                            "target_month": null,
+                            "notes": null,
+                            "status": "active",
+                            "sort_order": 0,
+                            "current_balance": "0.00",
+                            "remaining_amount": "200.00",
+                            "percent_funded": "0.00",
+                            "is_goal_met": false,
+                            "source_breakdown": {
+                                "month_closeout": "0.00",
+                                "transaction": "0.00",
+                                "manual": "0.00",
+                                "starting_balance": "0.00",
+                                "correction": "0.00"
+                            },
+                            "entries_count": 0,
+                            "recent_entries": []
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_3",
+                            "name": "Buffer goal",
+                            "fund_type": "buffer",
+                            "goal_amount": "100.00",
+                            "target_month": null,
+                            "notes": null,
+                            "status": "active",
+                            "sort_order": 0,
+                            "current_balance": "0.00",
+                            "remaining_amount": "100.00",
+                            "percent_funded": "0.00",
+                            "is_goal_met": false,
+                            "source_breakdown": {
+                                "month_closeout": "0.00",
+                                "transaction": "0.00",
+                                "manual": "0.00",
+                                "starting_balance": "0.00",
+                                "correction": "0.00"
+                            },
+                            "entries_count": 0,
+                            "recent_entries": []
+                        }
+                    }
+                ],
+                "saved_plan": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "active",
+                        "is_editable": true,
+                        "has_plan": true,
+                        "budget": {
+                            "has_budget": true,
+                            "resolved_effective_month": "2026-01",
+                            "savings_budget": "200.00"
+                        },
+                        "summary": {
+                            "saved_amount": "0.00",
+                            "remaining_to_save": "200.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "200.00",
+                            "unassigned_budget": "0.00",
+                            "transaction_directed_to_funds": "0.00",
+                            "saved_outside_funds": "0.00",
+                            "closeout_directed_to_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00"
+                        },
+                        "goal_pacing": {
+                            "status": "historical",
+                            "recommended_total": null,
+                            "gap_to_savings_budget": null,
+                            "headroom_vs_savings_budget": null
+                        },
+                        "funds": [
+                            {
+                                "fund": {
+                                    "id": "record_3",
+                                    "name": "Buffer goal",
+                                    "status": "active",
+                                    "goal_amount": "100.00",
+                                    "target_month": null,
+                                    "current_balance": "0.00"
+                                },
+                                "planned_amount": "50.00",
+                                "transaction_contributed": "0.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "0.00",
+                                "remaining_planned": "50.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "no_target",
+                                    "planning_basis_balance": null,
+                                    "goal_shortfall": null,
+                                    "months_remaining": null,
+                                    "recommended_amount": null
+                                }
+                            },
+                            {
+                                "fund": {
+                                    "id": "record_2",
+                                    "name": "Travel goal",
+                                    "status": "active",
+                                    "goal_amount": "200.00",
+                                    "target_month": null,
+                                    "current_balance": "0.00"
+                                },
+                                "planned_amount": "150.00",
+                                "transaction_contributed": "0.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "0.00",
+                                "remaining_planned": "150.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "no_target",
+                                    "planning_basis_balance": null,
+                                    "goal_shortfall": null,
+                                    "months_remaining": null,
+                                    "recommended_amount": null
+                                }
+                            }
+                        ]
+                    }
+                },
+                "over_budget": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Planned Fund allocations cannot exceed the month's Savings budget.",
+                        "details": [
+                            {
+                                "field": "allocations",
+                                "message": "planned allocations exceed the Savings budget by 1.00"
+                            }
+                        ]
+                    }
+                },
+                "view": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "active",
+                        "is_editable": true,
+                        "has_plan": true,
+                        "budget": {
+                            "has_budget": true,
+                            "resolved_effective_month": "2026-01",
+                            "savings_budget": "200.00"
+                        },
+                        "summary": {
+                            "saved_amount": "0.00",
+                            "remaining_to_save": "200.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "200.00",
+                            "unassigned_budget": "0.00",
+                            "transaction_directed_to_funds": "0.00",
+                            "saved_outside_funds": "0.00",
+                            "closeout_directed_to_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00"
+                        },
+                        "goal_pacing": {
+                            "status": "historical",
+                            "recommended_total": null,
+                            "gap_to_savings_budget": null,
+                            "headroom_vs_savings_budget": null
+                        },
+                        "funds": [
+                            {
+                                "fund": {
+                                    "id": "record_3",
+                                    "name": "Buffer goal",
+                                    "status": "active",
+                                    "goal_amount": "100.00",
+                                    "target_month": null,
+                                    "current_balance": "0.00"
+                                },
+                                "planned_amount": "50.00",
+                                "transaction_contributed": "0.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "0.00",
+                                "remaining_planned": "50.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "no_target",
+                                    "planning_basis_balance": null,
+                                    "goal_shortfall": null,
+                                    "months_remaining": null,
+                                    "recommended_amount": null
+                                }
+                            },
+                            {
+                                "fund": {
+                                    "id": "record_2",
+                                    "name": "Travel goal",
+                                    "status": "active",
+                                    "goal_amount": "200.00",
+                                    "target_month": null,
+                                    "current_balance": "0.00"
+                                },
+                                "planned_amount": "150.00",
+                                "transaction_contributed": "0.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "0.00",
+                                "remaining_planned": "150.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "no_target",
+                                    "planning_basis_balance": null,
+                                    "goal_shortfall": null,
+                                    "months_remaining": null,
+                                    "recommended_amount": null
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "plan_configuration_persisted": true,
+                "multiple_fund_allocations_ordered": true,
+                "over_allocation_rejected": true,
+                "goal_fields_exposed": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "fund_id": "record_4",
+                    "month": "2026-01-01",
+                    "planned_amount": "150.00"
+                },
+                {
+                    "fund_id": "record_5",
+                    "month": "2026-01-01",
+                    "planned_amount": "50.00"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-SAVINGS-001",
+        "INV-SAVINGS-002",
+        "INV-SAVINGS-003",
+        "INV-SAVINGS-004"
+    ]
+}

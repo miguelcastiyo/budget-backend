@@ -1,0 +1,192 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-SAV-002-case-001",
+    "scenario_id": "savings-plan.pacing-directed-activity",
+    "domain": "savings-plan",
+    "description": "Directed, unplanned, and pacing behavior",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "savings-plan.pacing-directed-activity",
+                "input": {
+                    "pacing": true,
+                    "goal_completion": true,
+                    "contribution_source": true,
+                    "month_boundary": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "january": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "active",
+                        "is_editable": true,
+                        "has_plan": true,
+                        "budget": {
+                            "has_budget": true,
+                            "resolved_effective_month": "2026-01",
+                            "savings_budget": "200.00"
+                        },
+                        "summary": {
+                            "saved_amount": "100.00",
+                            "remaining_to_save": "100.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "100.00",
+                            "unassigned_budget": "100.00",
+                            "transaction_directed_to_funds": "100.00",
+                            "saved_outside_funds": "0.00",
+                            "closeout_directed_to_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00"
+                        },
+                        "goal_pacing": {
+                            "status": "historical",
+                            "recommended_total": null,
+                            "gap_to_savings_budget": null,
+                            "headroom_vs_savings_budget": null
+                        },
+                        "funds": [
+                            {
+                                "fund": {
+                                    "id": "record_2",
+                                    "name": "Pacing goal",
+                                    "status": "active",
+                                    "goal_amount": "100.00",
+                                    "target_month": "2026-02",
+                                    "current_balance": "100.00"
+                                },
+                                "planned_amount": "100.00",
+                                "transaction_contributed": "100.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "100.00",
+                                "remaining_planned": "0.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "on_track_calculable",
+                                    "planning_basis_balance": "0.00",
+                                    "goal_shortfall": "100.00",
+                                    "months_remaining": 2,
+                                    "recommended_amount": "50.00"
+                                }
+                            }
+                        ]
+                    }
+                },
+                "february": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-02",
+                        "status": "active",
+                        "is_editable": true,
+                        "has_plan": false,
+                        "budget": {
+                            "has_budget": true,
+                            "resolved_effective_month": "2026-01",
+                            "savings_budget": "200.00"
+                        },
+                        "summary": {
+                            "saved_amount": "0.00",
+                            "remaining_to_save": "200.00",
+                            "over_saved_amount": "0.00",
+                            "planned_to_funds": "0.00",
+                            "unassigned_budget": "200.00",
+                            "transaction_directed_to_funds": "0.00",
+                            "saved_outside_funds": "0.00",
+                            "closeout_directed_to_funds": "0.00",
+                            "is_overallocated": false,
+                            "overallocation_amount": "0.00"
+                        },
+                        "goal_pacing": {
+                            "status": "historical",
+                            "recommended_total": null,
+                            "gap_to_savings_budget": null,
+                            "headroom_vs_savings_budget": null
+                        },
+                        "funds": [
+                            {
+                                "fund": {
+                                    "id": "record_2",
+                                    "name": "Pacing goal",
+                                    "status": "active",
+                                    "goal_amount": "100.00",
+                                    "target_month": "2026-02",
+                                    "current_balance": "100.00"
+                                },
+                                "planned_amount": "0.00",
+                                "transaction_contributed": "0.00",
+                                "closeout_contributed": "0.00",
+                                "progress_amount": "0.00",
+                                "remaining_planned": "0.00",
+                                "over_plan_amount": "0.00",
+                                "pace": {
+                                    "status": "goal_met",
+                                    "planning_basis_balance": "100.00",
+                                    "goal_shortfall": "0.00",
+                                    "months_remaining": 1,
+                                    "recommended_amount": "0.00"
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "contribution_source_integrated": true,
+                "goal_completion_reflected": true,
+                "month_boundary_respected": true,
+                "fund_balance_integrated": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "fund_id": "record_3",
+                    "month": "2026-01-01",
+                    "planned_amount": "100.00"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-SAVINGS-005",
+        "INV-SAVINGS-007",
+        "INV-SAVINGS-008"
+    ]
+}

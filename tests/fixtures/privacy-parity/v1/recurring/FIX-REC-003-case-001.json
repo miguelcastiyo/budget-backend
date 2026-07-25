@@ -1,0 +1,154 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-REC-003-case-001",
+    "scenario_id": "recurring.idempotent-materialization",
+    "domain": "recurring",
+    "description": "Idempotent occurrence materialization",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "recurring.idempotent-materialization",
+                "input": {
+                    "retry": true,
+                    "seed_transaction": true,
+                    "current_month": true,
+                    "future_non_generation": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "seed": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "date": "2026-02-15",
+                        "expense": "Seeded bill",
+                        "amount": "45.00",
+                        "category": "needs",
+                        "is_split": false,
+                        "notes": null,
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Seed",
+                            "icon_key": "receipt"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                },
+                "rule": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "series_id": "record_3",
+                        "expense": "Seeded bill",
+                        "amount": "45.00",
+                        "category": "needs",
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Seed",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "day_of_month",
+                        "billing_day": 15,
+                        "projected_date_for_month": "2026-03-15",
+                        "starts_month": "2026-02",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                },
+                "occurrences_after_retry_and_future_call": [
+                    {
+                        "id": "record_2",
+                        "occurrence_month": "2026-02-01",
+                        "due_date": "2026-02-15",
+                        "transaction_id": "record_2"
+                    },
+                    {
+                        "id": "record_4",
+                        "occurrence_month": "2026-03-01",
+                        "due_date": "2026-03-15",
+                        "transaction_id": "record_4"
+                    }
+                ]
+            },
+            "invariant_checks": {
+                "seed_occurrence_reused": true,
+                "retry_is_idempotent": true,
+                "future_month_not_generated": true,
+                "generated_transaction_distinguishable": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "source": "manual",
+                    "occurrence_month": "2026-02-01"
+                },
+                {
+                    "id": "record_4",
+                    "source": "manual",
+                    "occurrence_month": "2026-03-01"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": [
+                {
+                    "id": "record_2",
+                    "occurrence_month": "2026-02-01",
+                    "due_date": "2026-02-15",
+                    "transaction_id": "record_2"
+                },
+                {
+                    "id": "record_4",
+                    "occurrence_month": "2026-03-01",
+                    "due_date": "2026-03-15",
+                    "transaction_id": "record_4"
+                }
+            ]
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-014",
+        "INV-REC-005",
+        "INV-REC-010"
+    ]
+}

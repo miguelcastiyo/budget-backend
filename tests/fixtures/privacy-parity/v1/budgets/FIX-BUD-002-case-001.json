@@ -1,0 +1,166 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-BUD-002-case-001",
+    "scenario_id": "budget.income-conversion",
+    "domain": "budgets",
+    "description": "Income breakdown and hourly conversion",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "budget.income-conversion",
+                "input": {
+                    "monthly_composition": true,
+                    "hourly_conversion": true,
+                    "rounding": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "monthly_composition": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "5000.00",
+                        "income_source_type": "monthly",
+                        "primary_monthly_income": "4000.00",
+                        "primary_hourly_rate": null,
+                        "primary_weekly_hours": null,
+                        "side_income_type": "monthly",
+                        "side_income_label": "Freelance",
+                        "side_monthly_income": "1000.00",
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "percent",
+                        "needs_percent": "50.00",
+                        "wants_percent": "30.00",
+                        "savings_percent": "20.00",
+                        "needs_amount": null,
+                        "wants_amount": null,
+                        "savings_amount": null
+                    }
+                },
+                "hourly_conversion": {
+                    "status": 200,
+                    "body": {
+                        "monthly_income": "5000.00",
+                        "income_source_type": "hourly",
+                        "primary_monthly_income": null,
+                        "primary_hourly_rate": "25.00",
+                        "primary_weekly_hours": "40.00",
+                        "side_income_type": "monthly",
+                        "side_income_label": "Side",
+                        "side_monthly_income": "666.67",
+                        "side_hourly_rate": null,
+                        "side_weekly_hours": null,
+                        "allocation_mode": "percent",
+                        "needs_percent": "50.00",
+                        "wants_percent": "30.00",
+                        "savings_percent": "20.00",
+                        "needs_amount": null,
+                        "wants_amount": null,
+                        "savings_amount": null
+                    }
+                },
+                "resolved": {
+                    "status": 200,
+                    "body": {
+                        "requested_month": "2026-02",
+                        "resolved_effective_month": "2026-02",
+                        "is_exact_match": true,
+                        "settings": {
+                            "monthly_income": "5000.00",
+                            "income_source_type": "hourly",
+                            "primary_monthly_income": null,
+                            "primary_hourly_rate": "25.00",
+                            "primary_weekly_hours": "40.00",
+                            "side_income_type": "monthly",
+                            "side_income_label": "Side",
+                            "side_monthly_income": "666.67",
+                            "side_hourly_rate": null,
+                            "side_weekly_hours": null,
+                            "allocation_mode": "percent",
+                            "needs_percent": "50.00",
+                            "wants_percent": "30.00",
+                            "savings_percent": "20.00",
+                            "needs_amount": null,
+                            "wants_amount": null,
+                            "savings_amount": null
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "income_composition_accepted": true,
+                "hourly_conversion_accepted": true,
+                "hourly_conversion_rounding": true,
+                "resolved_income_breakdown_preserved": true
+            }
+        },
+        "state": {
+            "records": [],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [
+                {
+                    "effective_month": "2026-01-01",
+                    "monthly_income": "5000.00",
+                    "income_source_type": "monthly",
+                    "primary_monthly_income": "4000.00",
+                    "primary_hourly_rate": null,
+                    "primary_weekly_hours": null,
+                    "side_income_type": "monthly",
+                    "side_monthly_income": "1000.00",
+                    "side_hourly_rate": null,
+                    "side_weekly_hours": null
+                },
+                {
+                    "effective_month": "2026-02-01",
+                    "monthly_income": "5000.00",
+                    "income_source_type": "hourly",
+                    "primary_monthly_income": null,
+                    "primary_hourly_rate": "25.00",
+                    "primary_weekly_hours": "40.00",
+                    "side_income_type": "monthly",
+                    "side_monthly_income": "666.67",
+                    "side_hourly_rate": null,
+                    "side_weekly_hours": null
+                }
+            ],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-BUDGET-003",
+        "INV-BUDGET-004"
+    ]
+}

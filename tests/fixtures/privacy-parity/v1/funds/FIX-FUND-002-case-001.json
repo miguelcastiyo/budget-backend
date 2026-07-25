@@ -1,0 +1,179 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-FUND-002-case-001",
+    "scenario_id": "fund.archive-source-restrictions",
+    "domain": "funds",
+    "description": "Archived and source restrictions",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "fund.archive-source-restrictions",
+                "input": {
+                    "archive": true,
+                    "restore": true,
+                    "archived_mutation_rejection": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "created": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Archive candidate",
+                        "fund_type": "goal",
+                        "goal_amount": "25.00",
+                        "target_month": null,
+                        "notes": null,
+                        "status": "active",
+                        "sort_order": 0,
+                        "current_balance": "0.00",
+                        "remaining_amount": "25.00",
+                        "percent_funded": "0.00",
+                        "is_goal_met": false,
+                        "source_breakdown": {
+                            "month_closeout": "0.00",
+                            "transaction": "0.00",
+                            "manual": "0.00",
+                            "starting_balance": "0.00",
+                            "correction": "0.00"
+                        },
+                        "entries_count": 0,
+                        "recent_entries": []
+                    }
+                },
+                "archived": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Archive candidate",
+                        "fund_type": "goal",
+                        "goal_amount": "25.00",
+                        "target_month": null,
+                        "notes": null,
+                        "status": "archived",
+                        "sort_order": 0,
+                        "current_balance": "0.00",
+                        "remaining_amount": "25.00",
+                        "percent_funded": "0.00",
+                        "is_goal_met": false,
+                        "source_breakdown": {
+                            "month_closeout": "0.00",
+                            "transaction": "0.00",
+                            "manual": "0.00",
+                            "starting_balance": "0.00",
+                            "correction": "0.00"
+                        },
+                        "entries_count": 0,
+                        "recent_entries": []
+                    }
+                },
+                "rejected_entry": {
+                    "status": 409,
+                    "error": {
+                        "code": "CONFLICT",
+                        "message": "Archived funds cannot receive new entries",
+                        "details": []
+                    }
+                },
+                "restored": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Archive candidate",
+                        "fund_type": "goal",
+                        "goal_amount": "25.00",
+                        "target_month": null,
+                        "notes": null,
+                        "status": "active",
+                        "sort_order": 0,
+                        "current_balance": "0.00",
+                        "remaining_amount": "25.00",
+                        "percent_funded": "0.00",
+                        "is_goal_met": false,
+                        "source_breakdown": {
+                            "month_closeout": "0.00",
+                            "transaction": "0.00",
+                            "manual": "0.00",
+                            "starting_balance": "0.00",
+                            "correction": "0.00"
+                        },
+                        "entries_count": 0,
+                        "recent_entries": []
+                    }
+                },
+                "entry_after_restore": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_3",
+                        "fund_id": "record_2",
+                        "entry_date": "2026-01-02",
+                        "entry_type": "contribution",
+                        "direction": "in",
+                        "amount": "25.00",
+                        "source_type": "manual",
+                        "source_month": null,
+                        "source_transaction_id": null,
+                        "source_closeout_id": null,
+                        "note": null
+                    }
+                }
+            },
+            "invariant_checks": {
+                "archive_changes_status": true,
+                "archived_entry_rejected": true,
+                "restore_reenables_mutation": true,
+                "goal_completion_after_restore": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_4",
+                    "status": "active",
+                    "is_archived": 0
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-FUND-006",
+        "INV-FUND-007",
+        "INV-FUND-008"
+    ]
+}

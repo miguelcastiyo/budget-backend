@@ -13,13 +13,16 @@ use PDOException;
 
 final class RecurringExpenseService
 {
-    public function __construct(private readonly PDO $pdo)
+    public function __construct(
+        private readonly PDO $pdo,
+        private readonly ?DateTimeImmutable $clockNow = null
+    )
     {
     }
 
     public function currentMonth(): string
     {
-        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m');
+        return ($this->clockNow ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m');
     }
 
     public function newSeriesId(): string

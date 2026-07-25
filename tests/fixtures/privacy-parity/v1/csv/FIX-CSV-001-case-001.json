@@ -1,0 +1,374 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-CSV-001-case-001",
+    "scenario_id": "csv.preview-dry-run-mappings",
+    "domain": "csv",
+    "description": "Preview, dry-run, and mappings",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "csv.preview-dry-run-mappings",
+                "input": {
+                    "preview": true,
+                    "dry_run": true,
+                    "mapping": true,
+                    "yearless_dates": true,
+                    "category_strategy": true,
+                    "tag_strategy": true,
+                    "blank_amount_skip": true,
+                    "malformed_row": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "preview": {
+                    "mode": "preview",
+                    "headers": [
+                        "date",
+                        "expense",
+                        "amount",
+                        "external_category",
+                        "tag_source",
+                        "notes"
+                    ],
+                    "sample_rows": [
+                        {
+                            "date": "01/15",
+                            "expense": "Coffee import",
+                            "amount": "12.50",
+                            "external_category": "Debit",
+                            "tag_source": "NewTag",
+                            "notes": "Imported note"
+                        },
+                        {
+                            "date": "01/16",
+                            "expense": "Rejected import",
+                            "amount": "not-money",
+                            "external_category": "Debit",
+                            "tag_source": "NewTag",
+                            "notes": ""
+                        },
+                        {
+                            "date": "01/17",
+                            "expense": "Blank amount",
+                            "amount": "",
+                            "external_category": "Debit",
+                            "tag_source": "NewTag",
+                            "notes": ""
+                        }
+                    ],
+                    "column_profiles": [
+                        {
+                            "header": "date",
+                            "blank_count": 0,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "01/15",
+                                    "count": 1
+                                },
+                                {
+                                    "value": "01/16",
+                                    "count": 1
+                                },
+                                {
+                                    "value": "01/17",
+                                    "count": 1
+                                }
+                            ]
+                        },
+                        {
+                            "header": "expense",
+                            "blank_count": 0,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "Blank amount",
+                                    "count": 1
+                                },
+                                {
+                                    "value": "Coffee import",
+                                    "count": 1
+                                },
+                                {
+                                    "value": "Rejected import",
+                                    "count": 1
+                                }
+                            ]
+                        },
+                        {
+                            "header": "amount",
+                            "blank_count": 1,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "12.50",
+                                    "count": 1
+                                },
+                                {
+                                    "value": "not-money",
+                                    "count": 1
+                                }
+                            ]
+                        },
+                        {
+                            "header": "external_category",
+                            "blank_count": 0,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "Debit",
+                                    "count": 3
+                                }
+                            ]
+                        },
+                        {
+                            "header": "tag_source",
+                            "blank_count": 0,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "NewTag",
+                                    "count": 3
+                                }
+                            ]
+                        },
+                        {
+                            "header": "notes",
+                            "blank_count": 2,
+                            "unique_values_truncated": false,
+                            "unique_values": [
+                                {
+                                    "value": "Imported note",
+                                    "count": 1
+                                }
+                            ]
+                        }
+                    ],
+                    "date_profiles": [
+                        {
+                            "header": "date",
+                            "full_date_count": 0,
+                            "yearless_date_count": 3,
+                            "yearless_examples": [
+                                "01/15",
+                                "01/16",
+                                "01/17"
+                            ],
+                            "invalid_examples": []
+                        },
+                        {
+                            "header": "expense",
+                            "full_date_count": 0,
+                            "yearless_date_count": 0,
+                            "yearless_examples": [],
+                            "invalid_examples": [
+                                "Coffee import",
+                                "Rejected import",
+                                "Blank amount"
+                            ]
+                        },
+                        {
+                            "header": "amount",
+                            "full_date_count": 0,
+                            "yearless_date_count": 0,
+                            "yearless_examples": [],
+                            "invalid_examples": [
+                                "12.50",
+                                "not-money"
+                            ]
+                        },
+                        {
+                            "header": "external_category",
+                            "full_date_count": 0,
+                            "yearless_date_count": 0,
+                            "yearless_examples": [],
+                            "invalid_examples": [
+                                "Debit"
+                            ]
+                        },
+                        {
+                            "header": "tag_source",
+                            "full_date_count": 0,
+                            "yearless_date_count": 0,
+                            "yearless_examples": [],
+                            "invalid_examples": [
+                                "NewTag"
+                            ]
+                        },
+                        {
+                            "header": "notes",
+                            "full_date_count": 0,
+                            "yearless_date_count": 0,
+                            "yearless_examples": [],
+                            "invalid_examples": [
+                                "Imported note"
+                            ]
+                        }
+                    ],
+                    "suggested_mapping": {
+                        "date": "date",
+                        "expense": "expense",
+                        "amount": "amount",
+                        "notes": "notes"
+                    },
+                    "total_rows": 3,
+                    "limits": {
+                        "max_bytes": 5242880,
+                        "max_rows": 5000,
+                        "max_returned_errors": 100
+                    }
+                },
+                "dry_run": {
+                    "status": "partial",
+                    "message": "Validated 1 row(s), but 1 row(s) failed validation. Skipped 1 row(s).",
+                    "mode": "dry_run",
+                    "total_rows": 3,
+                    "valid_rows": 1,
+                    "imported_rows": 0,
+                    "duplicate_rows": 0,
+                    "invalid_rows": 1,
+                    "skipped_rows": 1,
+                    "skipped_blank_amount_rows": 1,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [
+                        {
+                            "row": 3,
+                            "field": "amount",
+                            "message": "must be a decimal number"
+                        }
+                    ],
+                    "new_tags": [
+                        {
+                            "name": "Imported Tag",
+                            "icon_key": "tag"
+                        }
+                    ],
+                    "new_cards": []
+                },
+                "commit": {
+                    "status": "partial",
+                    "message": "Imported 1 row(s), skipped 0 duplicate row(s), and 1 row(s) failed validation. Skipped 1 row(s).",
+                    "mode": "commit",
+                    "total_rows": 3,
+                    "valid_rows": 1,
+                    "imported_rows": 1,
+                    "duplicate_rows": 0,
+                    "invalid_rows": 1,
+                    "skipped_rows": 1,
+                    "skipped_blank_amount_rows": 1,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [
+                        {
+                            "row": 3,
+                            "field": "amount",
+                            "message": "must be a decimal number"
+                        }
+                    ],
+                    "new_tags": [],
+                    "new_cards": []
+                },
+                "duplicate_commit": {
+                    "status": "partial",
+                    "message": "Imported 0 row(s), skipped 1 duplicate row(s), and 1 row(s) failed validation. Skipped 1 row(s).",
+                    "mode": "commit",
+                    "total_rows": 3,
+                    "valid_rows": 1,
+                    "imported_rows": 0,
+                    "duplicate_rows": 1,
+                    "invalid_rows": 1,
+                    "skipped_rows": 1,
+                    "skipped_blank_amount_rows": 1,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [
+                        {
+                            "row": 3,
+                            "field": "amount",
+                            "message": "must be a decimal number"
+                        }
+                    ],
+                    "new_tags": [],
+                    "new_cards": []
+                },
+                "malformed": {
+                    "status": 422,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "CSV must include a header row",
+                        "details": []
+                    }
+                },
+                "rollback": {
+                    "status": "rolled_back",
+                    "import_run_id": "record_2",
+                    "deleted_rows": 1
+                }
+            },
+            "invariant_checks": {
+                "preview_does_not_mutate_financial_state": true,
+                "dry_run_does_not_commit_transactions": true,
+                "accepted_and_rejected_rows_are_deterministic": true,
+                "yearless_date_and_category_mapping_applied": true,
+                "new_tag_created_only_on_commit": true,
+                "duplicate_fingerprint_reused": true,
+                "malformed_input_rejected": true,
+                "rollback_soft_deletes_import_only": true
+            }
+        },
+        "state": {
+            "records": [],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-CSV-001",
+        "INV-CSV-002",
+        "INV-CSV-003",
+        "INV-CSV-004",
+        "INV-CSV-005",
+        "INV-CSV-006",
+        "INV-CSV-007",
+        "INV-CSV-008",
+        "INV-CSV-009",
+        "INV-CSV-010",
+        "INV-CSV-011",
+        "INV-CSV-012"
+    ]
+}

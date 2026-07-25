@@ -1,0 +1,333 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-CROSS-001-case-001",
+    "scenario_id": "cross.transaction-fund-closeout",
+    "domain": "cross-domain",
+    "description": "Transaction to Fund to closeout lifecycle",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "cross.transaction-fund-closeout",
+                "input": {
+                    "transaction_fund_linkage": true,
+                    "closeout_replacement": true,
+                    "reopen": true,
+                    "historical_source_linkage": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "transaction": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "date": "2026-01-12",
+                        "expense": "Cross savings",
+                        "amount": "100.00",
+                        "category": "savings",
+                        "is_split": false,
+                        "notes": null,
+                        "source": "manual",
+                        "recurring_expense_id": null,
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Cross",
+                            "icon_key": "receipt"
+                        },
+                        "context": null,
+                        "card": null
+                    }
+                },
+                "fund_link": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_3",
+                        "fund_id": "record_4",
+                        "entry_date": "2026-01-12",
+                        "entry_type": "contribution",
+                        "direction": "in",
+                        "amount": "100.00",
+                        "source_type": "transaction",
+                        "source_month": null,
+                        "source_transaction_id": "record_2",
+                        "source_closeout_id": null,
+                        "note": null
+                    }
+                },
+                "closed": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "0.00",
+                                "wants": "0.00",
+                                "savings": "100.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "800.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_5"
+                        },
+                        "closeout": {
+                            "id": "record_6",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "900.00",
+                            "unallocated_amount": "0.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_7",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_4",
+                                    "fund_name": "Cross-domain fund",
+                                    "label": null,
+                                    "amount": "900.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "replaced": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "0.00",
+                                "wants": "0.00",
+                                "savings": "100.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "800.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_5"
+                        },
+                        "closeout": {
+                            "id": "record_6",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "800.00",
+                            "unallocated_amount": "100.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_8",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_4",
+                                    "fund_name": "Cross-domain fund",
+                                    "label": null,
+                                    "amount": "800.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "reopened": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "reopened",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "0.00",
+                                "wants": "0.00",
+                                "savings": "100.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "800.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_5"
+                        },
+                        "closeout": {
+                            "id": "record_6",
+                            "status": "reopened",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "800.00",
+                            "unallocated_amount": "100.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_8",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_4",
+                                    "fund_name": "Cross-domain fund",
+                                    "label": null,
+                                    "amount": "800.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                },
+                "reclosed": {
+                    "status": 200,
+                    "body": {
+                        "month": "2026-01",
+                        "status": "closed",
+                        "is_closeable": true,
+                        "computed": {
+                            "month": "2026-01",
+                            "budget_effective_month": "2026-01",
+                            "budget_allocation_mode": "percent",
+                            "monthly_income": "1000.00",
+                            "planned": {
+                                "needs": "500.00",
+                                "wants": "300.00",
+                                "savings": "200.00",
+                                "total": "1000.00"
+                            },
+                            "actual": {
+                                "needs": "0.00",
+                                "wants": "0.00",
+                                "savings": "100.00",
+                                "total": "100.00"
+                            },
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "spending_surplus_amount": "800.00",
+                            "spending_deficit_amount": "0.00",
+                            "calculation_hash": "record_5"
+                        },
+                        "closeout": {
+                            "id": "record_6",
+                            "status": "closed",
+                            "result_type": "surplus",
+                            "surplus_amount": "900.00",
+                            "deficit_amount": "0.00",
+                            "allocated_amount": "700.00",
+                            "unallocated_amount": "200.00",
+                            "is_stale": false,
+                            "stale_reasons": [],
+                            "closed_at": "2026-04-15T12:00:00Z",
+                            "notes": null,
+                            "allocations": [
+                                {
+                                    "id": "record_9",
+                                    "allocation_type": "fund",
+                                    "fund_id": "record_4",
+                                    "fund_name": "Cross-domain fund",
+                                    "label": null,
+                                    "amount": "700.00",
+                                    "target_month": null,
+                                    "notes": null
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "transaction_and_fund_linked": true,
+                "replacement_and_reopen_preserve_history": true,
+                "reclose_has_new_active_entry": true,
+                "current_balance_excludes_voided_history": true
+            }
+        },
+        "state": {
+            "records": [],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": []
+}

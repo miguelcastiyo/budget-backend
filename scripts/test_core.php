@@ -1524,6 +1524,7 @@ $closeoutPdo->exec('CREATE TABLE monthly_closeout_allocations (
     amount TEXT NOT NULL,
     target_month TEXT NULL,
     notes TEXT NULL,
+    superseded_at TEXT NULL,
     created_at TEXT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NULL DEFAULT CURRENT_TIMESTAMP
 )');
@@ -1878,6 +1879,7 @@ $closeWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMonth, 
 assertSame('150.00', $closeWithFundAllocation['closeout']['allocated_amount'], 'closeout with fund allocation stores allocated amount');
 assertSame('fund', $closeWithFundAllocation['closeout']['allocations'][0]['allocation_type'], 'closeout serializes fund allocation type');
 assertSame($createdFund['id'], $closeWithFundAllocation['closeout']['allocations'][0]['fund_id'], 'closeout serializes allocated fund id');
+$originalCloseoutAllocation = $closeoutPdo->query("SELECT id FROM monthly_closeout_allocations WHERE closeout_id = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1")->fetch()['id'];
 
 $fundAfterCloseout = $fundService->getFund(11, $createdFund['id']);
 assertSame('725.00', $fundAfterCloseout['current_balance'], 'closeout-linked fund entry increases fund balance');
@@ -1895,6 +1897,16 @@ $patchedWithFundAllocation = $closeoutService->updateCloseout(11, $pastCloseoutM
     ],
 ]);
 assertSame('125.00', $patchedWithFundAllocation['closeout']['allocated_amount'], 'patch closeout replaces fund allocation amount');
+$historicalAllocation = $closeoutPdo->prepare('SELECT superseded_at FROM monthly_closeout_allocations WHERE id = :id');
+$historicalAllocation->execute([':id' => $originalCloseoutAllocation]);
+assertSame(true, $historicalAllocation->fetch()['superseded_at'] !== null, 'replaced closeout allocation is retired rather than deleted');
+$historicalEntry = $closeoutPdo->prepare('SELECT source_closeout_allocation_id, void_reason FROM fund_entries WHERE source_closeout_allocation_id = :allocation_id');
+$historicalEntry->execute([':allocation_id' => $originalCloseoutAllocation]);
+$historicalEntryRow = $historicalEntry->fetch();
+assertSame((string) $originalCloseoutAllocation, (string) $historicalEntryRow['source_closeout_allocation_id'], 'historical fund entry retains original allocation linkage');
+assertSame('allocation_replaced', $historicalEntryRow['void_reason'], 'replaced fund entry is voided with replacement reason');
+$currentCloseoutAllocation = $closeoutPdo->query("SELECT id FROM monthly_closeout_allocations WHERE closeout_id = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1")->fetch()['id'];
+assertSame(false, (int) $currentCloseoutAllocation === (int) $originalCloseoutAllocation, 'replacement uses a new current allocation row');
 $fundAfterPatch = $fundService->getFund(11, $createdFund['id']);
 assertSame('700.00', $fundAfterPatch['current_balance'], 'patching closeout voids old fund-linked entry and creates replacement');
 
@@ -1916,6 +1928,7 @@ $reclosedWithFundAllocation = $closeoutService->closeMonth(11, $pastCloseoutMont
 assertSame('closed', $reclosedWithFundAllocation['status'], 'reclose works with fund allocation');
 $fundAfterReclose = $fundService->getFund(11, $createdFund['id']);
 assertSame('675.00', $fundAfterReclose['current_balance'], 'reclose adds new active closeout-linked entry');
+assertSame(true, (int) $closeoutPdo->query("SELECT COUNT(*) FROM monthly_closeout_allocations WHERE closeout_id = 1")->fetchColumn() >= 3, 'closeout allocation history is preserved across replacement, reopen, and reclose');
 
 $closeoutSummary = $fundService->closeoutSummary(11, (int) substr($pastCloseoutMonth, 0, 4));
 assertSame('100.00', $closeoutSummary['total_closeout_contributed'], 'closeout summary totals active closeout-linked contributions');

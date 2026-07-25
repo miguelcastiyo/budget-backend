@@ -1,0 +1,122 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-TXN-004-case-001",
+    "scenario_id": "transaction.duplicate-import-linkage",
+    "domain": "transactions",
+    "description": "Duplicate fingerprint and import linkage",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "transaction.duplicate-import-linkage",
+                "input": {
+                    "commit_same_csv_twice": true,
+                    "fingerprint": true,
+                    "import_run_linkage": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "first_commit": {
+                    "status": "completed",
+                    "message": "Imported 1 row(s); skipped 0 duplicate row(s).",
+                    "mode": "commit",
+                    "total_rows": 1,
+                    "valid_rows": 1,
+                    "imported_rows": 1,
+                    "duplicate_rows": 0,
+                    "invalid_rows": 0,
+                    "skipped_rows": 0,
+                    "skipped_blank_amount_rows": 0,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [],
+                    "new_tags": [],
+                    "new_cards": []
+                },
+                "second_commit": {
+                    "status": "completed",
+                    "message": "Imported 0 row(s); skipped 1 duplicate row(s).",
+                    "mode": "commit",
+                    "total_rows": 1,
+                    "valid_rows": 1,
+                    "imported_rows": 0,
+                    "duplicate_rows": 1,
+                    "invalid_rows": 0,
+                    "skipped_rows": 0,
+                    "skipped_blank_amount_rows": 0,
+                    "errors_truncated": false,
+                    "max_returned_errors": 100,
+                    "errors": [],
+                    "new_tags": [],
+                    "new_cards": []
+                }
+            },
+            "invariant_checks": {
+                "first_imported": true,
+                "second_duplicate": true,
+                "fingerprint_and_run_linkage": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "source": "import",
+                    "import_fingerprint": "record_3",
+                    "csv_import_run_id": "record_2"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": [
+                {
+                    "id": "record_2",
+                    "mode": "commit",
+                    "imported_rows": 1,
+                    "duplicate_rows": 0
+                },
+                {
+                    "id": "record_4",
+                    "mode": "commit",
+                    "imported_rows": 0,
+                    "duplicate_rows": 1
+                }
+            ]
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-TXN-012"
+    ]
+}

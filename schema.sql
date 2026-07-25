@@ -595,6 +595,7 @@ CREATE TABLE monthly_closeout_allocations (
   amount DECIMAL(12,2) NOT NULL,
   target_month DATE NULL COMMENT 'first day of month for rollover allocations',
   notes TEXT NULL,
+  superseded_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -603,6 +604,7 @@ CREATE TABLE monthly_closeout_allocations (
   KEY idx_monthly_closeout_allocations_user_type (user_id, allocation_type),
   KEY idx_monthly_closeout_allocations_user_fund (user_id, fund_id),
   KEY idx_monthly_closeout_allocations_user_target_month (user_id, target_month),
+  KEY idx_monthly_closeout_allocations_current (closeout_id, superseded_at, id),
   CONSTRAINT fk_monthly_closeout_allocations_closeout
     FOREIGN KEY (closeout_id) REFERENCES monthly_closeouts (id),
   CONSTRAINT fk_monthly_closeout_allocations_user

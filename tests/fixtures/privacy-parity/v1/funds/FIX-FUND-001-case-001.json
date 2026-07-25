@@ -1,0 +1,393 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-FUND-001-case-001",
+    "scenario_id": "fund.ledger-balance-goal",
+    "domain": "funds",
+    "description": "Ledger balance and goal state",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "fund.ledger-balance-goal",
+                "input": {
+                    "zero": true,
+                    "exact_goal": true,
+                    "over_goal": true,
+                    "multiple_funds": true,
+                    "directions": true,
+                    "sources": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "funds": [
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_2",
+                            "name": "Emergency",
+                            "fund_type": "emergency",
+                            "goal_amount": "100.00",
+                            "target_month": null,
+                            "notes": null,
+                            "status": "active",
+                            "sort_order": 0,
+                            "current_balance": "0.00",
+                            "remaining_amount": "100.00",
+                            "percent_funded": "0.00",
+                            "is_goal_met": false,
+                            "source_breakdown": {
+                                "month_closeout": "0.00",
+                                "transaction": "0.00",
+                                "manual": "0.00",
+                                "starting_balance": "0.00",
+                                "correction": "0.00"
+                            },
+                            "entries_count": 0,
+                            "recent_entries": []
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_3",
+                            "name": "Buffer",
+                            "fund_type": "buffer",
+                            "goal_amount": "50.00",
+                            "target_month": null,
+                            "notes": null,
+                            "status": "active",
+                            "sort_order": 0,
+                            "current_balance": "0.00",
+                            "remaining_amount": "50.00",
+                            "percent_funded": "0.00",
+                            "is_goal_met": false,
+                            "source_breakdown": {
+                                "month_closeout": "0.00",
+                                "transaction": "0.00",
+                                "manual": "0.00",
+                                "starting_balance": "0.00",
+                                "correction": "0.00"
+                            },
+                            "entries_count": 0,
+                            "recent_entries": []
+                        }
+                    }
+                ],
+                "entries": [
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_4",
+                            "fund_id": "record_2",
+                            "entry_date": "2026-01-02",
+                            "entry_type": "contribution",
+                            "direction": "in",
+                            "amount": "100.00",
+                            "source_type": "manual",
+                            "source_month": null,
+                            "source_transaction_id": null,
+                            "source_closeout_id": null,
+                            "note": null
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_5",
+                            "fund_id": "record_2",
+                            "entry_date": "2026-01-03",
+                            "entry_type": "withdrawal",
+                            "direction": "out",
+                            "amount": "10.00",
+                            "source_type": "manual",
+                            "source_month": null,
+                            "source_transaction_id": null,
+                            "source_closeout_id": null,
+                            "note": null
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_6",
+                            "fund_id": "record_3",
+                            "entry_date": "2026-01-04",
+                            "entry_type": "contribution",
+                            "direction": "in",
+                            "amount": "50.00",
+                            "source_type": "manual",
+                            "source_month": null,
+                            "source_transaction_id": null,
+                            "source_closeout_id": null,
+                            "note": null
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_7",
+                            "fund_id": "record_3",
+                            "entry_date": "2026-01-01",
+                            "entry_type": "starting_balance",
+                            "direction": "in",
+                            "amount": "10.00",
+                            "source_type": "starting_balance",
+                            "source_month": null,
+                            "source_transaction_id": null,
+                            "source_closeout_id": null,
+                            "note": null
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "body": {
+                            "id": "record_8",
+                            "fund_id": "record_2",
+                            "entry_date": "2026-01-04",
+                            "entry_type": "contribution",
+                            "direction": "in",
+                            "amount": "20.00",
+                            "source_type": "manual",
+                            "source_month": null,
+                            "source_transaction_id": null,
+                            "source_closeout_id": null,
+                            "note": null
+                        }
+                    }
+                ],
+                "first_view": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Emergency",
+                        "fund_type": "emergency",
+                        "goal_amount": "100.00",
+                        "target_month": null,
+                        "notes": null,
+                        "status": "active",
+                        "sort_order": 0,
+                        "current_balance": "90.00",
+                        "remaining_amount": "10.00",
+                        "percent_funded": "90.00",
+                        "is_goal_met": false,
+                        "source_breakdown": {
+                            "month_closeout": "0.00",
+                            "transaction": "0.00",
+                            "manual": "90.00",
+                            "starting_balance": "0.00",
+                            "correction": "0.00"
+                        },
+                        "entries_count": 2,
+                        "recent_entries": [
+                            {
+                                "id": "record_5",
+                                "fund_id": "record_2",
+                                "entry_date": "2026-01-03",
+                                "entry_type": "withdrawal",
+                                "direction": "out",
+                                "amount": "10.00",
+                                "source_type": "manual",
+                                "source_month": null,
+                                "source_transaction_id": null,
+                                "source_closeout_id": null,
+                                "note": null
+                            },
+                            {
+                                "id": "record_4",
+                                "fund_id": "record_2",
+                                "entry_date": "2026-01-02",
+                                "entry_type": "contribution",
+                                "direction": "in",
+                                "amount": "100.00",
+                                "source_type": "manual",
+                                "source_month": null,
+                                "source_transaction_id": null,
+                                "source_closeout_id": null,
+                                "note": null
+                            }
+                        ]
+                    }
+                },
+                "over_goal_view": {
+                    "status": 200,
+                    "body": {
+                        "id": "record_2",
+                        "name": "Emergency",
+                        "fund_type": "emergency",
+                        "goal_amount": "100.00",
+                        "target_month": null,
+                        "notes": null,
+                        "status": "active",
+                        "sort_order": 0,
+                        "current_balance": "110.00",
+                        "remaining_amount": "0.00",
+                        "percent_funded": "110.00",
+                        "is_goal_met": true,
+                        "source_breakdown": {
+                            "month_closeout": "0.00",
+                            "transaction": "0.00",
+                            "manual": "110.00",
+                            "starting_balance": "0.00",
+                            "correction": "0.00"
+                        },
+                        "entries_count": 3,
+                        "recent_entries": [
+                            {
+                                "id": "record_8",
+                                "fund_id": "record_2",
+                                "entry_date": "2026-01-04",
+                                "entry_type": "contribution",
+                                "direction": "in",
+                                "amount": "20.00",
+                                "source_type": "manual",
+                                "source_month": null,
+                                "source_transaction_id": null,
+                                "source_closeout_id": null,
+                                "note": null
+                            },
+                            {
+                                "id": "record_5",
+                                "fund_id": "record_2",
+                                "entry_date": "2026-01-03",
+                                "entry_type": "withdrawal",
+                                "direction": "out",
+                                "amount": "10.00",
+                                "source_type": "manual",
+                                "source_month": null,
+                                "source_transaction_id": null,
+                                "source_closeout_id": null,
+                                "note": null
+                            },
+                            {
+                                "id": "record_4",
+                                "fund_id": "record_2",
+                                "entry_date": "2026-01-02",
+                                "entry_type": "contribution",
+                                "direction": "in",
+                                "amount": "100.00",
+                                "source_type": "manual",
+                                "source_month": null,
+                                "source_transaction_id": null,
+                                "source_closeout_id": null,
+                                "note": null
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "zero_initial_balance": true,
+                "balance_accounts_for_directions": true,
+                "exact_goal_completion_and_overfunding_safe": true,
+                "multiple_funds_ordered": true,
+                "source_types_preserved": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_9",
+                    "fund_id": "record_9",
+                    "entry_type": "contribution",
+                    "direction": "in",
+                    "amount": "100.00",
+                    "source_type": "manual",
+                    "source_transaction_id": null,
+                    "source_closeout_id": null,
+                    "is_voided": 0,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_10",
+                    "fund_id": "record_9",
+                    "entry_type": "withdrawal",
+                    "direction": "out",
+                    "amount": "10.00",
+                    "source_type": "manual",
+                    "source_transaction_id": null,
+                    "source_closeout_id": null,
+                    "is_voided": 0,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_11",
+                    "fund_id": "record_10",
+                    "entry_type": "contribution",
+                    "direction": "in",
+                    "amount": "50.00",
+                    "source_type": "manual",
+                    "source_transaction_id": null,
+                    "source_closeout_id": null,
+                    "is_voided": 0,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_12",
+                    "fund_id": "record_10",
+                    "entry_type": "starting_balance",
+                    "direction": "in",
+                    "amount": "10.00",
+                    "source_type": "starting_balance",
+                    "source_transaction_id": null,
+                    "source_closeout_id": null,
+                    "is_voided": 0,
+                    "is_deleted": 0
+                },
+                {
+                    "id": "record_13",
+                    "fund_id": "record_9",
+                    "entry_type": "contribution",
+                    "direction": "in",
+                    "amount": "20.00",
+                    "source_type": "manual",
+                    "source_transaction_id": null,
+                    "source_closeout_id": null,
+                    "is_voided": 0,
+                    "is_deleted": 0
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-FUND-001",
+        "INV-FUND-002",
+        "INV-FUND-003",
+        "INV-FUND-004",
+        "INV-FUND-005"
+    ]
+}

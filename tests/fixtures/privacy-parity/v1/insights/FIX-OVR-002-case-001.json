@@ -1,0 +1,445 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-OVR-002-case-001",
+    "scenario_id": "insights.range-aggregates",
+    "domain": "insights",
+    "description": "Insights ranges, rankings, and distributions",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "insights.range-aggregates",
+                "input": {
+                    "date_range": {
+                        "from": "2026-01-01",
+                        "to": "2026-02-28"
+                    },
+                    "totals": true,
+                    "weekday": true,
+                    "largest": true,
+                    "recurring_variable": true,
+                    "ties": true,
+                    "empty_zero_safe": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "range": {
+                    "status": 200,
+                    "body": {
+                        "date_from": "2026-01-01",
+                        "date_to": "2026-02-28",
+                        "months_in_range": 2,
+                        "total_spend": "120.00",
+                        "total_transactions": 6,
+                        "monthly_spend_trend": [
+                            {
+                                "month": "2026-01",
+                                "total_spend": "55.00"
+                            },
+                            {
+                                "month": "2026-02",
+                                "total_spend": "65.00"
+                            }
+                        ],
+                        "category_breakdown": [
+                            {
+                                "category": "needs",
+                                "spend": "40.00",
+                                "percent_of_total_spend": "33.33"
+                            },
+                            {
+                                "category": "wants",
+                                "spend": "60.00",
+                                "percent_of_total_spend": "50.00"
+                            },
+                            {
+                                "category": "savings",
+                                "spend": "20.00",
+                                "percent_of_total_spend": "16.67"
+                            }
+                        ],
+                        "category_budget_vs_actual": [
+                            {
+                                "category": "needs",
+                                "budget_amount": "0.00",
+                                "actual_spend": "40.00",
+                                "percent_used": "0.00"
+                            },
+                            {
+                                "category": "wants",
+                                "budget_amount": "0.00",
+                                "actual_spend": "60.00",
+                                "percent_used": "0.00"
+                            },
+                            {
+                                "category": "savings",
+                                "budget_amount": "0.00",
+                                "actual_spend": "20.00",
+                                "percent_used": "0.00"
+                            }
+                        ],
+                        "tag_breakdown": [
+                            {
+                                "tag_id": "record_2",
+                                "tag_name": "Insights",
+                                "icon_key": "receipt",
+                                "spend": "120.00",
+                                "percent_of_total_spend": "100.00"
+                            }
+                        ],
+                        "day_of_week_spend": [
+                            {
+                                "day": "monday",
+                                "avg_spend": "20.00",
+                                "total_spend": "40.00",
+                                "transactions_count": 2
+                            },
+                            {
+                                "day": "tuesday",
+                                "avg_spend": "15.00",
+                                "total_spend": "15.00",
+                                "transactions_count": 1
+                            },
+                            {
+                                "day": "wednesday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "thursday",
+                                "avg_spend": "20.00",
+                                "total_spend": "20.00",
+                                "transactions_count": 1
+                            },
+                            {
+                                "day": "friday",
+                                "avg_spend": "30.00",
+                                "total_spend": "30.00",
+                                "transactions_count": 1
+                            },
+                            {
+                                "day": "saturday",
+                                "avg_spend": "15.00",
+                                "total_spend": "15.00",
+                                "transactions_count": 1
+                            },
+                            {
+                                "day": "sunday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            }
+                        ],
+                        "largest_transactions": [
+                            {
+                                "transaction_id": "record_3",
+                                "date": "2026-02-20",
+                                "expense": "Delta",
+                                "amount": "30.00",
+                                "category": "wants",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            },
+                            {
+                                "transaction_id": "record_4",
+                                "date": "2026-01-12",
+                                "expense": "Beta",
+                                "amount": "30.00",
+                                "category": "wants",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            },
+                            {
+                                "transaction_id": "record_5",
+                                "date": "2026-02-05",
+                                "expense": "Gamma",
+                                "amount": "20.00",
+                                "category": "savings",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            },
+                            {
+                                "transaction_id": "record_6",
+                                "date": "2026-02-10",
+                                "expense": "Recurring insight",
+                                "amount": "15.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            },
+                            {
+                                "transaction_id": "record_7",
+                                "date": "2026-01-10",
+                                "expense": "Recurring insight",
+                                "amount": "15.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            },
+                            {
+                                "transaction_id": "record_2",
+                                "date": "2026-01-05",
+                                "expense": "Alpha",
+                                "amount": "10.00",
+                                "category": "needs",
+                                "is_split": false,
+                                "notes": null,
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Insights",
+                                    "icon_key": "receipt"
+                                },
+                                "card_name": null
+                            }
+                        ],
+                        "recurring_vs_variable": {
+                            "recurring": "30.00",
+                            "variable": "90.00",
+                            "recurring_percent": "25.00",
+                            "variable_percent": "75.00"
+                        }
+                    }
+                },
+                "empty_range": {
+                    "status": 200,
+                    "body": {
+                        "date_from": "2027-01-01",
+                        "date_to": "2027-02-28",
+                        "months_in_range": 2,
+                        "total_spend": "0.00",
+                        "total_transactions": 0,
+                        "monthly_spend_trend": [
+                            {
+                                "month": "2027-01",
+                                "total_spend": "0.00"
+                            },
+                            {
+                                "month": "2027-02",
+                                "total_spend": "0.00"
+                            }
+                        ],
+                        "category_breakdown": [
+                            {
+                                "category": "needs",
+                                "spend": "0.00",
+                                "percent_of_total_spend": "0.00"
+                            },
+                            {
+                                "category": "wants",
+                                "spend": "0.00",
+                                "percent_of_total_spend": "0.00"
+                            },
+                            {
+                                "category": "savings",
+                                "spend": "0.00",
+                                "percent_of_total_spend": "0.00"
+                            }
+                        ],
+                        "category_budget_vs_actual": [
+                            {
+                                "category": "needs",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "percent_used": "0.00"
+                            },
+                            {
+                                "category": "wants",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "percent_used": "0.00"
+                            },
+                            {
+                                "category": "savings",
+                                "budget_amount": "0.00",
+                                "actual_spend": "0.00",
+                                "percent_used": "0.00"
+                            }
+                        ],
+                        "tag_breakdown": [],
+                        "day_of_week_spend": [
+                            {
+                                "day": "monday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "tuesday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "wednesday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "thursday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "friday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "saturday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            },
+                            {
+                                "day": "sunday",
+                                "avg_spend": "0.00",
+                                "total_spend": "0.00",
+                                "transactions_count": 0
+                            }
+                        ],
+                        "largest_transactions": [],
+                        "recurring_vs_variable": {
+                            "recurring": "0.00",
+                            "variable": "0.00",
+                            "recurring_percent": "0.00",
+                            "variable_percent": "0.00"
+                        }
+                    }
+                }
+            },
+            "invariant_checks": {
+                "range_totals_and_months": true,
+                "category_and_weekday_aggregates": true,
+                "largest_and_tie_ordering": true,
+                "recurring_variable_distinction": true,
+                "empty_zero_safe": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "id": "record_2",
+                    "transaction_date": "2026-01-05",
+                    "expense": "Alpha",
+                    "amount": "10.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_7",
+                    "transaction_date": "2026-01-10",
+                    "expense": "Recurring insight",
+                    "amount": "15.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_4",
+                    "transaction_date": "2026-01-12",
+                    "expense": "Beta",
+                    "amount": "30.00",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_5",
+                    "transaction_date": "2026-02-05",
+                    "expense": "Gamma",
+                    "amount": "20.00",
+                    "category": "savings"
+                },
+                {
+                    "id": "record_6",
+                    "transaction_date": "2026-02-10",
+                    "expense": "Recurring insight",
+                    "amount": "15.00",
+                    "category": "needs"
+                },
+                {
+                    "id": "record_3",
+                    "transaction_date": "2026-02-20",
+                    "expense": "Delta",
+                    "amount": "30.00",
+                    "category": "wants"
+                },
+                {
+                    "id": "record_8",
+                    "transaction_date": "2026-03-10",
+                    "expense": "Recurring insight",
+                    "amount": "15.00",
+                    "category": "needs"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": []
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-OVR-004",
+        "INV-OVR-005"
+    ]
+}

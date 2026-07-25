@@ -19,7 +19,7 @@ final class MonthCloseoutRepository
             'SELECT mc.*,
                     COALESCE(SUM(mca.amount), 0.00) AS allocated_amount
              FROM monthly_closeouts mc
-             LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id
+             LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id AND mca.superseded_at IS NULL
              WHERE mc.user_id = :user_id
                AND mc.month = :month
              GROUP BY mc.id
@@ -59,7 +59,7 @@ final class MonthCloseoutRepository
         $sql = 'SELECT mc.*,
                        COALESCE(SUM(mca.amount), 0.00) AS allocated_amount
                 FROM monthly_closeouts mc
-                LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id
+                LEFT JOIN monthly_closeout_allocations mca ON mca.closeout_id = mc.id AND mca.superseded_at IS NULL
                 WHERE ' . implode(' AND ', $conditions) . '
                 GROUP BY mc.id
                 ORDER BY mc.month DESC, mc.id DESC
@@ -224,9 +224,15 @@ SQL;
         ]);
     }
 
-    public function deleteAllocationsForCloseout(int $closeoutDbId): void
+    public function supersedeAllocationsForCloseout(int $closeoutDbId): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM monthly_closeout_allocations WHERE closeout_id = :closeout_id');
+        $stmt = $this->pdo->prepare(
+            'UPDATE monthly_closeout_allocations
+             SET superseded_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE closeout_id = :closeout_id
+               AND superseded_at IS NULL'
+        );
         $stmt->execute([':closeout_id' => $closeoutDbId]);
     }
 
@@ -281,6 +287,7 @@ SQL;
              FROM monthly_closeout_allocations mca
              LEFT JOIN funds f ON f.id = mca.fund_id AND f.user_id = mca.user_id
              WHERE mca.closeout_id = :closeout_id
+               AND mca.superseded_at IS NULL
              ORDER BY mca.id ASC'
         );
         $stmt->execute([':closeout_id' => $closeoutDbId]);

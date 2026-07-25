@@ -1,0 +1,279 @@
+{
+    "fixture_version": "1.0",
+    "fixture_id": "FIX-REC-001-case-001",
+    "scenario_id": "recurring.schedule-generation",
+    "domain": "recurring",
+    "description": "Schedule and date generation",
+    "clock": {
+        "now": "2026-01-15T12:00:00Z",
+        "timezone": "UTC",
+        "month": "2026-01"
+    },
+    "input": {
+        "before": {
+            "user": {
+                "id": "record_1",
+                "email": "fixture-user@example.test"
+            }
+        },
+        "steps": [
+            {
+                "action": "recurring.schedule-generation",
+                "input": {
+                    "day_31": true,
+                    "short_months": true,
+                    "february": true,
+                    "leap_year": true,
+                    "last_day": true,
+                    "future_non_generation": true
+                }
+            }
+        ]
+    },
+    "expected": {
+        "result": {
+            "status": "captured",
+            "operations": {
+                "day_31": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_2",
+                        "series_id": "record_3",
+                        "expense": "Day 31 bill",
+                        "amount": "31.00",
+                        "category": "needs",
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Bills",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "day_of_month",
+                        "billing_day": 31,
+                        "projected_date_for_month": "2028-04-30",
+                        "starts_month": "2028-01",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                },
+                "last_day": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_4",
+                        "series_id": "record_5",
+                        "expense": "Last day bill",
+                        "amount": "29.00",
+                        "category": "wants",
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Bills",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "last_day",
+                        "billing_day": null,
+                        "projected_date_for_month": "2028-04-30",
+                        "starts_month": "2028-01",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                },
+                "future": {
+                    "status": 201,
+                    "body": {
+                        "id": "record_6",
+                        "series_id": "record_7",
+                        "expense": "Future bill",
+                        "amount": "40.00",
+                        "category": "needs",
+                        "tag": {
+                            "id": "record_2",
+                            "name": "Bills",
+                            "icon_key": "receipt"
+                        },
+                        "card": null,
+                        "billing_type": "day_of_month",
+                        "billing_day": 15,
+                        "projected_date_for_month": "2028-04-15",
+                        "starts_month": "2028-05",
+                        "ends_month": null,
+                        "is_active": true,
+                        "generated_for_month": false
+                    }
+                },
+                "february_list": {
+                    "status": 200,
+                    "body": {
+                        "month": "2028-02",
+                        "committed_total": "60.00",
+                        "items_count": 3,
+                        "items": [
+                            {
+                                "id": "record_2",
+                                "series_id": "record_3",
+                                "expense": "Day 31 bill",
+                                "amount": "31.00",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Bills",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "billing_type": "day_of_month",
+                                "billing_day": 31,
+                                "projected_date_for_month": "2028-02-29",
+                                "starts_month": "2028-01",
+                                "ends_month": null,
+                                "is_active": true,
+                                "generated_for_month": true
+                            },
+                            {
+                                "id": "record_6",
+                                "series_id": "record_7",
+                                "expense": "Future bill",
+                                "amount": "40.00",
+                                "category": "needs",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Bills",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "billing_type": "day_of_month",
+                                "billing_day": 15,
+                                "projected_date_for_month": "2028-02-15",
+                                "starts_month": "2028-05",
+                                "ends_month": null,
+                                "is_active": true,
+                                "generated_for_month": false
+                            },
+                            {
+                                "id": "record_4",
+                                "series_id": "record_5",
+                                "expense": "Last day bill",
+                                "amount": "29.00",
+                                "category": "wants",
+                                "tag": {
+                                    "id": "record_2",
+                                    "name": "Bills",
+                                    "icon_key": "receipt"
+                                },
+                                "card": null,
+                                "billing_type": "last_day",
+                                "billing_day": null,
+                                "projected_date_for_month": "2028-02-29",
+                                "starts_month": "2028-01",
+                                "ends_month": null,
+                                "is_active": true,
+                                "generated_for_month": true
+                            }
+                        ]
+                    }
+                }
+            },
+            "invariant_checks": {
+                "day_31_clamps_short_months": true,
+                "last_day_uses_calendar_end": true,
+                "future_month_not_generated": true,
+                "generated_dates_are_explicit": true
+            }
+        },
+        "state": {
+            "records": [
+                {
+                    "recurring_expense_id": "record_2",
+                    "occurrence_month": "2028-01-01",
+                    "due_date": "2028-01-31",
+                    "transaction_id": "record_6"
+                },
+                {
+                    "recurring_expense_id": "record_4",
+                    "occurrence_month": "2028-01-01",
+                    "due_date": "2028-01-31",
+                    "transaction_id": "record_8"
+                },
+                {
+                    "recurring_expense_id": "record_2",
+                    "occurrence_month": "2028-02-01",
+                    "due_date": "2028-02-29",
+                    "transaction_id": "record_9"
+                },
+                {
+                    "recurring_expense_id": "record_4",
+                    "occurrence_month": "2028-02-01",
+                    "due_date": "2028-02-29",
+                    "transaction_id": "record_10"
+                },
+                {
+                    "recurring_expense_id": "record_2",
+                    "occurrence_month": "2028-04-01",
+                    "due_date": "2028-04-30",
+                    "transaction_id": "record_2"
+                },
+                {
+                    "recurring_expense_id": "record_4",
+                    "occurrence_month": "2028-04-01",
+                    "due_date": "2028-04-30",
+                    "transaction_id": "record_4"
+                }
+            ],
+            "tombstones": [],
+            "voided_entries": [],
+            "historical_versions": [],
+            "source_records": [
+                {
+                    "id": "record_2",
+                    "expense": "Day 31 bill",
+                    "billing_type": "day_of_month",
+                    "billing_day": 31,
+                    "starts_month": "2028-01-01",
+                    "ends_month": null,
+                    "is_active": 1
+                },
+                {
+                    "id": "record_4",
+                    "expense": "Last day bill",
+                    "billing_type": "last_day",
+                    "billing_day": null,
+                    "starts_month": "2028-01-01",
+                    "ends_month": null,
+                    "is_active": 1
+                },
+                {
+                    "id": "record_6",
+                    "expense": "Future bill",
+                    "billing_type": "day_of_month",
+                    "billing_day": 15,
+                    "starts_month": "2028-05-01",
+                    "ends_month": null,
+                    "is_active": 1
+                }
+            ]
+        }
+    },
+    "normalization": {
+        "money": "decimal_string",
+        "dates": "iso_date",
+        "datetimes": "iso_utc_datetime",
+        "ids": "symbolic_fixture_ids",
+        "ordering": "declared_stable_order",
+        "ignored_fields": [
+            "request_id",
+            "audit_id",
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "reopened_at",
+            "path"
+        ]
+    },
+    "invariants": [
+        "INV-REC-002",
+        "INV-REC-003",
+        "INV-REC-004",
+        "INV-REC-006"
+    ]
+}
