@@ -16,7 +16,7 @@
                 "INV-BUDGET-002"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -36,7 +36,7 @@
                 "INV-BUDGET-004"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -57,7 +57,7 @@
                 "INV-BUDGET-008"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -81,7 +81,7 @@
                 "INV-CLOSEOUT-006"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -105,7 +105,7 @@
                 "INV-CLOSEOUT-012"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -122,7 +122,7 @@
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -152,7 +152,7 @@
                 "INV-CSV-012"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -172,7 +172,7 @@
                 "INV-CSV-012"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -195,7 +195,7 @@
                 "INV-FUND-005"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -216,7 +216,7 @@
                 "INV-FUND-008"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -238,7 +238,7 @@
                 "INV-FUND-013"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -259,7 +259,7 @@
                 "INV-OVR-003"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -279,7 +279,7 @@
                 "INV-OVR-005"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -301,7 +301,7 @@
                 "INV-REC-006"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -322,7 +322,7 @@
                 "INV-REC-009"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -343,7 +343,7 @@
                 "INV-REC-010"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -365,7 +365,7 @@
                 "INV-SAVINGS-004"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -386,7 +386,7 @@
                 "INV-SAVINGS-008"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -408,7 +408,7 @@
                 "INV-TAX-005"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -427,7 +427,7 @@
                 "INV-TAX-007"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -452,7 +452,7 @@
                 "INV-TXN-007"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -473,7 +473,7 @@
                 "INV-TXN-010"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -492,7 +492,7 @@
                 "INV-TXN-011"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -511,7 +511,7 @@
                 "INV-TXN-012"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
@@ -530,7 +530,7 @@
                 "INV-TXN-013"
             ],
             "status": "verified",
-            "source_commit": "a966bcda8427f1a47a23b8769d44c8aa44657319",
+            "source_commit": "d0da28bbe750bf7bb9c8d07d84159d1c625097f1",
             "notes": "Generated from current authoritative PHP controller/service execution against the isolated parity database.",
             "blocker_code": "",
             "blocker_owner": "",
