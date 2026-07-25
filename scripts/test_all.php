@@ -10,6 +10,7 @@ $scripts = [
     'scripts/smoke_savings_plan.php',
     'scripts/smoke_recurring_schedule_change_validation.php',
     'scripts/smoke_google_verifier.php',
+    'scripts/smoke_transaction_atomicity.php',
 ];
 
 foreach ($scripts as $script) {

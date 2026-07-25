@@ -8,6 +8,7 @@ use App\Auth\AuthService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
+use App\Support\ContextIconKeys;
 use PDO;
 use PDOException;
 
@@ -36,31 +37,6 @@ final class TaxonomyController
         'wrench',
         'wallet',
         'tag',
-    ];
-    private const ALLOWED_CONTEXT_ICON_KEYS = [
-        'map_pinned',
-        'plane',
-        'calendar_days',
-        'party_popper',
-        'gift',
-        'heart',
-        'luggage',
-        'home',
-        'car',
-        'building',
-        'landmark',
-        'mountain',
-        'beach',
-        'globe',
-        'route',
-        'briefcase',
-        'users',
-        'star',
-        'flag',
-        'ticket',
-        'bookmark',
-        'tag',
-        'box',
     ];
 
     public function __construct(
@@ -312,7 +288,7 @@ final class TaxonomyController
         $name = $this->validatedName($request);
         $supportsIcons = $this->tableSupportsIcons($table);
         $iconKey = $supportsIcons
-            ? $this->validatedIconKey($request, $table === 'contexts' ? self::ALLOWED_CONTEXT_ICON_KEYS : self::ALLOWED_ICON_KEYS)
+            ? $this->validatedIconKey($request, $table === 'contexts' ? ContextIconKeys::all() : self::ALLOWED_ICON_KEYS)
             : null;
         $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $request->json());
 
@@ -401,7 +377,7 @@ final class TaxonomyController
         $supportsIcons = $this->tableSupportsIcons($table);
         $iconFromPayload = $supportsIcons && array_key_exists('icon_key', $payload);
         $iconKey = $supportsIcons && $iconFromPayload
-            ? $this->validatedIconKey($request, $table === 'contexts' ? self::ALLOWED_CONTEXT_ICON_KEYS : self::ALLOWED_ICON_KEYS)
+            ? $this->validatedIconKey($request, $table === 'contexts' ? ContextIconKeys::all() : self::ALLOWED_ICON_KEYS)
             : null;
 
         $exists = $this->pdo->prepare(

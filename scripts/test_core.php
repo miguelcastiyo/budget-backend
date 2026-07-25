@@ -31,6 +31,7 @@ use App\MonthCloseout\MonthCloseoutService;
 use App\Monitoring\StructuredLogger;
 use App\Overview\MonthOverviewService;
 use App\Support\Str;
+use App\Support\ContextIconKeys;
 use App\Security\AuditLogger;
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -118,6 +119,12 @@ assertMatches('/^[a-f0-9]{16}$/', Str::randomHex(8), 'randomHex emits requested 
 assertSame(hash('sha256', 'budget'), Str::hashSha256('budget'), 'hashSha256 matches PHP hash');
 assertMatches('/^\d{6}$/', Str::randomNumericCode(), 'randomNumericCode defaults to six digits');
 assertMatches('/^\d{8}$/', Str::randomNumericCode(8), 'randomNumericCode supports custom lengths');
+
+assertSame(23, count(ContextIconKeys::all()), 'context icon vocabulary matches the public contract count');
+foreach (ContextIconKeys::all() as $contextIconKey) {
+    assertTrue(ContextIconKeys::isValid($contextIconKey), 'canonical context icon is accepted: ' . $contextIconKey);
+}
+assertTrue(!ContextIconKeys::isValid('not-a-context-icon'), 'invalid context icon is rejected');
 
 assertSame('2026-06', BudgetSettingsResolver::normalizeMonth('2026-06'), 'budget settings resolver accepts valid month');
 expectHttpException(

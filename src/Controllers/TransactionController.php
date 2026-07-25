@@ -11,18 +11,13 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Recurring\RecurringExpenseService;
 use App\Support\TransactionNotes;
+use App\Support\ContextIconKeys;
 use PDO;
 use PDOException;
 
 final class TransactionController
 {
     private const ALLOWED_CATEGORIES = ['needs', 'wants', 'savings'];
-    private const ALLOWED_CONTEXT_ICON_KEYS = [
-        'map_pinned', 'plane', 'calendar_days', 'party_popper', 'gift', 'heart',
-        'luggage', 'home', 'car', 'building', 'landmark', 'mountain', 'beach',
-        'globe', 'route', 'briefcase', 'users', 'star', 'flag', 'ticket',
-        'bookmark', 'tag', 'box',
-    ];
     private const SUGGESTION_CANDIDATE_LIMIT = 300;
     private const RECENT_SUGGESTION_HISTORY_LIMIT = 5;
 
@@ -168,19 +163,16 @@ SELECT
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
-  reo.recurring_expense_id,
+  (SELECT MIN(reo.recurring_expense_id)
+   FROM recurring_expense_occurrences reo
+   WHERE reo.user_id = t.user_id
+     AND reo.transaction_id = t.id) AS recurring_expense_id,
   t.created_at,
   t.updated_at
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
 LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
-LEFT JOIN (
-  SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
-  FROM recurring_expense_occurrences
-  WHERE transaction_id IS NOT NULL
-  GROUP BY user_id, transaction_id
-) reo ON reo.transaction_id = t.id AND reo.user_id = t.user_id
 WHERE %s
 ORDER BY %s
 LIMIT :limit OFFSET :offset
@@ -222,9 +214,9 @@ SQL;
         $expense = $this->validatedExpense($payload['expense'] ?? null);
         $amount = $this->validatedMoney($payload['amount'] ?? null, 'amount');
         $category = $this->validatedCategory($payload['category'] ?? null);
-        $tagId = $this->resolveTagIdFromPayload($payload, $ctx->userId(), required: true);
         $this->pdo->beginTransaction();
         try {
+            $tagId = $this->resolveTagIdFromPayload($payload, $ctx->userId(), required: true);
             $contextId = $this->resolveContextIdFromPayload($payload, $ctx->userId(), allowClear: false);
             $cardId = $this->resolveCardIdFromPayload($payload, $ctx->userId(), required: false, allowClear: false);
         $isSplit = array_key_exists('is_split', $payload)
@@ -361,32 +353,41 @@ SQL;
             ? TransactionNotes::normalize($payload['notes'])
             : ($existing['notes'] === null ? null : (string) $existing['notes']);
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, context_id = :context_id, card_id = :card_id, is_split = :is_split, notes = :notes, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
-        );
-        $stmt->execute([
-            ':transaction_date' => $date,
-            ':expense' => $expense,
-            ':amount' => $amount,
-            ':category' => $category,
-            ':tag_id' => $tagId,
-            ':context_id' => $contextId,
-            ':card_id' => $cardId,
-            ':is_split' => $isSplit ? 1 : 0,
-            ':notes' => $notes,
-            ':id' => $transactionId,
-            ':user_id' => $ctx->userId(),
-        ]);
-        if ($linkedFundEntry !== null) {
-            $this->fundTransactionIntegrationService->syncLinkedTransactionUpdate(
-                $ctx->userId(),
-                $existing,
-                $linkedFundEntry,
-                $date,
-                $amount,
-                $category,
-                $notes
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                'UPDATE transactions SET transaction_date = :transaction_date, expense = :expense, amount = :amount, category = :category, tag_id = :tag_id, context_id = :context_id, card_id = :card_id, is_split = :is_split, notes = :notes, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
             );
+            $stmt->execute([
+                ':transaction_date' => $date,
+                ':expense' => $expense,
+                ':amount' => $amount,
+                ':category' => $category,
+                ':tag_id' => $tagId,
+                ':context_id' => $contextId,
+                ':card_id' => $cardId,
+                ':is_split' => $isSplit ? 1 : 0,
+                ':notes' => $notes,
+                ':id' => $transactionId,
+                ':user_id' => $ctx->userId(),
+            ]);
+            if ($linkedFundEntry !== null) {
+                $this->fundTransactionIntegrationService->syncLinkedTransactionUpdate(
+                    $ctx->userId(),
+                    $existing,
+                    $linkedFundEntry,
+                    $date,
+                    $amount,
+                    $category,
+                    $notes
+                );
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
         }
 
         return Response::json($this->fetchTransaction($ctx->userId(), $transactionId));
@@ -398,23 +399,33 @@ SQL;
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $transactionId = $this->parseEntityId((string) ($params['transaction_id'] ?? ''), 'transaction_id');
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE transactions SET deleted_at = UTC_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
-        );
-        $stmt->execute([
-            ':id' => $transactionId,
-            ':user_id' => $ctx->userId(),
-        ]);
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                'UPDATE transactions SET deleted_at = :deleted_at, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL'
+            );
+            $stmt->execute([
+                ':deleted_at' => gmdate('Y-m-d H:i:s'),
+                ':id' => $transactionId,
+                ':user_id' => $ctx->userId(),
+            ]);
 
-        if ($stmt->rowCount() === 0) {
-            throw new HttpException(404, 'NOT_FOUND', 'Transaction not found');
+            if ($stmt->rowCount() === 0) {
+                throw new HttpException(404, 'NOT_FOUND', 'Transaction not found');
+            }
+
+            $this->fundTransactionIntegrationService->voidLinkedTransactionDelete(
+                $ctx->userId(),
+                $transactionId,
+                gmdate('Y-m-d H:i:s')
+            );
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
         }
-
-        $this->fundTransactionIntegrationService->voidLinkedTransactionDelete(
-            $ctx->userId(),
-            $transactionId,
-            gmdate('Y-m-d H:i:s')
-        );
 
         return Response::noContent();
     }
@@ -460,19 +471,16 @@ SELECT
   c.id AS card_id,
   c.name AS card_name,
   c.is_favorite AS card_is_favorite,
-  reo.recurring_expense_id,
+  (SELECT MIN(reo.recurring_expense_id)
+   FROM recurring_expense_occurrences reo
+   WHERE reo.user_id = t.user_id
+     AND reo.transaction_id = t.id) AS recurring_expense_id,
   t.created_at,
   t.updated_at
 FROM transactions t
 JOIN tags tg ON tg.id = t.tag_id AND tg.user_id = t.user_id
 LEFT JOIN cards c ON c.id = t.card_id AND c.user_id = t.user_id
 LEFT JOIN contexts cx ON cx.id = t.context_id AND cx.user_id = t.user_id
-LEFT JOIN (
-  SELECT user_id, transaction_id, MIN(recurring_expense_id) AS recurring_expense_id
-  FROM recurring_expense_occurrences
-  WHERE transaction_id IS NOT NULL
-  GROUP BY user_id, transaction_id
-) reo ON reo.transaction_id = t.id AND reo.user_id = t.user_id
 WHERE t.id = :id AND t.user_id = :user_id AND t.deleted_at IS NULL
 LIMIT 1
 SQL;
@@ -1012,7 +1020,7 @@ SQL;
         }
 
         $iconKey = trim($value);
-        if ($iconKey === '' || in_array($iconKey, self::ALLOWED_CONTEXT_ICON_KEYS, true)) {
+        if ($iconKey === '' || ContextIconKeys::isValid($iconKey)) {
             return $iconKey === '' ? null : $iconKey;
         }
 
