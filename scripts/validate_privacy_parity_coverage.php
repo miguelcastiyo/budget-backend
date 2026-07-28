@@ -13,14 +13,11 @@ $fixtureRoot = $root . '/tests/fixtures/privacy-parity';
 $manifestPath = $fixtureRoot . '/manifest.json';
 $manifest = is_file($manifestPath) ? json_decode((string) file_get_contents($manifestPath), true) : null;
 if (!is_array($manifest)) { fwrite(STDERR, "manifest.json is missing or invalid\n"); exit(1); }
-$invariantCandidates = [
-    $root . '/docs/financial-domain-invariants.md',
-    dirname($root) . '/docs-internal/architecture/privacy-program/financial-domain-invariants.md',
-];
-$invariantPath = array_values(array_filter($invariantCandidates, 'is_file'))[0] ?? null;
+$invariantPath = $root . '/docs/financial-domain-invariants.md';
+if (!is_file($invariantPath)) { fwrite(STDERR, "tracked financial-domain-invariants.md is missing\n"); exit(1); }
 $known = [];
 $high = [];
-foreach (($invariantPath && is_file($invariantPath) ? file($invariantPath, FILE_IGNORE_NEW_LINES) : []) as $line) {
+foreach (file($invariantPath, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
     if (preg_match('/^\| (INV-[A-Z0-9-]+) \|.*\| (high|medium) \|/', $line, $match)) {
         $known[$match[1]] = true;
         if ($match[2] === 'high') $high[$match[1]] = true;

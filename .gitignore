@@ -6,4 +6,5 @@ project_info.md
 /postman
 /storage
 /docs/*
+!/docs/financial-domain-invariants.md
 !/docs/privacy-launch-readiness-record.md
