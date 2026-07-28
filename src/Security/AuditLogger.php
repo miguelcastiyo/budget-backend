@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Security;
 
 use App\Http\Request;
+use App\Monitoring\OperationalMetadata;
 use App\Support\Str;
 use PDO;
 
@@ -71,34 +72,7 @@ final class AuditLogger
      */
     private function redactMetadata(array $metadata): array
     {
-        $redacted = [];
-        foreach ($metadata as $key => $value) {
-            $normalizedKey = strtolower((string) $key);
-            if (
-                str_contains($normalizedKey, 'token')
-                || str_contains($normalizedKey, 'secret')
-                || str_contains($normalizedKey, 'password')
-                || str_contains($normalizedKey, 'hash')
-                || str_contains($normalizedKey, 'code')
-            ) {
-                $redacted[$key] = '[redacted]';
-                continue;
-            }
-
-            if (is_array($value)) {
-                $redacted[$key] = $this->redactMetadata($value);
-                continue;
-            }
-
-            if (is_string($value) && strlen($value) > 512) {
-                $redacted[$key] = substr($value, 0, 512);
-                continue;
-            }
-
-            $redacted[$key] = $value;
-        }
-
-        return $redacted;
+        return OperationalMetadata::allowList($metadata);
     }
 
     private function ipAddress(): ?string

@@ -163,6 +163,8 @@ SQL;
             ]);
         }
 
+        $this->pdo->beginTransaction();
+        try {
         $stmt = $this->pdo->prepare(
             'INSERT INTO recurring_expenses (series_id, user_id, expense, amount, category, tag_id, card_id, billing_type, billing_day, starts_month, ends_month, is_active)
              VALUES (:series_id, :user_id, :expense, :amount, :category, :tag_id, :card_id, :billing_type, :billing_day, :starts_month, :ends_month, :is_active)'
@@ -213,7 +215,16 @@ SQL;
             $this->recurring->ensureGeneratedForMonth($ctx->userId(), $this->recurring->currentMonth());
         }
 
+        (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
+        $this->pdo->commit();
+
         return Response::json($this->fetchOne($ctx->userId(), $recurringExpenseId), 201);
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /** @param array{recurring_expense_id:string} $params */
@@ -295,6 +306,7 @@ SQL;
             ]);
             $this->recurring->assertNoSeriesOverlap($ctx->userId(), (string) $existing['series_id']);
 
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
             $this->pdo->commit();
         } catch (HttpException $e) {
             if ($this->pdo->inTransaction()) {
@@ -323,6 +335,8 @@ SQL;
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId((string) ($params['recurring_expense_id'] ?? ''), 'recurring_expense_id');
 
+        $this->pdo->beginTransaction();
+        try {
         $stmt = $this->pdo->prepare(
             'UPDATE recurring_expenses
              SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP
@@ -337,7 +351,16 @@ SQL;
             throw new HttpException(404, 'NOT_FOUND', 'Recurring expense not found');
         }
 
+        (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
+        $this->pdo->commit();
+
         return Response::noContent();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /** @param array{recurring_expense_id:string} $params */

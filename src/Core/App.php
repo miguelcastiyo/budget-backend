@@ -18,6 +18,9 @@ use App\Controllers\MonthCloseoutController;
 use App\Controllers\MonthOverviewController;
 use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
+use App\Controllers\PrivacyController;
+use App\Controllers\VaultController;
+use App\Controllers\EncryptedRecordController;
 use App\Controllers\RecurringExpenseController;
 use App\Controllers\SavingsPlanController;
 use App\Controllers\TaxonomyController;
@@ -48,6 +51,19 @@ use App\Overview\MonthOverviewService;
 use App\Security\AuditLogger;
 use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
+use App\Privacy\FinancialPrivacyStateService;
+use App\Privacy\FinancialRevisionService;
+use App\Privacy\FinancialWritePolicy;
+use App\Privacy\FinancialReadPolicy;
+use App\Privacy\MigrationSnapshotService;
+use App\Privacy\MigrationStagingRepository;
+use App\Privacy\PrivacyCleanupRepository;
+use App\Privacy\PrivacyMigrationRepository;
+use App\Privacy\RecentAuthGuard;
+use App\Privacy\VaultRepository;
+use App\Privacy\VaultService;
+use App\Privacy\EncryptedRecordRepository;
+use App\Privacy\EncryptedRecordService;
 use App\Savings\SavingsPlanService;
 use Throwable;
 
@@ -108,12 +124,41 @@ final class App
         $monthCloseoutController = new MonthCloseoutController($auth, $monthCloseoutService);
         $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
+        $financialStates = new FinancialPrivacyStateService($pdo);
+        $financialRevisions = new FinancialRevisionService($pdo);
+        $privacyMigrations = new PrivacyMigrationRepository($pdo);
+        $privacyCleanup = new PrivacyCleanupRepository($pdo);
+        $recentAuth = new RecentAuthGuard($config);
+        $vaultRepository = new VaultRepository($pdo);
+        $privacyMigrationService = new \App\Privacy\PrivacyMigrationService($pdo, $financialStates, $financialRevisions, $privacyMigrations);
+        $migrationStaging = new MigrationStagingRepository($pdo);
+        $privacyCutover = new \App\Privacy\PrivacyCutoverService($pdo, $financialStates, $financialRevisions, $privacyMigrations, $migrationStaging, $vaultRepository, $privacyCleanup);
+        $privacyController = new PrivacyController($auth, $financialStates, $financialRevisions, $privacyMigrations, $privacyCleanup, $privacyMigrationService, new MigrationSnapshotService($pdo, $financialRevisions, $privacyMigrations), $migrationStaging, $vaultRepository, $recentAuth, $privacyCutover);
+        $vaultController = new VaultController($auth, new VaultService($pdo, $vaultRepository, $financialStates, $recentAuth, $auditLogger));
+        $deviceController = new \App\Controllers\DeviceController($pdo, $auth, $recentAuth);
+        $encryptedRecordController = new EncryptedRecordController($auth, new EncryptedRecordService($pdo, new EncryptedRecordRepository($pdo), new VaultRepository($pdo), $financialStates, $auditLogger));
+        $writePolicy = new FinancialWritePolicy($financialStates);
+        $readPolicy = new FinancialReadPolicy($financialStates);
 
         $router = new Router();
 
         $add = static function (string $method, string $path, callable $handler) use ($router): void {
             $router->add($method, '/api/v1' . $path, $handler);
             $router->add($method, $path, $handler);
+        };
+
+        $financialMutation = static function (callable $handler) use ($auth, $writePolicy): callable {
+            return static function (Request $request, array $params = []) use ($auth, $writePolicy, $handler): Response {
+                $writePolicy->requirePlaintextWriteAllowed($auth->requireAuth($request)->userId());
+                return $handler($request, $params);
+            };
+        };
+
+        $financialRead = static function (callable $handler) use ($auth, $readPolicy): callable {
+            return static function (Request $request, array $params = []) use ($auth, $readPolicy, $handler): Response {
+                $readPolicy->requireLegacyReadAllowed($auth->requireAuth($request)->userId());
+                return $handler($request, $params);
+            };
         };
 
         $add('GET', '/health', fn(Request $request) => $healthController($request));
@@ -131,6 +176,27 @@ final class App
         $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $authController->confirmPasswordReset($request));
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
+        $add('GET', '/me/privacy', fn(Request $request) => $privacyController->status($request));
+        $add('POST', '/me/privacy/migration', fn(Request $request) => $privacyController->start($request));
+        $add('GET', '/me/privacy/migration/{migration_id}', fn(Request $request, array $params) => $privacyController->migrationStatus($request, $params));
+        $add('GET', '/me/privacy/migration/{migration_id}/snapshot', fn(Request $request, array $params) => $privacyController->snapshot($request, $params));
+        $add('PUT', '/me/privacy/migration/{migration_id}/manifest', fn(Request $request, array $params) => $privacyController->putManifest($request, $params));
+        $add('PUT', '/me/privacy/migration/{migration_id}/records/{record_id}', fn(Request $request, array $params) => $privacyController->putRecord($request, $params));
+        $add('POST', '/me/privacy/migration/{migration_id}/verify', fn(Request $request, array $params) => $privacyController->verify($request, $params));
+        $add('POST', '/me/privacy/migration/{migration_id}/cutover', fn(Request $request, array $params) => $privacyController->cutover($request, $params));
+        $add('POST', '/me/privacy/migration/{migration_id}/cancel', fn(Request $request, array $params) => $privacyController->cancel($request, $params));
+        $add('GET', '/me/vault', fn(Request $request) => $vaultController->get($request));
+        $add('POST', '/me/vault', fn(Request $request) => $vaultController->initialize($request));
+        $add('PUT', '/me/vault/passphrase', fn(Request $request) => $vaultController->replacePassphrase($request));
+        $add('PUT', '/me/vault/recovery', fn(Request $request) => $vaultController->replaceRecovery($request));
+        $add('GET', '/me/devices', fn(Request $request) => $deviceController->list($request));
+        $add('DELETE', '/me/devices/{session_id}', fn(Request $request, array $params) => $deviceController->revoke($request, $params));
+        $add('POST', '/me/encrypted-records', fn(Request $request) => $encryptedRecordController->create($request));
+        $add('POST', '/me/encrypted-records/batch', fn(Request $request) => $encryptedRecordController->batch($request));
+        $add('GET', '/me/encrypted-records/sync', fn(Request $request) => $encryptedRecordController->sync($request));
+        $add('GET', '/me/encrypted-records/{record_id}', fn(Request $request, array $params) => $encryptedRecordController->get($request, $params));
+        $add('PUT', '/me/encrypted-records/{record_id}', fn(Request $request, array $params) => $encryptedRecordController->update($request, $params));
+        $add('DELETE', '/me/encrypted-records/{record_id}', fn(Request $request, array $params) => $encryptedRecordController->delete($request, $params));
         $add('PATCH', '/me', fn(Request $request) => $profileController->updateMe($request));
         $add('GET', '/me/setup-status', fn(Request $request) => $profileController->getSetupStatus($request));
         $add('PATCH', '/me/onboarding-state', fn(Request $request) => $profileController->updateOnboardingState($request));
@@ -144,70 +210,70 @@ final class App
         $add('DELETE', '/me/master-api-keys/{api_key_id}', fn(Request $request, array $params) => $masterApiKeyController->revoke($request, $params));
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
-        $add('GET', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->get($request));
-        $add('GET', '/me/budget-settings/versions', fn(Request $request) => $budgetSettingsController->versions($request));
-        $add('PUT', '/me/budget-settings', fn(Request $request) => $budgetSettingsController->upsert($request));
+        $add('GET', '/me/budget-settings', $financialRead(fn(Request $request) => $budgetSettingsController->get($request)));
+        $add('GET', '/me/budget-settings/versions', $financialRead(fn(Request $request) => $budgetSettingsController->versions($request)));
+        $add('PUT', '/me/budget-settings', $financialMutation(fn(Request $request) => $budgetSettingsController->upsert($request)));
 
-        $add('GET', '/me/tags', fn(Request $request) => $taxonomyController->listTags($request));
-        $add('GET', '/me/tags/quick-picks', fn(Request $request) => $taxonomyController->tagQuickPicks($request));
-        $add('POST', '/me/tags', fn(Request $request) => $taxonomyController->createTag($request));
-        $add('PATCH', '/me/tags/{tag_id}', fn(Request $request, array $params) => $taxonomyController->updateTag($request, $params));
-        $add('DELETE', '/me/tags/{tag_id}', fn(Request $request, array $params) => $taxonomyController->deleteTag($request, $params));
+        $add('GET', '/me/tags', $financialRead(fn(Request $request) => $taxonomyController->listTags($request)));
+        $add('GET', '/me/tags/quick-picks', $financialRead(fn(Request $request) => $taxonomyController->tagQuickPicks($request)));
+        $add('POST', '/me/tags', $financialMutation(fn(Request $request) => $taxonomyController->createTag($request)));
+        $add('PATCH', '/me/tags/{tag_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateTag($request, $params)));
+        $add('DELETE', '/me/tags/{tag_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteTag($request, $params)));
 
-        $add('GET', '/me/cards', fn(Request $request) => $taxonomyController->listCards($request));
-        $add('POST', '/me/cards', fn(Request $request) => $taxonomyController->createCard($request));
-        $add('PATCH', '/me/cards/{card_id}', fn(Request $request, array $params) => $taxonomyController->updateCard($request, $params));
-        $add('DELETE', '/me/cards/{card_id}', fn(Request $request, array $params) => $taxonomyController->deleteCard($request, $params));
+        $add('GET', '/me/cards', $financialRead(fn(Request $request) => $taxonomyController->listCards($request)));
+        $add('POST', '/me/cards', $financialMutation(fn(Request $request) => $taxonomyController->createCard($request)));
+        $add('PATCH', '/me/cards/{card_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateCard($request, $params)));
+        $add('DELETE', '/me/cards/{card_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteCard($request, $params)));
 
-        $add('GET', '/me/contexts', fn(Request $request) => $taxonomyController->listContexts($request));
-        $add('POST', '/me/contexts', fn(Request $request) => $taxonomyController->createContext($request));
-        $add('PATCH', '/me/contexts/{context_id}', fn(Request $request, array $params) => $taxonomyController->updateContext($request, $params));
-        $add('DELETE', '/me/contexts/{context_id}', fn(Request $request, array $params) => $taxonomyController->deleteContext($request, $params));
+        $add('GET', '/me/contexts', $financialRead(fn(Request $request) => $taxonomyController->listContexts($request)));
+        $add('POST', '/me/contexts', $financialMutation(fn(Request $request) => $taxonomyController->createContext($request)));
+        $add('PATCH', '/me/contexts/{context_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateContext($request, $params)));
+        $add('DELETE', '/me/contexts/{context_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteContext($request, $params)));
 
-        $add('GET', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->list($request));
-        $add('POST', '/me/recurring-expenses', fn(Request $request) => $recurringExpenseController->create($request));
-        $add('GET', '/me/recurring-expenses/{recurring_expense_id}/series', fn(Request $request, array $params) => $recurringExpenseController->series($request, $params));
-        $add('POST', '/me/recurring-expenses/{recurring_expense_id}/schedule-change', fn(Request $request, array $params) => $recurringExpenseController->scheduleChange($request, $params));
-        $add('PATCH', '/me/recurring-expenses/{recurring_expense_id}', fn(Request $request, array $params) => $recurringExpenseController->update($request, $params));
-        $add('DELETE', '/me/recurring-expenses/{recurring_expense_id}', fn(Request $request, array $params) => $recurringExpenseController->delete($request, $params));
+        $add('GET', '/me/recurring-expenses', $financialRead(fn(Request $request) => $recurringExpenseController->list($request)));
+        $add('POST', '/me/recurring-expenses', $financialMutation(fn(Request $request) => $recurringExpenseController->create($request)));
+        $add('GET', '/me/recurring-expenses/{recurring_expense_id}/series', $financialRead(fn(Request $request, array $params) => $recurringExpenseController->series($request, $params)));
+        $add('POST', '/me/recurring-expenses/{recurring_expense_id}/schedule-change', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->scheduleChange($request, $params)));
+        $add('PATCH', '/me/recurring-expenses/{recurring_expense_id}', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->update($request, $params)));
+        $add('DELETE', '/me/recurring-expenses/{recurring_expense_id}', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->delete($request, $params)));
 
-        $add('GET', '/me/transactions', fn(Request $request) => $transactionController->list($request));
-        $add('GET', '/me/transactions/suggestions', fn(Request $request) => $transactionController->suggestions($request));
-        $add('POST', '/me/transactions', fn(Request $request) => $transactionController->create($request));
-        $add('PATCH', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->update($request, $params));
-        $add('DELETE', '/me/transactions/{transaction_id}', fn(Request $request, array $params) => $transactionController->delete($request, $params));
+        $add('GET', '/me/transactions', $financialRead(fn(Request $request) => $transactionController->list($request)));
+        $add('GET', '/me/transactions/suggestions', $financialRead(fn(Request $request) => $transactionController->suggestions($request)));
+        $add('POST', '/me/transactions', $financialMutation(fn(Request $request) => $transactionController->create($request)));
+        $add('PATCH', '/me/transactions/{transaction_id}', $financialMutation(fn(Request $request, array $params) => $transactionController->update($request, $params)));
+        $add('DELETE', '/me/transactions/{transaction_id}', $financialMutation(fn(Request $request, array $params) => $transactionController->delete($request, $params)));
 
-        $add('GET', '/me/months/{month}/savings-plan', fn(Request $request, array $params) => $savingsPlanController->get($request, $params));
-        $add('PUT', '/me/months/{month}/savings-plan', fn(Request $request, array $params) => $savingsPlanController->replace($request, $params));
+        $add('GET', '/me/months/{month}/savings-plan', $financialRead(fn(Request $request, array $params) => $savingsPlanController->get($request, $params)));
+        $add('PUT', '/me/months/{month}/savings-plan', $financialMutation(fn(Request $request, array $params) => $savingsPlanController->replace($request, $params)));
 
-        $add('GET', '/me/funds', fn(Request $request) => $fundController->list($request));
-        $add('POST', '/me/funds', fn(Request $request) => $fundController->create($request));
-        $add('GET', '/me/funds/closeout-summary', fn(Request $request) => $fundController->closeoutSummary($request));
-        $add('GET', '/me/funds/{fund_id}', fn(Request $request, array $params) => $fundController->get($request, $params));
-        $add('PATCH', '/me/funds/{fund_id}', fn(Request $request, array $params) => $fundController->update($request, $params));
-        $add('POST', '/me/funds/{fund_id}/archive', fn(Request $request, array $params) => $fundController->archive($request, $params));
-        $add('POST', '/me/funds/{fund_id}/restore', fn(Request $request, array $params) => $fundController->restore($request, $params));
-        $add('GET', '/me/funds/{fund_id}/entries', fn(Request $request, array $params) => $fundController->entries($request, $params));
-        $add('POST', '/me/funds/{fund_id}/entries', fn(Request $request, array $params) => $fundController->createEntry($request, $params));
-        $add('PATCH', '/me/funds/{fund_id}/entries/{entry_id}', fn(Request $request, array $params) => $fundController->updateEntry($request, $params));
-        $add('DELETE', '/me/funds/{fund_id}/entries/{entry_id}', fn(Request $request, array $params) => $fundController->deleteEntry($request, $params));
+        $add('GET', '/me/funds', $financialRead(fn(Request $request) => $fundController->list($request)));
+        $add('POST', '/me/funds', $financialMutation(fn(Request $request) => $fundController->create($request)));
+        $add('GET', '/me/funds/closeout-summary', $financialRead(fn(Request $request) => $fundController->closeoutSummary($request)));
+        $add('GET', '/me/funds/{fund_id}', $financialRead(fn(Request $request, array $params) => $fundController->get($request, $params)));
+        $add('PATCH', '/me/funds/{fund_id}', $financialMutation(fn(Request $request, array $params) => $fundController->update($request, $params)));
+        $add('POST', '/me/funds/{fund_id}/archive', $financialMutation(fn(Request $request, array $params) => $fundController->archive($request, $params)));
+        $add('POST', '/me/funds/{fund_id}/restore', $financialMutation(fn(Request $request, array $params) => $fundController->restore($request, $params)));
+        $add('GET', '/me/funds/{fund_id}/entries', $financialRead(fn(Request $request, array $params) => $fundController->entries($request, $params)));
+        $add('POST', '/me/funds/{fund_id}/entries', $financialMutation(fn(Request $request, array $params) => $fundController->createEntry($request, $params)));
+        $add('PATCH', '/me/funds/{fund_id}/entries/{entry_id}', $financialMutation(fn(Request $request, array $params) => $fundController->updateEntry($request, $params)));
+        $add('DELETE', '/me/funds/{fund_id}/entries/{entry_id}', $financialMutation(fn(Request $request, array $params) => $fundController->deleteEntry($request, $params)));
 
-        $add('GET', '/me/months/{month}/overview', fn(Request $request, array $params) => $monthOverviewController->overview($request, $params));
-        $add('GET', '/me/month-closeouts', fn(Request $request) => $monthCloseoutController->list($request));
-        $add('GET', '/me/month-closeouts/{month}', fn(Request $request, array $params) => $monthCloseoutController->get($request, $params));
-        $add('POST', '/me/month-closeouts/{month}/close', fn(Request $request, array $params) => $monthCloseoutController->close($request, $params));
-        $add('PATCH', '/me/month-closeouts/{month}', fn(Request $request, array $params) => $monthCloseoutController->update($request, $params));
-        $add('POST', '/me/month-closeouts/{month}/reopen', fn(Request $request, array $params) => $monthCloseoutController->reopen($request, $params));
+        $add('GET', '/me/months/{month}/overview', $financialRead(fn(Request $request, array $params) => $monthOverviewController->overview($request, $params)));
+        $add('GET', '/me/month-closeouts', $financialRead(fn(Request $request) => $monthCloseoutController->list($request)));
+        $add('GET', '/me/month-closeouts/{month}', $financialRead(fn(Request $request, array $params) => $monthCloseoutController->get($request, $params)));
+        $add('POST', '/me/month-closeouts/{month}/close', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->close($request, $params)));
+        $add('PATCH', '/me/month-closeouts/{month}', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->update($request, $params)));
+        $add('POST', '/me/month-closeouts/{month}/reopen', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->reopen($request, $params)));
 
-        $add('GET', '/me/transactions/export.csv', fn(Request $request) => $importExportController->exportCsv($request));
-        $add('POST', '/me/transactions/import.csv', fn(Request $request) => $importExportController->importCsv($request));
-        $add('DELETE', '/me/imports/{import_run_id}/transactions', fn(Request $request, array $params) => $importExportController->rollbackImport($request, $params));
-        $add('GET', '/me/data-runs', fn(Request $request) => $importExportController->listDataRuns($request));
+        $add('GET', '/me/transactions/export.csv', $financialRead(fn(Request $request) => $importExportController->exportCsv($request)));
+        $add('POST', '/me/transactions/import.csv', $financialMutation(fn(Request $request) => $importExportController->importCsv($request)));
+        $add('DELETE', '/me/imports/{import_run_id}/transactions', $financialMutation(fn(Request $request, array $params) => $importExportController->rollbackImport($request, $params)));
+        $add('GET', '/me/data-runs', $financialRead(fn(Request $request) => $importExportController->listDataRuns($request)));
 
-        $add('GET', '/me/metrics/tags', fn(Request $request) => $metricsController->tags($request));
-        $add('GET', '/me/metrics/categories', fn(Request $request) => $metricsController->categories($request));
-        $add('GET', '/me/dashboard', fn(Request $request) => $metricsController->dashboard($request));
-        $add('GET', '/me/metrics/insights', fn(Request $request) => $metricsController->insights($request));
+        $add('GET', '/me/metrics/tags', $financialRead(fn(Request $request) => $metricsController->tags($request)));
+        $add('GET', '/me/metrics/categories', $financialRead(fn(Request $request) => $metricsController->categories($request)));
+        $add('GET', '/me/dashboard', $financialRead(fn(Request $request) => $metricsController->dashboard($request)));
+        $add('GET', '/me/metrics/insights', $financialRead(fn(Request $request) => $metricsController->insights($request)));
 
         return new self($router, $config, $rateLimiter, $errorReporter);
     }
@@ -242,7 +308,6 @@ final class App
             if ($this->debugModeEnabled()) {
                 $body['error']['debug'] = [
                     'type' => $e::class,
-                    'message' => $e->getMessage(),
                 ];
             }
 

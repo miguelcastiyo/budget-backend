@@ -124,6 +124,7 @@ final class MonthCloseoutService
             }
             $this->fundCloseoutIntegrationService->createEntriesForCloseout($userId, $closeoutDbId, $month);
 
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -163,6 +164,7 @@ final class MonthCloseoutService
                 $this->repository->insertAllocations((int) $existing['id'], $userId, $rows);
             }
             $this->fundCloseoutIntegrationService->createEntriesForCloseout($userId, (int) $existing['id'], $month);
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -188,6 +190,7 @@ final class MonthCloseoutService
             try {
                 $this->repository->markCloseoutReopened((int) $existing['id'], $this->nowUtc());
                 $this->fundCloseoutIntegrationService->replaceCloseoutLinkedEntries($userId, (int) $existing['id'], $month, 'closeout_reopened');
+                (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
                 $this->pdo->commit();
             } catch (Throwable $e) {
                 if ($this->pdo->inTransaction()) {

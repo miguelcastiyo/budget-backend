@@ -1,0 +1,23 @@
+CREATE TABLE user_financial_vaults (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vault_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  crypto_profile_version TINYINT UNSIGNED NOT NULL,
+  passphrase_kdf VARCHAR(32) NOT NULL,
+  passphrase_kdf_hash VARCHAR(32) NOT NULL,
+  passphrase_kdf_iterations INT UNSIGNED NOT NULL,
+  passphrase_wrap_algorithm VARCHAR(32) NOT NULL,
+  passphrase_kdf_salt VARBINARY(64) NOT NULL,
+  passphrase_wrapped_vault_key VARBINARY(512) NOT NULL,
+  recovery_wrap_algorithm VARCHAR(32) NOT NULL,
+  recovery_wrapped_vault_key VARBINARY(512) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_financial_vaults_vault_id (vault_id),
+  UNIQUE KEY uq_user_financial_vaults_user (user_id),
+  CONSTRAINT fk_user_financial_vaults_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT chk_user_financial_vaults_profile CHECK (crypto_profile_version = 1),
+  CONSTRAINT chk_user_financial_vaults_kdf CHECK (passphrase_kdf = 'PBKDF2' AND passphrase_kdf_hash = 'SHA-256' AND passphrase_kdf_iterations >= 600000),
+  CONSTRAINT chk_user_financial_vaults_wraps CHECK (passphrase_wrap_algorithm = 'AES-KW' AND recovery_wrap_algorithm = 'AES-KW')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

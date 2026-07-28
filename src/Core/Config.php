@@ -45,6 +45,18 @@ final class Config
             }
         }
 
+        // PHP-FPM/CLI deployments may expose process variables through
+        // getenv() without populating $_ENV. Process configuration must win
+        // over the local .env file so test and deployment overrides are real.
+        $processEnvironment = getenv();
+        if (is_array($processEnvironment)) {
+            foreach ($processEnvironment as $k => $v) {
+                if (is_string($k) && is_string($v)) {
+                    $values[$k] = $v;
+                }
+            }
+        }
+
         return new self($values);
     }
 

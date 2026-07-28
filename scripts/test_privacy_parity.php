@@ -25,7 +25,13 @@ $fixtureRoot = dirname(__DIR__) . '/tests/fixtures/privacy-parity';
 $manifest = json_decode((string) file_get_contents($fixtureRoot . '/manifest.json'), true);
 if (!is_array($manifest) || count($manifest['entries'] ?? []) !== 25) $fail('manifest does not contain 25 scenarios');
 $known = [];
-foreach (file(dirname(__DIR__) . '/../docs/financial-domain-invariants.md', FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+$invariantCandidates = [
+    dirname(__DIR__) . '/../docs/financial-domain-invariants.md',
+    dirname(__DIR__) . '/../docs-internal/architecture/privacy-program/financial-domain-invariants.md',
+];
+$invariantPath = array_values(array_filter($invariantCandidates, 'is_file'))[0] ?? null;
+if ($invariantPath === null) $fail('tracked financial-domain-invariants.md is missing');
+foreach (file($invariantPath, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
     if (preg_match('/^\| (INV-[A-Z0-9-]+) \|/', $line, $match)) $known[$match[1]] = true;
 }
 $validator = new FixtureValidator();

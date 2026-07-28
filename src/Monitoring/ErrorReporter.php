@@ -21,19 +21,13 @@ final class ErrorReporter
         $fingerprint = $this->fingerprint($request, $exception, $status);
         $context = [
             'request_id' => $requestId,
-            'http' => [
-                'method' => $request->method,
-                'path' => $request->path,
-                'status' => $status,
-                'user_agent' => $request->header('User-Agent'),
-            ],
-            'exception' => [
-                'class' => $exception::class,
-                'code' => $exception->getCode(),
-                'message' => $exception->getMessage(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-            ],
+            'method' => $request->method,
+            'route' => $request->path,
+            'status' => $status,
+            'exception_class' => $exception::class,
+            'code' => $exception->getCode(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
             'fingerprint' => $fingerprint,
         ];
 

@@ -157,6 +157,10 @@ SQL;
                 ':rolled_back_rows' => $deletedRows,
             ]);
 
+            if ($deletedRows > 0) {
+                (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            }
+
             if ($ownsTransaction) {
                 $this->pdo->commit();
             }

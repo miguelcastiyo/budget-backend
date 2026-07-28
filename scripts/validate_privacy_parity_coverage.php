@@ -13,7 +13,11 @@ $fixtureRoot = $root . '/tests/fixtures/privacy-parity';
 $manifestPath = $fixtureRoot . '/manifest.json';
 $manifest = is_file($manifestPath) ? json_decode((string) file_get_contents($manifestPath), true) : null;
 if (!is_array($manifest)) { fwrite(STDERR, "manifest.json is missing or invalid\n"); exit(1); }
-$invariantPath = dirname($root) . '/docs/financial-domain-invariants.md';
+$invariantCandidates = [
+    $root . '/docs/financial-domain-invariants.md',
+    dirname($root) . '/docs-internal/architecture/privacy-program/financial-domain-invariants.md',
+];
+$invariantPath = array_values(array_filter($invariantCandidates, 'is_file'))[0] ?? null;
 $known = [];
 $high = [];
 foreach (($invariantPath && is_file($invariantPath) ? file($invariantPath, FILE_IGNORE_NEW_LINES) : []) as $line) {

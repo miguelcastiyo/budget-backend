@@ -10,6 +10,8 @@ CREATE TABLE users (
   display_name VARCHAR(120) NOT NULL,
   avatar_url VARCHAR(512) NULL,
   user_preferences JSON NULL,
+  financial_privacy_state VARCHAR(32) NOT NULL DEFAULT 'vault_setup_required',
+  financial_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
   auth_provider ENUM('password', 'google') NOT NULL,
   password_hash VARCHAR(255) NULL,
   google_sub VARCHAR(128) NULL,
@@ -25,6 +27,9 @@ CREATE TABLE users (
     (auth_provider = 'password' AND password_hash IS NOT NULL AND google_sub IS NULL)
     OR
     (auth_provider = 'google' AND google_sub IS NOT NULL AND password_hash IS NULL)
+  ),
+  CONSTRAINT chk_users_financial_privacy_state CHECK (
+    financial_privacy_state IN ('vault_setup_required', 'legacy_plaintext', 'migration_in_progress', 'migration_failed', 'encrypted')
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -82,6 +87,177 @@ CREATE TABLE user_sessions (
   KEY idx_user_sessions_user_revoked (user_id, revoked_at),
   CONSTRAINT fk_user_sessions_user
     FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE financial_privacy_migrations (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  migration_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  source_financial_revision BIGINT UNSIGNED NOT NULL,
+  encrypted_schema_version VARCHAR(32) NULL,
+  failure_code VARCHAR(80) NULL,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  failed_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  cancelled_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  active_user_slot TINYINT GENERATED ALWAYS AS (CASE WHEN status = 'active' THEN 1 ELSE NULL END) STORED,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_financial_privacy_migrations_id (migration_id),
+  UNIQUE KEY uq_financial_privacy_migrations_active_user (user_id, active_user_slot),
+  KEY idx_financial_privacy_migrations_user_created (user_id, created_at),
+  CONSTRAINT fk_financial_privacy_migrations_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT chk_financial_privacy_migrations_status CHECK (status IN ('active', 'failed', 'completed', 'cancelled', 'expired')),
+  CONSTRAINT chk_financial_privacy_migrations_failure CHECK (
+    (status = 'failed' AND failure_code IS NOT NULL) OR status <> 'failed'
+  )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE financial_privacy_cleanup_jobs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  cleanup_job_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  migration_id VARCHAR(64) NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'pending',
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME NULL,
+  lease_expires_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  last_failure_code VARCHAR(80) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_financial_privacy_cleanup_jobs_id (cleanup_job_id),
+  UNIQUE KEY uq_financial_privacy_cleanup_jobs_migration (migration_id),
+  KEY idx_financial_privacy_cleanup_jobs_claim (status, next_attempt_at),
+  CONSTRAINT fk_financial_privacy_cleanup_jobs_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT fk_financial_privacy_cleanup_jobs_migration FOREIGN KEY (migration_id) REFERENCES financial_privacy_migrations (migration_id),
+  CONSTRAINT chk_financial_privacy_cleanup_jobs_status CHECK (status IN ('pending', 'running', 'retry_pending', 'completed', 'failed'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE encrypted_migration_manifests (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  migration_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  manifest_version VARCHAR(32) NOT NULL,
+  snapshot_schema_version VARCHAR(32) NOT NULL,
+  source_financial_revision BIGINT UNSIGNED NOT NULL,
+  target_count INT UNSIGNED NOT NULL,
+  relationship_count INT UNSIGNED NOT NULL DEFAULT 0,
+  manifest_json JSON NOT NULL,
+  manifest_hash CHAR(64) NOT NULL,
+  finalized_at DATETIME NULL,
+  verified_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_encrypted_migration_manifests_migration (migration_id),
+  CONSTRAINT fk_encrypted_migration_manifests_migration FOREIGN KEY (migration_id) REFERENCES financial_privacy_migrations (migration_id),
+  CONSTRAINT fk_encrypted_migration_manifests_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE encrypted_migration_records (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  migration_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  target_record_id VARCHAR(160) NOT NULL,
+  record_family VARCHAR(64) NOT NULL,
+  record_schema_version VARCHAR(32) NOT NULL,
+  envelope_version TINYINT UNSIGNED NOT NULL,
+  iv VARBINARY(64) NOT NULL,
+  ciphertext MEDIUMBLOB NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_encrypted_migration_records_target (migration_id, target_record_id),
+  KEY idx_encrypted_migration_records_migration (migration_id, record_family),
+  CONSTRAINT fk_encrypted_migration_records_migration FOREIGN KEY (migration_id) REFERENCES financial_privacy_migrations (migration_id),
+  CONSTRAINT fk_encrypted_migration_records_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE user_financial_vaults (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vault_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  crypto_profile_version TINYINT UNSIGNED NOT NULL,
+  passphrase_kdf VARCHAR(32) NOT NULL,
+  passphrase_kdf_hash VARCHAR(32) NOT NULL,
+  passphrase_kdf_iterations INT UNSIGNED NOT NULL,
+  passphrase_wrap_algorithm VARCHAR(32) NOT NULL,
+  passphrase_kdf_salt VARBINARY(64) NOT NULL,
+  passphrase_wrapped_vault_key VARBINARY(512) NOT NULL,
+  recovery_wrap_algorithm VARCHAR(32) NOT NULL,
+  recovery_wrapped_vault_key VARBINARY(512) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_financial_vaults_vault_id (vault_id),
+  UNIQUE KEY uq_user_financial_vaults_user (user_id),
+  CONSTRAINT fk_user_financial_vaults_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT chk_user_financial_vaults_profile CHECK (crypto_profile_version = 1),
+  CONSTRAINT chk_user_financial_vaults_kdf CHECK (passphrase_kdf = 'PBKDF2' AND passphrase_kdf_hash = 'SHA-256' AND passphrase_kdf_iterations >= 600000),
+  CONSTRAINT chk_user_financial_vaults_wraps CHECK (passphrase_wrap_algorithm = 'AES-KW' AND recovery_wrap_algorithm = 'AES-KW')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE encrypted_record_sync_state (
+  user_id BIGINT UNSIGNED NOT NULL,
+  next_sync_sequence BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_encrypted_sync_state_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE encrypted_financial_records (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  vault_id VARCHAR(64) NOT NULL,
+  record_id VARCHAR(96) NOT NULL,
+  envelope_version TINYINT UNSIGNED NOT NULL,
+  record_revision BIGINT UNSIGNED NOT NULL,
+  iv VARBINARY(16) NULL,
+  ciphertext MEDIUMBLOB NULL,
+  sync_sequence BIGINT UNSIGNED NOT NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  last_mutation_id VARCHAR(128) NOT NULL,
+  last_mutation_digest CHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_encrypted_records_user_record (user_id, record_id),
+  UNIQUE KEY uq_encrypted_records_user_sequence (user_id, sync_sequence),
+  KEY ix_encrypted_records_user_sequence (user_id, sync_sequence),
+  CONSTRAINT fk_encrypted_records_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT fk_encrypted_records_vault FOREIGN KEY (vault_id) REFERENCES user_financial_vaults (vault_id),
+  CONSTRAINT chk_encrypted_records_version CHECK (envelope_version = 1),
+  CONSTRAINT chk_encrypted_records_revision CHECK (record_revision >= 1),
+  CONSTRAINT chk_encrypted_records_deleted_payload CHECK ((is_deleted = 1 AND iv IS NULL AND ciphertext IS NULL) OR (is_deleted = 0 AND iv IS NOT NULL AND ciphertext IS NOT NULL)),
+  CONSTRAINT chk_encrypted_records_ciphertext_size CHECK (ciphertext IS NULL OR OCTET_LENGTH(ciphertext) <= 262144),
+  CONSTRAINT chk_encrypted_records_iv_size CHECK (iv IS NULL OR OCTET_LENGTH(iv) = 12)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE encrypted_record_changes (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  vault_id VARCHAR(64) NOT NULL,
+  record_id VARCHAR(96) NOT NULL,
+  envelope_version TINYINT UNSIGNED NOT NULL,
+  record_revision BIGINT UNSIGNED NOT NULL,
+  iv VARBINARY(16) NULL,
+  ciphertext MEDIUMBLOB NULL,
+  sync_sequence BIGINT UNSIGNED NOT NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_encrypted_record_changes_user_sequence (user_id, sync_sequence),
+  KEY ix_encrypted_record_changes_user_sequence (user_id, sync_sequence),
+  CONSTRAINT fk_encrypted_record_changes_record FOREIGN KEY (user_id, record_id) REFERENCES encrypted_financial_records (user_id, record_id),
+  CONSTRAINT chk_encrypted_record_changes_version CHECK (envelope_version = 1),
+  CONSTRAINT chk_encrypted_record_changes_deleted_payload CHECK ((is_deleted = 1 AND iv IS NULL AND ciphertext IS NULL) OR (is_deleted = 0 AND iv IS NOT NULL AND ciphertext IS NOT NULL)),
+  CONSTRAINT chk_encrypted_record_changes_ciphertext_size CHECK (ciphertext IS NULL OR OCTET_LENGTH(ciphertext) <= 262144),
+  CONSTRAINT chk_encrypted_record_changes_iv_size CHECK (iv IS NULL OR OCTET_LENGTH(iv) = 12)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE email_change_requests (

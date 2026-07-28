@@ -40,6 +40,39 @@ try {
         if ($schema === false) throw new RuntimeException('schema.sql could not be read');
         $pdo->exec($schema);
     }
+    // Existing parity databases may have been baselined before the
+    // encrypted-by-default lifecycle migration was introduced. The migration
+    // ledger alone is insufficient in that case because the baseline helper
+    // intentionally records historical files without replaying them. Repair
+    // only this additive lifecycle DDL when the live column default is stale;
+    // existing legacy fixture rows remain valid and are not rewritten.
+    $defaultCheck = $pdo->prepare('SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = \'users\' AND COLUMN_NAME = \'financial_privacy_state\' LIMIT 1');
+    $defaultCheck->execute();
+    if (trim((string) $defaultCheck->fetchColumn(), "'\"") !== 'vault_setup_required') {
+        $lifecycleSql = file_get_contents($root . '/migrations/20260727_encrypted_by_default_account_lifecycle.sql');
+        if ($lifecycleSql === false) throw new RuntimeException('Encrypted-by-default lifecycle migration could not be read');
+        $pdo->exec($lifecycleSql);
+    }
+    // Existing parity databases predate additive migrations. Apply the Phase 5
+    // staging DDL when its canonical tables are not present; it contains no
+    // plaintext financial columns and is safe to add without data rewriting.
+    $stagingTables = ['encrypted_migration_manifests', 'encrypted_migration_records'];
+    foreach ($stagingTables as $stagingTable) {
+        $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name");
+        $check->execute([':table_name' => $stagingTable]);
+        if ((int) $check->fetchColumn() === 0) {
+            $stagingSql = file_get_contents($root . '/migrations/20260725_create_encrypted_migration_staging.sql');
+            if ($stagingSql === false) throw new RuntimeException('Phase 5 staging migration could not be read');
+            $pdo->exec($stagingSql);
+            break;
+        }
+    }
+    $batchTableCheck = $pdo->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'encrypted_record_batches'");
+    if ((int) $batchTableCheck->fetchColumn() === 0) {
+        $batchSql = file_get_contents($root . '/migrations/20260726_create_encrypted_record_batches.sql');
+        if ($batchSql === false) throw new RuntimeException('Encrypted batch migration could not be read');
+        $pdo->exec($batchSql);
+    }
     // schema.sql is the canonical current schema. Historical migrations are
     // recorded as applied; they are never replayed after the canonical schema.
     $pdo->exec('CREATE TABLE IF NOT EXISTS schema_migrations (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, migration_name VARCHAR(255) NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY uq_schema_migrations_name (migration_name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');

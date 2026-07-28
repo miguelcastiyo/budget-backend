@@ -127,7 +127,10 @@ final class RecurringExpenseService
             $dueDate = sprintf('%s-%02d', $month, $billingDay);
 
             try {
-                $this->pdo->beginTransaction();
+                $ownsTransaction = !$this->pdo->inTransaction();
+                if ($ownsTransaction) {
+                    $this->pdo->beginTransaction();
+                }
 
                 $insertOccurrence->execute([
                     ':user_id' => $userId,
@@ -137,7 +140,9 @@ final class RecurringExpenseService
                 ]);
 
                 if ($insertOccurrence->rowCount() === 0) {
-                    $this->pdo->rollBack();
+                    if ($ownsTransaction) {
+                        $this->pdo->rollBack();
+                    }
                     continue;
                 }
 
@@ -160,9 +165,12 @@ final class RecurringExpenseService
                     ':user_id' => $userId,
                 ]);
 
-                $this->pdo->commit();
+                if ($ownsTransaction) {
+                    (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+                    $this->pdo->commit();
+                }
             } catch (PDOException $e) {
-                if ($this->pdo->inTransaction()) {
+                if (($ownsTransaction ?? false) && $this->pdo->inTransaction()) {
                     $this->pdo->rollBack();
                 }
 
@@ -337,6 +345,8 @@ final class RecurringExpenseService
             ]);
 
             $this->assertNoSeriesOverlap($userId, $seriesId);
+
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
 
             $this->pdo->commit();
 

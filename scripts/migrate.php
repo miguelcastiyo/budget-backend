@@ -158,6 +158,18 @@ function applyMigrations(PDO $pdo, array $state): void
 {
     ensureMigrationsTable($pdo);
 
+    // A pre-migration database may be baselined without replaying historical
+    // files. Ensure the encrypted-by-default lifecycle DDL is present before
+    // that baseline is recorded. If the lifecycle file is already recorded
+    // but the live column is stale, repair the schema rather than trusting the
+    // ledger alone.
+    $lifecycleMigration = '20260727_encrypted_by_default_account_lifecycle.sql';
+    $lifecycleRecorded = in_array($lifecycleMigration, $state['applied_migrations'], true);
+    $lifecyclePending = in_array(__DIR__ . '/../migrations/' . $lifecycleMigration, $state['pending_migrations'], true);
+    if ($state['schema_exists'] && ($state['applied_migrations'] === [] || ($lifecycleRecorded && !$lifecyclePending))) {
+        ensureEncryptedByDefaultLifecycle($pdo);
+    }
+
     if (!$state['schema_exists']) {
         applySqlFile($pdo, __DIR__ . '/../schema.sql');
         markMigrationsApplied($pdo, $state['migration_files']);
@@ -184,6 +196,22 @@ function applyMigrations(PDO $pdo, array $state): void
 
     echo "All pending migrations applied successfully.\n";
     exit(0);
+}
+
+function ensureEncryptedByDefaultLifecycle(PDO $pdo): void
+{
+    $check = $pdo->prepare('SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = \'users\' AND COLUMN_NAME = \'financial_privacy_state\' LIMIT 1');
+    $check->execute();
+    $default = $check->fetchColumn();
+    if ($default === false) {
+        throw new RuntimeException('users.financial_privacy_state is missing; refusing to baseline the schema');
+    }
+    if (trim((string) $default, "'\"") === 'vault_setup_required') return;
+
+    $migration = file_get_contents(__DIR__ . '/../migrations/20260727_encrypted_by_default_account_lifecycle.sql');
+    if ($migration === false) throw new RuntimeException('Encrypted-by-default lifecycle migration could not be read');
+    $pdo->exec($migration);
+    echo "Repaired encrypted-by-default lifecycle schema.\n";
 }
 
 function ensureMigrationsTable(PDO $pdo): void

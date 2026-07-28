@@ -242,6 +242,7 @@ SQL;
                 ':notes' => $notes,
             ]);
             $transactionId = (int) $this->pdo->lastInsertId();
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -382,6 +383,7 @@ SQL;
                     $notes
                 );
             }
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -419,6 +421,7 @@ SQL;
                 $transactionId,
                 gmdate('Y-m-d H:i:s')
             );
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {

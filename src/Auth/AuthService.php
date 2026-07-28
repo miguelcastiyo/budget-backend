@@ -67,11 +67,13 @@ final class AuthService
         [$sessionId, $sessionSecret] = $parts;
         $sessionSecretHash = Str::hashSha256($sessionSecret);
 
-        $sql = <<<'SQL'
+        $sessionCreatedAt = $this->sessionCreatedAtExpression();
+        $sql = <<<SQL
 SELECT
   us.session_id,
   us.csrf_token_hash,
   us.last_seen_at,
+  {$sessionCreatedAt},
   u.id,
   u.email,
   u.display_name,
@@ -185,5 +187,21 @@ SQL;
         }
 
         return $lastSeenUnix <= (time() - $intervalSeconds);
+    }
+
+    private function sessionCreatedAtExpression(): string
+    {
+        if ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'sqlite') {
+            return 'us.created_at AS session_created_at';
+        }
+
+        $columns = $this->pdo->query('PRAGMA table_info(user_sessions)')->fetchAll();
+        foreach ($columns as $column) {
+            if ((string) ($column['name'] ?? '') === 'created_at') {
+                return 'us.created_at AS session_created_at';
+            }
+        }
+
+        return 'NULL AS session_created_at';
     }
 }

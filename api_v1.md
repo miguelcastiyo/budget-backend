@@ -72,6 +72,35 @@ Categories are fixed in v1 (not user-editable). Debt payments use `needs` plus a
 
 ## 2) Authentication & Session Model
 
+### Financial Privacy Status
+
+`GET /api/v1/me/privacy` returns the authenticated user's control-plane status:
+
+```json
+{
+  "financial_privacy_state": "vault_setup_required",
+  "financial_revision": 0,
+  "active_migration": null,
+  "cleanup_status": null
+}
+```
+
+The endpoint is read-only and does not expose financial data, secrets, ciphertext, backup details, or failure messages. Master API keys may read status because no privacy transition is performed. Migration start/cutover routes are not implemented in Phase 1 and must not be inferred from this endpoint.
+
+### Client-owned Vault foundation
+
+`GET /api/v1/me/vault` and `POST /api/v1/me/vault` are session-only routes. Initialization requires recent interactive authentication and a CSRF token for cookie sessions. The browser creates a random AES-GCM-256 Vault key, wraps it with a PBKDF2-HMAC-SHA-256-derived AES-KW key and a separate random recovery AES-KW key, then sends only the opaque wrapped materials. Passphrases, recovery secrets, raw keys, and financial ciphertext never cross this API in Phase 2.
+
+New accounts begin in `vault_setup_required`. After Recovery Code confirmation, the client sends the opaque wrappers and the backend atomically initializes encrypted authority and transitions the account to `encrypted`. Existing `legacy_plaintext` accounts continue to use the migration path. Exact repeated initialization is idempotent, while a different second payload returns `VAULT_ALREADY_INITIALIZED`. Master API keys are rejected, including for metadata reads, because the wrapped envelope is sensitive control-plane material.
+
+### Encrypted record substrate
+
+Phase 3 adds session-authenticated `POST /api/v1/me/encrypted-records`, `GET/PUT/DELETE /api/v1/me/encrypted-records/{record_id}`, and `GET /api/v1/me/encrypted-records/sync`. Phase 6B adds `POST /api/v1/me/encrypted-records/batch` for atomic structural create/update/tombstone persistence with expected revisions and batch idempotency. These endpoints persist opaque client-encrypted envelopes only; they do not interpret financial semantics.
+
+The visible envelope metadata is limited to the opaque `vault_id` and `record_id`, envelope version `1`, record revision, Base64URL AES-GCM IV/ciphertext, deletion state, and a per-user monotonic sync sequence. The backend never decrypts, searches, validates, logs, or interprets financial meaning. Ciphertext is stored as binary with a 262,144-byte maximum and may reveal approximate plaintext size.
+
+Updates require `expected_revision` and an envelope revision exactly one higher. Stale writes return `ENCRYPTED_RECORD_REVISION_CONFLICT`; exact mutation retries are idempotent. Deletes create retained sync-visible tombstones, and record IDs are never reusable. Sync uses `after` plus bounded cursor pagination; omitted/zero `after` performs a full retained-history sync. Master API keys cannot access these routes.
+
 ### Goals
 - Invite-only access, no public sign-up.
 - Support Google and email/password.
@@ -2266,3 +2295,34 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 - Bank aggregation integrations
 - Shared household budgets
 - Native iOS-specific endpoints (same contract, different session transport)
+
+## 21) Phase 5 Migration Staging
+
+Migration control is session-only; master API keys are rejected. Start also
+requires recent interactive authentication and an initialized Vault.
+
+- `POST /me/privacy/migration` starts one run and captures the source financial revision.
+- `GET /me/privacy/migration/{migration_id}` returns safe structural progress.
+- `GET /me/privacy/migration/{migration_id}/snapshot` returns the immutable, revision-bound plaintext source snapshot with `Cache-Control: no-store`.
+- `PUT /me/privacy/migration/{migration_id}/manifest` stores the client target manifest.
+- `PUT /me/privacy/migration/{migration_id}/records/{record_id}` idempotently stores one opaque encrypted staging envelope.
+- `POST /me/privacy/migration/{migration_id}/verify` checks revision and exact target completeness.
+- `POST /me/privacy/migration/{migration_id}/cancel` removes staging and restores writable plaintext authority.
+- `POST /me/privacy/migration/{migration_id}/cutover` requires recent session authentication and promotes a fully verified run into encrypted authority atomically.
+
+Before cutover, staging is non-authoritative and normal encrypted-record sync is
+not available during `migration_in_progress`. After a successful cutover,
+`financial_privacy_state` is `encrypted`, normal encrypted-record sync exposes
+the promoted records, legacy financial reads and writes are rejected, staging is
+removed, and plaintext cleanup is scheduled separately. Cleanup failure never
+reverts encrypted authority.
+# Phase 7 recovery and device endpoints
+
+`PUT /api/v1/me/vault/passphrase` and `PUT /api/v1/me/vault/recovery` are
+session-only, recent-auth-protected wrapper replacement operations. They accept
+only opaque wrapper metadata; raw keys and secrets are never sent.
+
+`GET /api/v1/me/devices` lists coarse session metadata. `DELETE
+/api/v1/me/devices/{session_id}` revokes a session and is session-only and
+recent-auth-protected. Revocation prevents future authenticated sync but does
+not claim remote cryptographic erasure.

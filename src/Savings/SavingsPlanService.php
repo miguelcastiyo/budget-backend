@@ -204,6 +204,7 @@ final class SavingsPlanService
                     ]);
                 }
             }
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {

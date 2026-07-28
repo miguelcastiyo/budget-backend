@@ -1338,10 +1338,7 @@ $redactedMetadata = $redactMetadata->invoke($auditLogger, [
         'email' => 'owner@example.com',
     ],
 ]);
-assertSame('[redacted]', $redactedMetadata['invite_token'], 'audit logger redacts token metadata');
-assertSame('[redacted]', $redactedMetadata['password'], 'audit logger redacts password metadata');
-assertSame('[redacted]', $redactedMetadata['profile']['verification_code'], 'audit logger redacts nested code metadata');
-assertSame('owner@example.com', $redactedMetadata['profile']['email'], 'audit logger keeps safe nested metadata');
+assertSame([], $redactedMetadata, 'audit logger drops non-allow-listed metadata');
 
 $appReflection = new ReflectionClass(App::class);
 $app = $appReflection->newInstanceWithoutConstructor();
@@ -1369,10 +1366,8 @@ $structuredLog = json_decode($structuredLogger->format('error', 'server_error', 
 ]), true);
 assertSame('budget-api', $structuredLog['service'] ?? null, 'structured logger includes service');
 assertSame('test', $structuredLog['environment'] ?? null, 'structured logger includes environment');
-assertSame('Failed with token=[redacted]', $structuredLog['message'] ?? null, 'structured logger redacts sensitive message fragments');
-assertSame('[redacted]', $structuredLog['context']['password'] ?? null, 'structured logger redacts sensitive top-level context');
-assertSame('[redacted]', $structuredLog['context']['nested']['api_key'] ?? null, 'structured logger redacts sensitive nested context');
-assertSame('visible', $structuredLog['context']['nested']['safe'] ?? null, 'structured logger keeps non-sensitive context');
+assertSame('[operational message omitted]', $structuredLog['message'] ?? null, 'structured logger omits sensitive message fragments');
+assertSame([], $structuredLog['context'] ?? null, 'structured logger enforces the metadata allow-list');
 
 $apiKeyReflection = new ReflectionClass(MasterApiKeyController::class);
 $apiKeyController = $apiKeyReflection->newInstanceWithoutConstructor();

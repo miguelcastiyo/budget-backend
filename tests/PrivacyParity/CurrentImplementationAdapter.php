@@ -157,8 +157,8 @@ final class CurrentImplementationAdapter
     private function seedIdentity(): void
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO users (id, email, display_name, auth_provider, password_hash, email_verified, role, is_active)
-             VALUES (:id, :email, :display_name, :auth_provider, :password_hash, 1, \'owner\', 1)'
+            'INSERT INTO users (id, email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state)
+             VALUES (:id, :email, :display_name, :auth_provider, :password_hash, 1, \'owner\', 1, \'legacy_plaintext\')'
         );
         foreach ([
             [self::USER_ID, 'privacy-parity@example.test', 'Privacy Parity Fixture'],
@@ -188,8 +188,8 @@ final class CurrentImplementationAdapter
     private function captureTransactions(): array
     {
         $taxonomy = new TaxonomyController($this->pdo, $this->auth);
-        $this->call($taxonomy, 'createTag', $this->request('POST', '/me/tags', ['name' => 'Groceries', 'icon_key' => 'shopping_cart']));
-        $tagId = (string) $this->pdo->lastInsertId();
+        $tag = $this->call($taxonomy, 'createTag', $this->request('POST', '/me/tags', ['name' => 'Groceries', 'icon_key' => 'shopping_cart']));
+        $tagId = (string) ($tag['body']['id'] ?? '');
         $this->pdo->exec("INSERT INTO tags (id, user_id, name) VALUES (2, 2, 'Other User Tag')");
         $transactions = new TransactionController(
             $this->pdo,

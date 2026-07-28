@@ -1,8 +1,24 @@
 # Budget API
 
-## Phase 0D parity
+## Current documentation
 
-Phase 0D is complete and `parity_baseline_ready`: [coverage](docs/phase-0d-parity-coverage.md), [fixture summary](docs/phase-0d-parity-fixture-summary.md), [harness](docs/phase-0d-parity-harness.md), [record](docs/phase-0d-parity-record.md), and [discrepancies](docs/phase-0d-parity-discrepancies.md).
+- [Architecture](docs/architecture.md)
+- [Privacy model](docs/privacy.md)
+- [Encryption architecture](docs/encryption.md)
+- [Privacy migration](docs/migration.md)
+- [Backend testing](docs/testing.md)
+- [Backend operations](docs/operations.md)
+- [API contract](../openapi.yaml)
+- [Human-readable API context](../api_v1.md)
+
+Financial data is application data, not operational telemetry. Never log
+request/response bodies or financial field values; operational events must use
+the approved metadata allow-list. Cryptographic keys, recovery material,
+authorization/session secrets, and ciphertext blobs must never be logged.
+
+New accounts are encrypted by default: they begin in `vault_setup_required`,
+complete Vault and Recovery Code setup, and transition directly to `encrypted`.
+Existing legacy accounts retain the separate migration path.
 
 ## What is implemented
 - Invite-only auth flows:

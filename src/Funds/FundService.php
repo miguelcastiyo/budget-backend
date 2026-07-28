@@ -78,6 +78,7 @@ final class FundService
                     null
                 );
             }
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -123,7 +124,17 @@ final class FundService
             throw new HttpException(409, 'CONFLICT', 'Fund already exists');
         }
 
-        $this->repository->updateFund((int) $fund['id'], $userId, $name, $fundType, $goalAmount, $targetMonthStart, $notes, $sortOrder);
+        $this->pdo->beginTransaction();
+        try {
+            $this->repository->updateFund((int) $fund['id'], $userId, $name, $fundType, $goalAmount, $targetMonthStart, $notes, $sortOrder);
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
 
         return $this->getFund($userId, $fundPublicId);
     }
@@ -131,7 +142,17 @@ final class FundService
     public function archiveFund(int $userId, string $fundPublicId): array
     {
         $fund = $this->requireFund($userId, $fundPublicId);
-        $this->repository->archiveFund((int) $fund['id'], $userId, $this->nowUtc());
+        $this->pdo->beginTransaction();
+        try {
+            $this->repository->archiveFund((int) $fund['id'], $userId, $this->nowUtc());
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
         return $this->getFund($userId, $fundPublicId);
     }
 
@@ -141,7 +162,17 @@ final class FundService
         if ($this->repository->activeNameExists($userId, (string) $fund['name'], (int) $fund['id'])) {
             throw new HttpException(409, 'CONFLICT', 'Another active fund already uses this name');
         }
-        $this->repository->restoreFund((int) $fund['id'], $userId);
+        $this->pdo->beginTransaction();
+        try {
+            $this->repository->restoreFund((int) $fund['id'], $userId);
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
         return $this->getFund($userId, $fundPublicId);
     }
 
@@ -238,19 +269,20 @@ final class FundService
             ]);
         }
 
-        $entryPublicId = $this->repository->insertEntry(
-            $userId,
-            (int) $fund['id'],
-            $entryDate,
-            $entryType,
-            $direction,
-            $amount,
-            $sourceType,
-            null,
-            null,
-            null,
-            $note
-        );
+        $this->pdo->beginTransaction();
+        try {
+            $entryPublicId = $this->repository->insertEntry(
+                $userId, (int) $fund['id'], $entryDate, $entryType, $direction, $amount,
+                $sourceType, null, null, null, $note
+            );
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
 
         return $this->entryResponse($this->requireEntry($userId, (int) $fund['id'], $entryPublicId), $fundPublicId);
     }
@@ -268,7 +300,17 @@ final class FundService
         $entryDate = array_key_exists('entry_date', $payload) ? $this->validatedDate($payload['entry_date'], 'entry_date') : (string) $entry['entry_date'];
         $note = array_key_exists('note', $payload) ? $this->nullableString($payload['note'], 'note') : ($entry['note'] === null ? null : (string) $entry['note']);
 
-        $this->repository->updateEditableEntry((int) $entry['id'], $userId, $entryDate, $entryType, $direction, $amount, $note);
+        $this->pdo->beginTransaction();
+        try {
+            $this->repository->updateEditableEntry((int) $entry['id'], $userId, $entryDate, $entryType, $direction, $amount, $note);
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
 
         return $this->entryResponse($this->requireEntry($userId, (int) $fund['id'], $entryPublicId), $fundPublicId);
     }
@@ -278,7 +320,17 @@ final class FundService
         $fund = $this->requireFund($userId, $fundPublicId);
         $entry = $this->requireEntry($userId, (int) $fund['id'], $entryPublicId);
         $this->assertEntryEditable($entry);
-        $this->repository->softDeleteEditableEntry((int) $entry['id'], $userId, $this->nowUtc());
+        $this->pdo->beginTransaction();
+        try {
+            $this->repository->softDeleteEditableEntry((int) $entry['id'], $userId, $this->nowUtc());
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function closeoutSummary(int $userId, int $year): array

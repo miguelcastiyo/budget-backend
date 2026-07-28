@@ -37,7 +37,11 @@ if (!$write) {
 if ($write) ScenarioContext::assertSafe($root, $outputRoot);
 
 $groups = ScenarioCatalog::groups();
-$invariantPath = dirname($root) . '/docs/financial-domain-invariants.md';
+$invariantCandidates = [
+    $root . '/docs/financial-domain-invariants.md',
+    dirname($root) . '/docs-internal/architecture/privacy-program/financial-domain-invariants.md',
+];
+$invariantPath = array_values(array_filter($invariantCandidates, 'is_file'))[0] ?? null;
 $highByGroup = [];
 foreach (($invariantPath && is_file($invariantPath) ? file($invariantPath, FILE_IGNORE_NEW_LINES) : []) as $line) {
     if (preg_match('/^\| (INV-[A-Z0-9-]+) \|.*\| (high) \|/', $line, $match)) {

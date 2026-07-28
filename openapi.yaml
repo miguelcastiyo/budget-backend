@@ -14,6 +14,9 @@ tags:
   - name: Health
   - name: Auth
   - name: Profile
+  - name: Privacy
+  - name: Vault
+  - name: EncryptedRecords
   - name: ApiKeys
   - name: AuditLogs
   - name: Tags
@@ -30,6 +33,59 @@ tags:
   - name: ImportExport
   - name: DataRuns
 paths:
+  /me/vault/passphrase:
+    put:
+      tags: [Vault]
+      summary: Replace the client-owned passphrase wrapper
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passphrase_wrap]
+              properties:
+                passphrase_wrap:
+                  $ref: '#/components/schemas/VaultPassphraseWrap'
+      responses:
+        '200': {description: Wrapper replaced}
+        '403': {description: Recent authentication required}
+  /me/vault/recovery:
+    put:
+      tags: [Vault]
+      summary: Replace the client-owned recovery wrapper
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recovery_wrap]
+              properties:
+                recovery_wrap:
+                  $ref: '#/components/schemas/VaultRecoveryWrap'
+      responses:
+        '200': {description: Wrapper replaced}
+        '403': {description: Recent authentication required}
+  /me/devices:
+    get:
+      tags: [Profile]
+      summary: List coarse authenticated device sessions
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      responses:
+        '200': {description: Device session list}
+  /me/devices/{session_id}:
+    delete:
+      tags: [Profile]
+      summary: Revoke an authenticated device session
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Session revoked}
+        '403': {description: Recent authentication required}
   /health:
     get:
       tags: [Health]
@@ -374,6 +430,234 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/privacy:
+    get:
+      tags: [Privacy]
+      summary: Get financial privacy control-plane status
+      description: Read-only infrastructure status. Existing accounts remain in the legacy plaintext backend architecture until later implementation phases.
+      responses:
+        '200':
+          description: Privacy status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyStatus'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /me/vault:
+    get:
+      tags: [Vault]
+      summary: Read the authenticated user's opaque Vault key envelope
+      description: Session-only metadata read. The backend stores and returns wrapped materials but never receives a passphrase, recovery secret, or plaintext Vault key.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      responses:
+        '200':
+          description: Vault metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VaultMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      tags: [Vault]
+      summary: Initialize the client-owned Vault key envelope
+      description: Recent interactive session required. The request contains only client-created AES-KW wrapped materials and safe profile metadata. Exact retries are idempotent; conflicting initialization returns 409.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializeVaultRequest'
+      responses:
+        '201':
+          description: Vault initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VaultMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/encrypted-records:
+    post:
+      tags: [EncryptedRecords]
+      summary: Store an opaque encrypted record envelope
+      description: Phase 3 synthetic persistence substrate only. The backend validates structure, ownership, Vault binding, and revisions but never decrypts or interprets the payload.
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptedRecordMutationRequest'
+      responses:
+        '201':
+          description: Encrypted record stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/encrypted-records/sync:
+    get:
+      tags: [EncryptedRecords]
+      summary: Pull opaque encrypted-record changes after a cursor
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - name: after
+          in: query
+          schema:
+            type: string
+            pattern: '^(0|[1-9][0-9]{0,18})$'
+            default: '0'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Ordered encrypted-record changes and cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedRecordSyncResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me/encrypted-records/{record_id}:
+    parameters:
+      - name: record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^rec_[A-Za-z0-9_-]{8,90}$'
+    get:
+      tags: [EncryptedRecords]
+      summary: Retrieve one opaque encrypted record envelope
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      responses:
+        '200':
+          description: Encrypted record envelope or tombstone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    put:
+      tags: [EncryptedRecords]
+      summary: Optimistically update an opaque encrypted record
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptedRecordUpdateRequest'
+      responses:
+        '200':
+          description: Updated encrypted record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [EncryptedRecords]
+      summary: Create a sync-visible tombstone for an encrypted record
+      security:
+        - cookieAuth: []
+        - sessionTokenAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XCsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptedRecordDeleteRequest'
+      responses:
+        '200':
+          description: Encrypted record tombstone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptedRecordEnvelope'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -2444,6 +2728,219 @@ components:
               type: boolean
           required: [dismissed]
       required: [appearance, onboarding]
+
+    PrivacyStatus:
+      type: object
+      properties:
+        financial_privacy_state:
+          type: string
+          enum: [vault_setup_required, legacy_plaintext, migration_in_progress, migration_failed, encrypted]
+        financial_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        active_migration:
+          oneOf:
+            - $ref: '#/components/schemas/ActivePrivacyMigration'
+            - type: 'null'
+        cleanup_status:
+          oneOf:
+            - $ref: '#/components/schemas/PrivacyCleanupStatus'
+            - type: 'null'
+      required: [financial_privacy_state, financial_revision, active_migration, cleanup_status]
+
+    VaultMetadata:
+      type: object
+      properties:
+        vault_id:
+          type: string
+        crypto_profile_version:
+          type: integer
+          enum: [1]
+        passphrase:
+          $ref: '#/components/schemas/VaultPassphraseWrap'
+        recovery:
+          $ref: '#/components/schemas/VaultRecoveryWrap'
+      required: [vault_id, crypto_profile_version, passphrase, recovery]
+
+    VaultPassphraseWrap:
+      type: object
+      properties:
+        kdf:
+          type: string
+          enum: [PBKDF2]
+        kdf_hash:
+          type: string
+          enum: [SHA-256]
+        iterations:
+          type: integer
+          minimum: 600000
+        salt:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        wrap_algorithm:
+          type: string
+          enum: [AES-KW]
+        wrapped_vault_key:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      required: [kdf, kdf_hash, iterations, salt, wrap_algorithm, wrapped_vault_key]
+
+    VaultRecoveryWrap:
+      type: object
+      properties:
+        wrap_algorithm:
+          type: string
+          enum: [AES-KW]
+        wrapped_vault_key:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      required: [wrap_algorithm, wrapped_vault_key]
+
+    InitializeVaultRequest:
+      type: object
+      properties:
+        crypto_profile_version:
+          type: integer
+          enum: [1]
+        passphrase_wrap:
+          $ref: '#/components/schemas/VaultPassphraseWrap'
+        recovery_wrap:
+          $ref: '#/components/schemas/VaultRecoveryWrap'
+      required: [crypto_profile_version, passphrase_wrap, recovery_wrap]
+
+    EncryptedRecordEnvelope:
+      type: object
+      properties:
+        vault_id:
+          type: string
+        record_id:
+          type: string
+          pattern: '^rec_[A-Za-z0-9_-]{8,90}$'
+        envelope_version:
+          type: integer
+          enum: [1]
+        record_revision:
+          type: integer
+          minimum: 1
+        iv:
+          type: [string, 'null']
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Base64URL 12-byte AES-GCM IV; absent on tombstones.
+        ciphertext:
+          type: [string, 'null']
+          maxLength: 349528
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Base64URL opaque AES-GCM ciphertext including authentication tag; absent on tombstones.
+        sync_sequence:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,18})$'
+        deleted:
+          type: boolean
+      required: [vault_id, record_id, envelope_version, record_revision, sync_sequence, deleted]
+
+    EncryptedRecordMutationRequest:
+      type: object
+      properties:
+        envelope:
+          $ref: '#/components/schemas/EncryptedRecordWriteEnvelope'
+        idempotency_key:
+          type: string
+          minLength: 12
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_-]+$'
+      required: [envelope, idempotency_key]
+
+    EncryptedRecordUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/EncryptedRecordMutationRequest'
+        - type: object
+          properties:
+            expected_revision:
+              type: integer
+              minimum: 1
+          required: [expected_revision]
+
+    EncryptedRecordWriteEnvelope:
+      type: object
+      properties:
+        vault_id:
+          type: string
+        record_id:
+          type: string
+          pattern: '^rec_[A-Za-z0-9_-]{8,90}$'
+        envelope_version:
+          type: integer
+          enum: [1]
+        record_revision:
+          type: integer
+          minimum: 1
+        iv:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+        ciphertext:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      required: [vault_id, record_id, envelope_version, record_revision, iv, ciphertext]
+
+    EncryptedRecordDeleteRequest:
+      type: object
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+        idempotency_key:
+          type: string
+          minLength: 12
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_-]+$'
+      required: [expected_revision, idempotency_key]
+
+    EncryptedRecordSyncResponse:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncryptedRecordEnvelope'
+        next_cursor:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,18})$'
+        has_more:
+          type: boolean
+      required: [changes, next_cursor, has_more]
+
+    ActivePrivacyMigration:
+      type: object
+      properties:
+        migration_id:
+          type: string
+        status:
+          type: string
+          enum: [active]
+        source_financial_revision:
+          type: integer
+          format: int64
+        started_at:
+          type: string
+          format: date-time
+      required: [migration_id, status, source_financial_revision, started_at]
+
+    PrivacyCleanupStatus:
+      type: object
+      properties:
+        cleanup_job_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, retry_pending, completed, failed]
+        attempt_count:
+          type: integer
+          minimum: 0
+        next_attempt_at:
+          type: string
+          format: date-time
+      required: [cleanup_job_id, status, attempt_count, next_attempt_at]
 
     SetupTask:
       type: object

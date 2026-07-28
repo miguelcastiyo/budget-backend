@@ -142,6 +142,10 @@ final class CsvImportService
                     errorSummary: $invalidRows > 0 ? $message : null
                 );
 
+                if ($importedRows > 0) {
+                    (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+                }
+
                 if ($ownsTransaction) {
                     $this->pdo->commit();
                 }

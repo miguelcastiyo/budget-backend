@@ -290,7 +290,7 @@ SQL;
         $this->pdo->beginTransaction();
         try {
             $insertUser = $this->pdo->prepare(
-                'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role)'
+                'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role, \'vault_setup_required\')'
             );
             $insertUser->execute([
                 ':email' => $email,
@@ -373,7 +373,7 @@ SQL;
         $this->pdo->beginTransaction();
         try {
             $insertUser = $this->pdo->prepare(
-                'INSERT INTO users (email, display_name, auth_provider, google_sub, avatar_url, email_verified, role) VALUES (:email, :display_name, :auth_provider, :google_sub, :avatar_url, 1, :role)'
+                'INSERT INTO users (email, display_name, auth_provider, google_sub, avatar_url, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :google_sub, :avatar_url, 1, :role, \'vault_setup_required\')'
             );
             $insertUser->execute([
                 ':email' => strtolower($googleIdentity['email']),
@@ -527,7 +527,7 @@ SQL;
         $this->pdo->beginTransaction();
         try {
             $insertUser = $this->pdo->prepare(
-                'INSERT INTO users (email, display_name, auth_provider, google_sub, avatar_url, email_verified, role) VALUES (:email, :display_name, :auth_provider, :google_sub, :avatar_url, 1, :role)'
+                'INSERT INTO users (email, display_name, auth_provider, google_sub, avatar_url, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :google_sub, :avatar_url, 1, :role, \'vault_setup_required\')'
             );
             $insertUser->execute([
                 ':email' => strtolower((string) $googleIdentity['email']),

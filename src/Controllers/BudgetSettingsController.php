@@ -89,6 +89,7 @@ final class BudgetSettingsController
             $this->upsertVersionRow($ctx->userId(), $effectiveMonth, $settings);
             $latest = $this->resolver->getLatestSettings($ctx->userId()) ?? $settings;
             $this->upsertCompatibilityRow($ctx->userId(), $latest);
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($ctx->userId());
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {

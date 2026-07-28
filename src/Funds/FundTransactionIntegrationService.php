@@ -66,6 +66,7 @@ final class FundTransactionIntegrationService
                 null,
                 $entryNote ?? $transactionNotes
             );
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
             $this->pdo->commit();
 
             return $entryPublicId;
@@ -100,19 +101,22 @@ final class FundTransactionIntegrationService
             throw new HttpException(409, 'CONFLICT', 'Transaction already has an active fund entry');
         }
 
-        return $this->repository->insertEntry(
-            $userId,
-            (int) $fund['id'],
-            (string) $transaction['transaction_date'],
-            'contribution',
-            'in',
-            $amount,
-            'transaction',
-            $transactionId,
-            null,
-            null,
-            $entryNote ?? ($transaction['notes'] === null ? null : (string) $transaction['notes'])
-        );
+        $this->pdo->beginTransaction();
+        try {
+            $entryPublicId = $this->repository->insertEntry(
+                $userId, (int) $fund['id'], (string) $transaction['transaction_date'],
+                'contribution', 'in', $amount, 'transaction', $transactionId, null, null,
+                $entryNote ?? ($transaction['notes'] === null ? null : (string) $transaction['notes'])
+            );
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            $this->pdo->commit();
+            return $entryPublicId;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /** @return array<string,mixed>|null */

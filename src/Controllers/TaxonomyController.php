@@ -82,7 +82,7 @@ final class TaxonomyController
     public function createTag(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
-        return Response::json($this->createInTable('tags', $ctx->userId(), $request), 201);
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->createInTable('tags', $ctx->userId(), $request)), 201);
     }
 
     /** @param array{tag_id:string} $params */
@@ -91,7 +91,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['tag_id'] ?? '', 'tag_id');
 
-        return Response::json($this->updateInTable('tags', $ctx->userId(), $id, $request));
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->updateInTable('tags', $ctx->userId(), $id, $request)));
     }
 
     /** @param array{tag_id:string} $params */
@@ -100,7 +100,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['tag_id'] ?? '', 'tag_id');
 
-        $this->softDeleteInTable('tags', $ctx->userId(), $id);
+        $this->withFinancialRevision($ctx->userId(), fn() => $this->softDeleteInTable('tags', $ctx->userId(), $id));
         return Response::noContent();
     }
 
@@ -113,7 +113,7 @@ final class TaxonomyController
     public function createCard(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
-        return Response::json($this->createInTable('cards', $ctx->userId(), $request), 201);
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->createInTable('cards', $ctx->userId(), $request)), 201);
     }
 
     /** @param array{card_id:string} $params */
@@ -122,7 +122,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['card_id'] ?? '', 'card_id');
 
-        return Response::json($this->updateCardForUser($ctx->userId(), $id, $request));
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->updateCardForUser($ctx->userId(), $id, $request)));
     }
 
     /** @param array{card_id:string} $params */
@@ -131,7 +131,7 @@ final class TaxonomyController
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['card_id'] ?? '', 'card_id');
 
-        $this->softDeleteCard($ctx->userId(), $id);
+        $this->withFinancialRevision($ctx->userId(), fn() => $this->softDeleteCard($ctx->userId(), $id));
         return Response::noContent();
     }
 
@@ -144,7 +144,7 @@ final class TaxonomyController
     public function createContext(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
-        return Response::json($this->createInTable('contexts', $ctx->userId(), $request), 201);
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->createInTable('contexts', $ctx->userId(), $request)), 201);
     }
 
     /** @param array{context_id:string} $params */
@@ -152,7 +152,7 @@ final class TaxonomyController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['context_id'] ?? '', 'context_id');
-        return Response::json($this->updateInTable('contexts', $ctx->userId(), $id, $request));
+        return Response::json($this->withFinancialRevision($ctx->userId(), fn() => $this->updateInTable('contexts', $ctx->userId(), $id, $request)));
     }
 
     /** @param array{context_id:string} $params */
@@ -160,7 +160,7 @@ final class TaxonomyController
     {
         $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
         $id = $this->parseEntityId($params['context_id'] ?? '', 'context_id');
-        $this->softDeleteInTable('contexts', $ctx->userId(), $id);
+        $this->withFinancialRevision($ctx->userId(), fn() => $this->softDeleteInTable('contexts', $ctx->userId(), $id));
         return Response::noContent();
     }
 
@@ -462,7 +462,10 @@ final class TaxonomyController
             ? $this->validatedBoolean($payload['is_favorite'], 'is_favorite')
             : ((int) $existing['is_favorite']) === 1;
 
-        $this->pdo->beginTransaction();
+        $ownsTransaction = !$this->pdo->inTransaction();
+        if ($ownsTransaction) {
+            $this->pdo->beginTransaction();
+        }
         try {
             if ($isFavorite) {
                 $clearFavorite = $this->pdo->prepare(
@@ -501,9 +504,11 @@ final class TaxonomyController
                 throw new HttpException(404, 'NOT_FOUND', 'Card not found');
             }
 
-            $this->pdo->commit();
+            if ($ownsTransaction) {
+                $this->pdo->commit();
+            }
         } catch (PDOException $e) {
-            if ($this->pdo->inTransaction()) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
             if (($e->errorInfo[0] ?? '') === '23000') {
@@ -511,7 +516,7 @@ final class TaxonomyController
             }
             throw $e;
         } catch (\Throwable $e) {
-            if ($this->pdo->inTransaction()) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
             throw $e;
@@ -658,5 +663,26 @@ final class TaxonomyController
             'name' => (string) $row['name'],
             'is_favorite' => ((int) ($row['is_favorite'] ?? 0)) === 1,
         ];
+    }
+
+    private function withFinancialRevision(int $userId, callable $mutation): mixed
+    {
+        $ownsTransaction = !$this->pdo->inTransaction();
+        if ($ownsTransaction) {
+            $this->pdo->beginTransaction();
+        }
+        try {
+            $result = $mutation();
+            (new \App\Privacy\FinancialRevisionService($this->pdo))->increment($userId);
+            if ($ownsTransaction) {
+                $this->pdo->commit();
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 }

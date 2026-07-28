@@ -30,7 +30,7 @@ if ($stmt->fetch()) {
 }
 
 $insert = $pdo->prepare(
-    'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role)'
+    'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role, \'vault_setup_required\')'
 );
 $insert->execute([
     ':email' => strtolower($email),
