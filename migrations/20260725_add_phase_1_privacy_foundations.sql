@@ -1,38 +1,6 @@
-SET @financial_privacy_state_exists := (
-  SELECT COUNT(*)
-  FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'users'
-    AND COLUMN_NAME = 'financial_privacy_state'
-);
-
-SET @sql := IF(
-  @financial_privacy_state_exists = 0,
-  'ALTER TABLE users ADD COLUMN financial_privacy_state VARCHAR(32) NULL',
-  'SELECT 1'
-);
-
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @financial_revision_exists := (
-  SELECT COUNT(*)
-  FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'users'
-    AND COLUMN_NAME = 'financial_revision'
-);
-
-SET @sql := IF(
-  @financial_revision_exists = 0,
-  'ALTER TABLE users ADD COLUMN financial_revision BIGINT UNSIGNED NULL',
-  'SELECT 1'
-);
-
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS financial_privacy_state VARCHAR(32) NULL,
+  ADD COLUMN IF NOT EXISTS financial_revision BIGINT UNSIGNED NULL;
 
 UPDATE users
 SET financial_privacy_state = 'legacy_plaintext', financial_revision = 0
@@ -61,7 +29,7 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-CREATE TABLE financial_privacy_migrations (
+CREATE TABLE IF NOT EXISTS financial_privacy_migrations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   migration_id VARCHAR(64) NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
@@ -85,7 +53,7 @@ CREATE TABLE financial_privacy_migrations (
   CONSTRAINT chk_financial_privacy_migrations_failure CHECK ((status = 'failed' AND failure_code IS NOT NULL) OR status <> 'failed')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE financial_privacy_cleanup_jobs (
+CREATE TABLE IF NOT EXISTS financial_privacy_cleanup_jobs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   cleanup_job_id VARCHAR(64) NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
