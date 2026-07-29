@@ -3,6 +3,11 @@
   "description": "Budget backend application",
   "license": "proprietary",
   "type": "project",
+  "config": {
+    "platform": {
+      "php": "8.3.0"
+    }
+  },
   "require": {
     "php": ">=8.3",
     "web-auth/webauthn-lib": "~5.3.5"
