@@ -1,6 +1,38 @@
-ALTER TABLE users
-  ADD COLUMN financial_privacy_state VARCHAR(32) NULL,
-  ADD COLUMN financial_revision BIGINT UNSIGNED NULL;
+SET @financial_privacy_state_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'users'
+    AND COLUMN_NAME = 'financial_privacy_state'
+);
+
+SET @sql := IF(
+  @financial_privacy_state_exists = 0,
+  'ALTER TABLE users ADD COLUMN financial_privacy_state VARCHAR(32) NULL',
+  'SELECT 1'
+);
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @financial_revision_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'users'
+    AND COLUMN_NAME = 'financial_revision'
+);
+
+SET @sql := IF(
+  @financial_revision_exists = 0,
+  'ALTER TABLE users ADD COLUMN financial_revision BIGINT UNSIGNED NULL',
+  'SELECT 1'
+);
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 UPDATE users
 SET financial_privacy_state = 'legacy_plaintext', financial_revision = 0
@@ -9,10 +41,25 @@ WHERE financial_privacy_state IS NULL OR financial_revision IS NULL;
 ALTER TABLE users
   MODIFY COLUMN financial_privacy_state VARCHAR(32) NOT NULL DEFAULT 'legacy_plaintext',
   MODIFY COLUMN financial_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
-  ALTER COLUMN financial_privacy_state SET DEFAULT 'vault_setup_required',
-  ADD CONSTRAINT chk_users_financial_privacy_state CHECK (
-    financial_privacy_state IN ('vault_setup_required', 'legacy_plaintext', 'migration_in_progress', 'migration_failed', 'encrypted')
-  );
+  ALTER COLUMN financial_privacy_state SET DEFAULT 'vault_setup_required';
+
+SET @privacy_state_constraint_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'users'
+    AND CONSTRAINT_NAME = 'chk_users_financial_privacy_state'
+);
+
+SET @sql := IF(
+  @privacy_state_constraint_exists = 0,
+  'ALTER TABLE users ADD CONSTRAINT chk_users_financial_privacy_state CHECK (financial_privacy_state IN (''vault_setup_required'', ''legacy_plaintext'', ''migration_in_progress'', ''migration_failed'', ''encrypted''))',
+  'SELECT 1'
+);
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE financial_privacy_migrations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
