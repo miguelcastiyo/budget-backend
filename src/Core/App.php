@@ -166,6 +166,7 @@ final class App
         $add('GET', '/auth/invitations', fn(Request $request) => $authController->listInvitations($request));
         $add('POST', '/auth/invitations', fn(Request $request) => $authController->createInvitation($request));
         $add('DELETE', '/auth/invitations/{invite_id}', fn(Request $request, array $params) => $authController->revokeInvitation($request, $params));
+        $add('DELETE', '/auth/invitations/{invite_id}/account', fn(Request $request, array $params) => $authController->deleteInvitedAccount($request, $params));
         $add('GET', '/auth/invitations/preview', fn(Request $request) => $authController->previewInvitation($request));
         $add('POST', '/auth/invitations/accept-password', fn(Request $request) => $authController->acceptInvitationPassword($request));
         $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $authController->acceptInvitationGoogle($request));

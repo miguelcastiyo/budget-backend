@@ -164,12 +164,17 @@ SQL;
         $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
         $this->auth->requireRole($ctx, ['owner']);
 
-        $stmt = $this->pdo->query(
-            "SELECT invite_id, invitee_name, email, role, status, expires_at, accepted_at, created_at
-             FROM invitations
-             ORDER BY created_at DESC, id DESC"
+        $stmt = $this->pdo->prepare(
+            "SELECT i.invite_id, i.invitee_name, i.email, i.role, i.status, i.expires_at, i.accepted_at, i.created_at,
+                    i.accepted_by_user_id, u.display_name AS accepted_user_name, u.role AS accepted_user_role,
+                    u.is_active AS accepted_user_active
+             FROM invitations i
+             LEFT JOIN users u ON u.id = i.accepted_by_user_id
+             WHERE i.invited_by_user_id = :owner_id
+             ORDER BY i.created_at DESC, i.id DESC"
         );
-        $rows = $stmt ? $stmt->fetchAll() : [];
+        $stmt->execute([':owner_id' => $ctx->userId()]);
+        $rows = $stmt->fetchAll();
 
         $items = array_map(fn(array $row): array => [
             'invite_id' => (string) $row['invite_id'],
@@ -180,6 +185,10 @@ SQL;
             'expires_at' => (string) $row['expires_at'],
             'created_at' => (string) $row['created_at'],
             'accepted_at' => $row['accepted_at'] !== null ? (string) $row['accepted_at'] : null,
+            'accepted_user_id' => $row['accepted_by_user_id'] !== null ? (string) $row['accepted_by_user_id'] : null,
+            'accepted_user_name' => $row['accepted_user_name'] !== null ? (string) $row['accepted_user_name'] : null,
+            'accepted_user_role' => $row['accepted_user_role'] !== null ? (string) $row['accepted_user_role'] : null,
+            'accepted_user_active' => $row['accepted_user_active'] !== null ? (bool) $row['accepted_user_active'] : null,
         ], $rows);
 
         return Response::json(['items' => $items]);
@@ -237,6 +246,82 @@ SQL;
         );
 
         return Response::noContent();
+    }
+
+    /** @param array{invite_id:string} $params */
+    public function deleteInvitedAccount(Request $request, array $params): Response
+    {
+        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $this->auth->requireRole($ctx, ['owner']);
+
+        $inviteId = trim((string) ($params['invite_id'] ?? ''));
+        if ($inviteId === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
+                ['field' => 'invite_id', 'message' => 'is required'],
+            ]);
+        }
+
+        $lookup = $this->pdo->prepare(
+            "SELECT i.id, i.invite_id, i.email, i.status, i.accepted_by_user_id,
+                    u.role AS accepted_user_role, u.is_active AS accepted_user_active
+             FROM invitations i
+             LEFT JOIN users u ON u.id = i.accepted_by_user_id
+             WHERE i.invite_id = :invite_id AND i.invited_by_user_id = :owner_id
+             LIMIT 1
+             FOR UPDATE"
+        );
+
+        $this->pdo->beginTransaction();
+        try {
+            $lookup->execute([':invite_id' => $inviteId, ':owner_id' => $ctx->userId()]);
+            $invitation = $lookup->fetch();
+
+            if (!$invitation || (string) $invitation['status'] !== 'accepted' || $invitation['accepted_by_user_id'] === null) {
+                throw new HttpException(404, 'NOT_FOUND', 'Invited account not found');
+            }
+
+            $acceptedUserId = (int) $invitation['accepted_by_user_id'];
+            if ((string) ($invitation['accepted_user_role'] ?? '') === 'owner') {
+                throw new HttpException(403, 'FORBIDDEN', 'Owner accounts cannot be deleted from invites');
+            }
+
+            if ((int) ($invitation['accepted_user_active'] ?? 0) === 0) {
+                throw new HttpException(404, 'NOT_FOUND', 'Invited account not found');
+            }
+
+            $revokeSessions = $this->pdo->prepare('UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()) WHERE user_id = :user_id AND revoked_at IS NULL');
+            $revokeSessions->execute([':user_id' => $acceptedUserId]);
+
+            $revokeKeys = $this->pdo->prepare("UPDATE master_api_keys SET is_active = 0, revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()) WHERE user_id = :user_id AND is_active = 1 AND revoked_at IS NULL");
+            $revokeKeys->execute([':user_id' => $acceptedUserId]);
+
+            $deactivate = $this->pdo->prepare('UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = :user_id AND role <> \'owner\' AND is_active = 1');
+            $deactivate->execute([':user_id' => $acceptedUserId]);
+            if ($deactivate->rowCount() !== 1) {
+                throw new HttpException(409, 'CONFLICT', 'Invited account could not be deleted');
+            }
+
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'invited_account.deactivated',
+                'user',
+                (string) $acceptedUserId,
+                [
+                    'invite_id' => $inviteId,
+                    'email' => (string) $invitation['email'],
+                ]
+            );
+
+            $this->pdo->commit();
+            return Response::noContent();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function previewInvitation(Request $request): Response
