@@ -15,6 +15,9 @@ $read = static function (string $path) use ($root, $fail): string {
 $service = $read('src/Privacy/QuickUnlockService.php');
 $schema = $read('schema.sql');
 $openapi = $read('openapi.yaml');
+$deviceMigration = $read('migrations/20260728_add_budget_device_identity.sql');
+$quickUnlockMigration = $read('migrations/20260728_create_quick_unlock.sql');
+$quickUnlockDeviceMigration = $read('migrations/20260728z_migrate_quick_unlock_device_identity.sql');
 
 if (!str_contains($service, "gmdate('Y-m-d H:i:s'")) $fail('challenge expiry is not UTC-based');
 if (preg_match('/\bdate\s*\(/', $service)) $fail('Quick Unlock uses a local-time date function');
@@ -27,4 +30,7 @@ foreach (['vault_quick_unlock_credentials', 'webauthn_challenges', 'idx_quick_un
 foreach (['/me/vault/quick-unlock', '/me/vault/quick-unlock/assertion/complete', '/me/devices/{device_id}'] as $term) {
     if (!str_contains($openapi, $term)) $fail('OpenAPI Quick Unlock contract is missing: ' . $term);
 }
+if (str_contains($deviceMigration, 'vault_quick_unlock_credentials')) $fail('device identity migration runs before the Quick Unlock table');
+if (!str_contains($deviceMigration, 'IF NOT EXISTS') || !str_contains($quickUnlockDeviceMigration, 'vault_quick_unlock_credentials')) $fail('Quick Unlock migration ordering/idempotence contract is missing');
+if (!str_contains($quickUnlockMigration, 'CREATE TABLE vault_quick_unlock_credentials')) $fail('Quick Unlock table migration is missing');
 echo "Quick Unlock contract tests passed\n";

@@ -1,4 +1,4 @@
-CREATE TABLE vault_quick_unlock_credentials (
+CREATE TABLE IF NOT EXISTS vault_quick_unlock_credentials (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   quick_unlock_id VARCHAR(64) NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE vault_quick_unlock_credentials (
   CONSTRAINT chk_quick_unlock_wrapper CHECK (OCTET_LENGTH(wrapped_vault_key) BETWEEN 40 AND 512)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE webauthn_challenges (
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   session_id VARCHAR(64) NOT NULL,
