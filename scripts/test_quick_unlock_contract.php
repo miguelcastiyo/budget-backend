@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/src/bootstrap.php';
+
 // Static contract canaries keep this check runnable in CI without requiring a
 // production credential, a browser authenticator, or a database account.
 $root = dirname(__DIR__);
@@ -33,4 +35,10 @@ foreach (['/me/vault/quick-unlock', '/me/vault/quick-unlock/assertion/complete',
 if (str_contains($deviceMigration, 'vault_quick_unlock_credentials')) $fail('device identity migration runs before the Quick Unlock table');
 if (!str_contains($deviceMigration, 'IF NOT EXISTS') || !str_contains($quickUnlockDeviceMigration, 'vault_quick_unlock_credentials')) $fail('Quick Unlock migration ordering/idempotence contract is missing');
 if (!str_contains($quickUnlockMigration, 'CREATE TABLE IF NOT EXISTS vault_quick_unlock_credentials')) $fail('Quick Unlock table migration is missing');
+$serviceReflection = new ReflectionClass(App\Privacy\QuickUnlockService::class);
+$binary = $serviceReflection->getMethod('binary');
+$sample = random_bytes(32);
+$encoded = rtrim(strtr(base64_encode($sample), '+/', '-_'), '=');
+$decoded = $binary->invoke($serviceReflection->newInstanceWithoutConstructor(), $encoded, 'prf_input', 32, 32);
+if (!hash_equals($sample, $decoded)) $fail('base64url PRF input decoding failed');
 echo "Quick Unlock contract tests passed\n";
