@@ -32,5 +32,5 @@ foreach (['/me/vault/quick-unlock', '/me/vault/quick-unlock/assertion/complete',
 }
 if (str_contains($deviceMigration, 'vault_quick_unlock_credentials')) $fail('device identity migration runs before the Quick Unlock table');
 if (!str_contains($deviceMigration, 'IF NOT EXISTS') || !str_contains($quickUnlockDeviceMigration, 'vault_quick_unlock_credentials')) $fail('Quick Unlock migration ordering/idempotence contract is missing');
-if (!str_contains($quickUnlockMigration, 'CREATE TABLE vault_quick_unlock_credentials')) $fail('Quick Unlock table migration is missing');
+if (!str_contains($quickUnlockMigration, 'CREATE TABLE IF NOT EXISTS vault_quick_unlock_credentials')) $fail('Quick Unlock table migration is missing');
 echo "Quick Unlock contract tests passed\n";
