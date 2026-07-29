@@ -5,6 +5,6 @@
   "type": "project",
   "require": {
     "php": ">=8.3",
-    "web-auth/webauthn-lib": "5.3.5"
+    "web-auth/webauthn-lib": "~5.3.5"
   }
 }
