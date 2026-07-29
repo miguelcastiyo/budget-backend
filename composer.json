@@ -1,5 +1,7 @@
 {
   "name": "budget/backend",
+  "description": "Budget backend application",
+  "license": "proprietary",
   "type": "project",
   "require": {
     "php": ">=8.3",

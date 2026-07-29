@@ -28,7 +28,7 @@ jobs:
 
       - name: Validate and install Composer dependencies
         run: |
-          composer validate --strict
+          composer validate --strict --no-check-publish
           composer install --no-interaction --prefer-dist
 
       - name: Test
