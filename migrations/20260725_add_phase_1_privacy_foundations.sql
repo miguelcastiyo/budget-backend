@@ -11,23 +11,11 @@ ALTER TABLE users
   MODIFY COLUMN financial_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
   ALTER COLUMN financial_privacy_state SET DEFAULT 'vault_setup_required';
 
-SET @privacy_state_constraint_exists := (
-  SELECT COUNT(*)
-  FROM information_schema.TABLE_CONSTRAINTS
-  WHERE CONSTRAINT_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'users'
-    AND CONSTRAINT_NAME = 'chk_users_financial_privacy_state'
-);
-
-SET @sql := IF(
-  @privacy_state_constraint_exists = 0,
-  'ALTER TABLE users ADD CONSTRAINT chk_users_financial_privacy_state CHECK (financial_privacy_state IN (''vault_setup_required'', ''legacy_plaintext'', ''migration_in_progress'', ''migration_failed'', ''encrypted''))',
-  'SELECT 1'
-);
-
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+ALTER TABLE users
+  DROP CONSTRAINT IF EXISTS chk_users_financial_privacy_state,
+  ADD CONSTRAINT chk_users_financial_privacy_state CHECK (
+    financial_privacy_state IN ('vault_setup_required', 'legacy_plaintext', 'migration_in_progress', 'migration_failed', 'encrypted')
+  );
 
 CREATE TABLE IF NOT EXISTS financial_privacy_migrations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
