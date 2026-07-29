@@ -1,6 +1,6 @@
 ALTER TABLE users
-  ADD COLUMN financial_privacy_state VARCHAR(32) NULL AFTER user_preferences,
-  ADD COLUMN financial_revision BIGINT UNSIGNED NULL AFTER financial_privacy_state;
+  ADD COLUMN financial_privacy_state VARCHAR(32) NULL,
+  ADD COLUMN financial_revision BIGINT UNSIGNED NULL;
 
 UPDATE users
 SET financial_privacy_state = 'legacy_plaintext', financial_revision = 0
