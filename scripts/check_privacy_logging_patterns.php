@@ -9,6 +9,7 @@ foreach ($iterator as $file) {
     if (!$file->isFile() || $file->getExtension() !== 'php') continue;
     $path = $file->getPathname();
     if (str_contains($path, DIRECTORY_SEPARATOR . '.git' . DIRECTORY_SEPARATOR)) continue;
+    if (str_contains($path, DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) continue;
     $lines = file($path, FILE_IGNORE_NEW_LINES) ?: [];
     foreach ($lines as $number => $line) {
         if (preg_match('/error_log\s*\([^;]*(?:\$request|php:\/\/input)/i', $line) === 1

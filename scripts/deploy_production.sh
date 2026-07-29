@@ -8,6 +8,7 @@ BACKEND_URL="${BACKEND_URL:-https://api-budget.miguelcastillo.info}"
 MAX_TIME="${MAX_TIME:-20}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-3}"
 HEALTH_RETRY_SLEEP_SECONDS="${HEALTH_RETRY_SLEEP_SECONDS:-5}"
+PHP_FPM_SERVICE="${PHP_FPM_SERVICE:-php8.3-fpm}"
 
 check_backend_health() {
   local check_name="$1"
@@ -70,7 +71,24 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
+if ! command -v composer >/dev/null 2>&1; then
+  echo "Composer 2 is required on the production host" >&2
+  exit 1
+fi
+composer --version | grep -Eq 'Composer version 2\.'
+
+composer install \
+  --no-dev \
+  --prefer-dist \
+  --optimize-autoloader \
+  --no-interaction
+
+composer check-platform-reqs --no-dev
+test -f vendor/autoload.php
+
 php scripts/migrate.php
+
+sudo systemctl reload "$PHP_FPM_SERVICE"
 
 check_backend_health "health" "/api/v1/health"
 check_backend_health "ready" "/api/v1/ready"

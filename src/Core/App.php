@@ -20,6 +20,7 @@ use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
 use App\Controllers\PrivacyController;
 use App\Controllers\VaultController;
+use App\Controllers\QuickUnlockController;
 use App\Controllers\EncryptedRecordController;
 use App\Controllers\RecurringExpenseController;
 use App\Controllers\SavingsPlanController;
@@ -62,6 +63,9 @@ use App\Privacy\PrivacyMigrationRepository;
 use App\Privacy\RecentAuthGuard;
 use App\Privacy\VaultRepository;
 use App\Privacy\VaultService;
+use App\Privacy\QuickUnlockRepository;
+use App\Privacy\QuickUnlockService;
+use App\Devices\DeviceLifecycleService;
 use App\Privacy\EncryptedRecordRepository;
 use App\Privacy\EncryptedRecordService;
 use App\Savings\SavingsPlanService;
@@ -135,7 +139,9 @@ final class App
         $privacyCutover = new \App\Privacy\PrivacyCutoverService($pdo, $financialStates, $financialRevisions, $privacyMigrations, $migrationStaging, $vaultRepository, $privacyCleanup);
         $privacyController = new PrivacyController($auth, $financialStates, $financialRevisions, $privacyMigrations, $privacyCleanup, $privacyMigrationService, new MigrationSnapshotService($pdo, $financialRevisions, $privacyMigrations), $migrationStaging, $vaultRepository, $recentAuth, $privacyCutover);
         $vaultController = new VaultController($auth, new VaultService($pdo, $vaultRepository, $financialStates, $recentAuth, $auditLogger));
-        $deviceController = new \App\Controllers\DeviceController($pdo, $auth, $recentAuth);
+        $quickUnlockController = new QuickUnlockController($auth, new QuickUnlockService($pdo, $config, $financialStates, $vaultRepository, $recentAuth, new QuickUnlockRepository($pdo), $auditLogger));
+        $deviceLifecycle = new DeviceLifecycleService($pdo, new QuickUnlockRepository($pdo), $auditLogger);
+        $deviceController = new \App\Controllers\DeviceController($pdo, $auth, $recentAuth, $deviceLifecycle);
         $encryptedRecordController = new EncryptedRecordController($auth, new EncryptedRecordService($pdo, new EncryptedRecordRepository($pdo), new VaultRepository($pdo), $financialStates, $auditLogger));
         $writePolicy = new FinancialWritePolicy($financialStates);
         $readPolicy = new FinancialReadPolicy($financialStates);
@@ -190,8 +196,14 @@ final class App
         $add('POST', '/me/vault', fn(Request $request) => $vaultController->initialize($request));
         $add('PUT', '/me/vault/passphrase', fn(Request $request) => $vaultController->replacePassphrase($request));
         $add('PUT', '/me/vault/recovery', fn(Request $request) => $vaultController->replaceRecovery($request));
+        $add('POST', '/me/vault/quick-unlock/registration/options', fn(Request $request) => $quickUnlockController->registrationOptions($request));
+        $add('POST', '/me/vault/quick-unlock/registration/complete', fn(Request $request) => $quickUnlockController->registrationComplete($request));
+        $add('POST', '/me/vault/quick-unlock/assertion/options', fn(Request $request) => $quickUnlockController->assertionOptions($request));
+        $add('GET', '/me/vault/quick-unlock', fn(Request $request) => $quickUnlockController->status($request));
+        $add('POST', '/me/vault/quick-unlock/assertion/complete', fn(Request $request) => $quickUnlockController->assertionComplete($request));
+        $add('DELETE', '/me/vault/quick-unlock/{quick_unlock_id}', fn(Request $request, array $params) => $quickUnlockController->revoke($request, $params));
         $add('GET', '/me/devices', fn(Request $request) => $deviceController->list($request));
-        $add('DELETE', '/me/devices/{session_id}', fn(Request $request, array $params) => $deviceController->revoke($request, $params));
+        $add('DELETE', '/me/devices/{device_id}', fn(Request $request, array $params) => $deviceController->revoke($request, $params));
         $add('POST', '/me/encrypted-records', fn(Request $request) => $encryptedRecordController->create($request));
         $add('POST', '/me/encrypted-records/batch', fn(Request $request) => $encryptedRecordController->batch($request));
         $add('GET', '/me/encrypted-records/sync', fn(Request $request) => $encryptedRecordController->sync($request));
@@ -384,6 +396,11 @@ final class App
             return;
         }
 
+        if ($method === 'DELETE' && preg_match('#^/me/devices/[^/]+$#', $path) === 1) {
+            $this->hitAuthenticatedRateLimit($request, 'device-removal', $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_MAX', 10), $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_WINDOW_SECONDS', 600));
+            return;
+        }
+
         if ($method === 'POST' && $path === '/me/transactions/import.csv') {
             $this->hitAuthenticatedRateLimit(
                 $request,
@@ -468,6 +485,19 @@ final class App
                 $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_MAX', 5),
                 $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_WINDOW_SECONDS', 600)
             );
+            return;
+        }
+
+        if (($method === 'GET' && $path === '/me/vault/quick-unlock')
+            || ($method === 'POST' && preg_match('#^/me/vault/quick-unlock/(registration|assertion)/(options|complete)$#', $path) === 1)
+            || ($method === 'DELETE' && preg_match('#^/me/vault/quick-unlock/[^/]+$#', $path) === 1)) {
+            $this->hitAuthenticatedRateLimit(
+                $request,
+                'quick-unlock',
+                $this->config->getInt('RATE_LIMIT_QUICK_UNLOCK_MAX', 20),
+                $this->config->getInt('RATE_LIMIT_QUICK_UNLOCK_WINDOW_SECONDS', 600)
+            );
+            return;
         }
     }
 

@@ -171,6 +171,17 @@ APP_DEBUG=true # set to false in prod
 SESSION_COOKIE_SECURE= # true|false, empty = auto by APP_ENV
 TRUST_PROXY_HEADERS=false # true behind trusted reverse proxy
 ```
+Configure WebAuthn Quick Unlock explicitly:
+```bash
+WEBAUTHN_RP_ID=budget.example.com
+WEBAUTHN_RP_NAME=Budget
+WEBAUTHN_ALLOWED_ORIGINS=https://budget.example.com
+WEBAUTHN_CHALLENGE_TTL_SECONDS=60
+```
+Production requires a non-wildcard HTTPS origin whose host is the RP ID or a
+subdomain of it. The backend fails closed when these values are missing or
+invalid; it never derives trust from request headers. Local development may
+use the localhost values in `.env.example`.
 Configure backend error reporting:
 ```bash
 ERROR_ALERT_WEBHOOK_URL= # optional Slack, Discord, or generic webhook URL for 5xx exceptions
@@ -236,17 +247,23 @@ mkdir -p storage/rate-limit
 touch storage/mail.log
 ```
 
-4. Apply schema:
+4. Install committed PHP dependencies:
+
+```bash
+composer install --no-interaction
+```
+
+5. Apply schema:
 ```bash
 php scripts/migrate.php
 ```
 
-5. Seed first owner user:
+6. Seed first owner user:
 ```bash
 php scripts/seed_owner.php you@example.com "Your Name" "StrongPassword123!"
 ```
 
-6. Run server:
+7. Run server:
 ```bash
 php -S localhost:8000 -t public
 ```

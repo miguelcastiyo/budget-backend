@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Auth\AuthContext;
 use App\Controllers\DeviceController;
 use App\Core\Config;
+use App\Devices\DeviceLifecycleService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Privacy\FinancialPrivacyStateService;
@@ -12,6 +13,7 @@ use App\Privacy\RecentAuthGuard;
 use App\Privacy\VaultCryptoProfile;
 use App\Privacy\VaultRepository;
 use App\Privacy\VaultService;
+use App\Privacy\QuickUnlockRepository;
 use App\Security\AuditLogger;
 
 if (getenv('PRIVACY_PARITY_TEST') !== '1') {
@@ -41,7 +43,8 @@ function expectFailure(callable $callback, int $status, string $code): void {
 try {
     $config = Config::load(dirname(__DIR__));
     $request = new Request('POST', '/api/v1/me/vault', '', [], [], [], [], ['User-Agent' => 'phase2-vault-test']);
-    $auth = new AuthContext(['id' => $userId, 'role' => 'member', 'session_created_at' => gmdate('Y-m-d H:i:s')], 'session', 'phase2-session-' . $suffix);
+    $currentDevice = 'dev-phase7-current-' . $suffix;
+    $auth = new AuthContext(['id' => $userId, 'role' => 'member', 'session_created_at' => gmdate('Y-m-d H:i:s')], 'session', 'phase2-session-' . $suffix, null, null, $currentDevice);
     $service = new VaultService($pdo, new VaultRepository($pdo), new FinancialPrivacyStateService($pdo), new RecentAuthGuard($config), new AuditLogger($pdo));
     $payload = [
         'crypto_profile_version' => 1,
@@ -72,15 +75,16 @@ try {
     expectFailure(fn() => $service->replacePassphrase(new AuthContext(['id' => $userId], 'api_key', null, 'phase2-key'), ['passphrase_wrap' => $rotatedPassphrase['passphrase_wrap']]), 403, 'RECENT_AUTH_REQUIRED');
     $currentSession = (string) $auth->sessionId;
     $currentSecret = 'device-current-secret';
-    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :secret_hash, :csrf_hash, 'web', 'Mozilla/5.0 Safari/Phase7', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':session_id' => $currentSession, ':user_id' => $userId, ':secret_hash' => hash('sha256', $currentSecret), ':csrf_hash' => hash('sha256', 'device-csrf')]);
+    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :device_id, :secret_hash, :csrf_hash, 'web', 'Mozilla/5.0 Safari/Phase7', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':session_id' => $currentSession, ':user_id' => $userId, ':device_id' => $currentDevice, ':secret_hash' => hash('sha256', $currentSecret), ':csrf_hash' => hash('sha256', 'device-csrf')]);
     $otherSession = 'phase7-device-' . $suffix;
-    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :secret_hash, :csrf_hash, 'web', 'Mozilla/5.0 Chrome/Phase7', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':session_id' => $otherSession, ':user_id' => $userId, ':secret_hash' => hash('sha256', 'device-secret'), ':csrf_hash' => hash('sha256', 'device-csrf')]);
-    $devices = new DeviceController($pdo, new App\Auth\AuthService($pdo, $config), new RecentAuthGuard($config));
+    $otherDevice = 'dev-phase7-other-' . $suffix;
+    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :device_id, :secret_hash, :csrf_hash, 'web', 'Mozilla/5.0 Chrome/Phase7', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':session_id' => $otherSession, ':user_id' => $userId, ':device_id' => $otherDevice, ':secret_hash' => hash('sha256', 'device-secret'), ':csrf_hash' => hash('sha256', 'device-csrf')]);
+    $devices = new DeviceController($pdo, new App\Auth\AuthService($pdo, $config), new RecentAuthGuard($config), new DeviceLifecycleService($pdo, new QuickUnlockRepository($pdo), new AuditLogger($pdo)));
     $deviceHeaders = ['Authorization' => 'Session ' . $currentSession . '.' . $currentSecret, 'User-Agent' => 'phase7-device-test'];
     $deviceList = json_decode($devices->list(new Request('GET', '/me/devices', '', [], [], [], [], $deviceHeaders))->body, true);
     if (!is_array($deviceList) || count($deviceList['items'] ?? []) < 1) throw new RuntimeException('device listing is incorrect');
-    $revoked = json_decode($devices->revoke(new Request('DELETE', '/me/devices/' . $otherSession, '', [], [], [], [], $deviceHeaders), ['session_id' => $otherSession])->body, true);
-    if (($revoked['revoked'] ?? false) !== true) throw new RuntimeException('device revocation is incorrect');
+    $revoked = json_decode($devices->revoke(new Request('DELETE', '/me/devices/' . $otherDevice, '', [], [], [], [], $deviceHeaders), ['device_id' => $otherDevice])->body, true);
+    if (($revoked['status'] ?? null) !== 'removed' || ($revoked['device_id'] ?? null) !== $otherDevice) throw new RuntimeException('device revocation is incorrect');
     $audit = $pdo->prepare("SELECT action, target_type, target_id, metadata FROM audit_logs WHERE actor_user_id = :user_id AND action = 'vault.initialized' ORDER BY id DESC LIMIT 1");
     $audit->execute([':user_id' => $userId]);
     $event = $audit->fetch();

@@ -70,6 +70,7 @@ CREATE TABLE user_sessions (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   session_id VARCHAR(64) NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
+  device_id VARCHAR(64) NOT NULL,
   session_secret_hash CHAR(64) NOT NULL COMMENT 'sha256(session secret)',
   csrf_token_hash CHAR(64) NULL COMMENT 'sha256(csrf token)',
   client_type ENUM('web', 'native') NOT NULL,
@@ -85,6 +86,7 @@ CREATE TABLE user_sessions (
   KEY idx_user_sessions_user (user_id),
   KEY idx_user_sessions_expiry (expires_at),
   KEY idx_user_sessions_user_revoked (user_id, revoked_at),
+  KEY idx_user_sessions_device (user_id, device_id, revoked_at),
   CONSTRAINT fk_user_sessions_user
     FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -200,6 +202,49 @@ CREATE TABLE user_financial_vaults (
   CONSTRAINT chk_user_financial_vaults_profile CHECK (crypto_profile_version = 1),
   CONSTRAINT chk_user_financial_vaults_kdf CHECK (passphrase_kdf = 'PBKDF2' AND passphrase_kdf_hash = 'SHA-256' AND passphrase_kdf_iterations >= 600000),
   CONSTRAINT chk_user_financial_vaults_wraps CHECK (passphrase_wrap_algorithm = 'AES-KW' AND recovery_wrap_algorithm = 'AES-KW')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE vault_quick_unlock_credentials (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  quick_unlock_id VARCHAR(64) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  device_id VARCHAR(64) NOT NULL,
+  credential_id VARBINARY(512) NOT NULL,
+  credential_record JSON NOT NULL,
+  signature_counter BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  quick_unlock_profile_version TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  prf_input VARBINARY(64) NOT NULL,
+  wrapped_vault_key VARBINARY(512) NOT NULL,
+  status ENUM('pending', 'active', 'revoked') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  activated_at TIMESTAMP NULL,
+  last_used_at TIMESTAMP NULL,
+  revoked_at TIMESTAMP NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_quick_unlock_id (quick_unlock_id),
+  UNIQUE KEY uq_quick_unlock_credential_id (credential_id),
+  KEY idx_quick_unlock_user_device_status (user_id, device_id, status),
+  CONSTRAINT fk_quick_unlock_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT chk_quick_unlock_profile CHECK (quick_unlock_profile_version = 1),
+  CONSTRAINT chk_quick_unlock_prf_input CHECK (OCTET_LENGTH(prf_input) = 32),
+  CONSTRAINT chk_quick_unlock_wrapper CHECK (OCTET_LENGTH(wrapped_vault_key) BETWEEN 40 AND 512)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE webauthn_challenges (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  session_id VARCHAR(64) NOT NULL,
+  purpose ENUM('quick_unlock_registration', 'quick_unlock_registration_activation', 'quick_unlock_assertion') NOT NULL,
+  quick_unlock_id VARCHAR(64) NULL,
+  challenge VARBINARY(64) NOT NULL,
+  options_json JSON NOT NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_webauthn_challenges_lookup (user_id, session_id, purpose, consumed_at, expires_at),
+  CONSTRAINT fk_webauthn_challenges_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT chk_webauthn_challenge_length CHECK (OCTET_LENGTH(challenge) >= 16)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE encrypted_record_sync_state (

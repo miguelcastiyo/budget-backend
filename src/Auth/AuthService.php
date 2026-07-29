@@ -71,6 +71,7 @@ final class AuthService
         $sql = <<<SQL
 SELECT
   us.session_id,
+  {$this->sessionDeviceIdExpression()},
   us.csrf_token_hash,
   us.last_seen_at,
   {$sessionCreatedAt},
@@ -121,7 +122,7 @@ SQL;
             $touch->execute([':session_id' => $sessionId]);
         }
 
-        return new AuthContext($row, 'session', $sessionId, null, $source);
+        return new AuthContext($row, 'session', $sessionId, null, $source, (string) ($row['device_id'] ?? ''));
     }
 
     private function authenticateApiKey(string $apiKey): AuthContext
@@ -203,5 +204,13 @@ SQL;
         }
 
         return 'NULL AS session_created_at';
+    }
+
+    private function sessionDeviceIdExpression(): string
+    {
+        if ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'sqlite') return 'us.device_id AS device_id';
+        $columns = $this->pdo->query('PRAGMA table_info(user_sessions)')->fetchAll();
+        foreach ($columns as $column) if ((string) ($column['name'] ?? '') === 'device_id') return 'us.device_id AS device_id';
+        return 'NULL AS device_id';
     }
 }

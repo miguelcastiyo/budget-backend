@@ -26,5 +26,10 @@ jobs:
         run: |
           find src public scripts -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Validate and install Composer dependencies
+        run: |
+          composer validate --strict
+          composer install --no-interaction --prefer-dist
+
       - name: Test
         run: php scripts/test_all.php

@@ -12,7 +12,8 @@ final class AuthContext
         public readonly string $authType,
         public readonly ?string $sessionId = null,
         public readonly ?string $apiKeyId = null,
-        public readonly ?string $sessionSource = null
+        public readonly ?string $sessionSource = null,
+        public readonly ?string $deviceId = null
     ) {
     }
 

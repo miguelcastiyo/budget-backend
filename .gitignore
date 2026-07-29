@@ -5,6 +5,12 @@ storage/rate-limit/
 project_info.md
 /postman
 /storage
+/vendor/
+/composer.phar
+/auth.json
 /docs/*
 !/docs/financial-domain-invariants.md
 !/docs/privacy-launch-readiness-record.md
+!/docs/quick-unlock-foundation.md
+!/docs/quick-unlock-device-lifecycle.md
+!/docs/quick-unlock-integration-readiness.md

@@ -884,11 +884,13 @@ SQL;
         $ttlHours = $this->config->getInt('SESSION_TTL_HOURS', 168);
         $expiresAt = gmdate('Y-m-d H:i:s', time() + ($ttlHours * 3600));
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, expires_at) VALUES (:session_id, :user_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), :expires_at)'
+        $hasDeviceId = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'sqlite' || array_filter($this->pdo->query('PRAGMA table_info(user_sessions)')->fetchAll(), static fn (array $column): bool => (string) ($column['name'] ?? '') === 'device_id') !== [];
+        $stmt = $this->pdo->prepare($hasDeviceId
+            ? 'INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, expires_at) VALUES (:session_id, :user_id, :device_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), :expires_at)'
+            : 'INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, expires_at) VALUES (:session_id, :user_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), :expires_at)'
         );
 
-        $stmt->execute([
+        $parameters = [
             ':session_id' => $sessionId,
             ':user_id' => $userId,
             ':session_secret_hash' => $sessionSecretHash,
@@ -897,7 +899,9 @@ SQL;
             ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
             ':user_agent' => substr((string) ($request->header('User-Agent') ?? ''), 0, 255),
             ':expires_at' => $expiresAt,
-        ]);
+        ];
+        if ($hasDeviceId) $parameters[':device_id'] = $this->deviceId($request);
+        $stmt->execute($parameters);
 
         $lookup = $this->pdo->prepare('SELECT expires_at FROM user_sessions WHERE session_id = :session_id LIMIT 1');
         $lookup->execute([':session_id' => $sessionId]);
@@ -909,6 +913,13 @@ SQL;
             'token' => $sessionToken,
             'csrf_token' => $csrfToken,
         ];
+    }
+
+    private function deviceId(Request $request): string
+    {
+        $value = trim((string) ($request->header('X-Budget-Device-ID') ?? ''));
+        if (preg_match('/^dev_[A-Za-z0-9_-]{10,64}$/', $value) === 1) return $value;
+        return Str::randomId('dev');
     }
 
     private function buildAuthResponse(int $userId, array $session, string $clientType, int $statusCode = 200): Response

@@ -14,6 +14,7 @@ $scripts = [
     'scripts/test_privacy_parity.php',
     'scripts/test_privacy_operational_boundaries.php',
     'scripts/check_privacy_logging_patterns.php',
+    'scripts/test_quick_unlock_contract.php',
 ];
 
 foreach ($scripts as $script) {

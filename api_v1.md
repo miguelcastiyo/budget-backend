@@ -2316,13 +2316,32 @@ not available during `migration_in_progress`. After a successful cutover,
 the promoted records, legacy financial reads and writes are rejected, staging is
 removed, and plaintext cleanup is scheduled separately. Cleanup failure never
 reverts encrypted authority.
-# Phase 7 recovery and device endpoints
+# Quick Unlock and device endpoints
 
 `PUT /api/v1/me/vault/passphrase` and `PUT /api/v1/me/vault/recovery` are
 session-only, recent-auth-protected wrapper replacement operations. They accept
 only opaque wrapper metadata; raw keys and secrets are never sent.
 
-`GET /api/v1/me/devices` lists coarse session metadata. `DELETE
-/api/v1/me/devices/{session_id}` revokes a session and is session-only and
-recent-auth-protected. Revocation prevents future authenticated sync but does
-not claim remote cryptographic erasure.
+Quick Unlock is an optional device-scoped wrapper around the existing Vault
+key. The following routes are session-only; registration options and
+completion also require recent interactive authentication:
+
+- `POST /api/v1/me/vault/quick-unlock/registration/options`
+- `POST /api/v1/me/vault/quick-unlock/registration/complete`
+- `POST /api/v1/me/vault/quick-unlock/assertion/options`
+- `POST /api/v1/me/vault/quick-unlock/assertion/complete`
+- `GET /api/v1/me/vault/quick-unlock`
+- `DELETE /api/v1/me/vault/quick-unlock/{quick_unlock_id}`
+
+The server verifies WebAuthn ceremonies and stores only public credential
+material, non-secret PRF input, device association, counters, and an opaque
+wrapped Vault key. PRF output, the derived Quick Unlock key, Vault key,
+passphrase, Recovery Code, and financial plaintext never cross the API.
+
+`GET /api/v1/me/devices` lists coarse device metadata grouped by the opaque
+client-generated `device_id`. `DELETE /api/v1/me/devices/{device_id}` is
+session-only and recent-auth-protected and transactionally revokes every
+session and Quick Unlock credential for that device. Sign-out revokes only
+the current session; removing a device is the stronger operation. Revocation
+prevents future authenticated sync but does not claim remote cryptographic
+erasure of data already learned by that device.

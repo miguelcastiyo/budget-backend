@@ -69,22 +69,84 @@ paths:
       responses:
         '200': {description: Wrapper replaced}
         '403': {description: Recent authentication required}
+  /me/vault/quick-unlock/registration/options:
+    post:
+      tags: [Vault]
+      summary: Create device-scoped Quick Unlock registration options
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prf_input]
+              properties:
+                prf_input: {type: string, description: Base64url-encoded client-generated 32-byte PRF input}
+      responses:
+        '200': {description: WebAuthn creation options}
+        '403': {description: Interactive recent authentication required}
+  /me/vault/quick-unlock/registration/complete:
+    post:
+      tags: [Vault]
+      summary: Verify and persist a Quick Unlock registration
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      responses:
+        '201': {description: Pending or active Quick Unlock credential}
+        '422': {description: Invalid or expired ceremony}
+  /me/vault/quick-unlock/assertion/options:
+    post:
+      tags: [Vault]
+      summary: Create current-device Quick Unlock assertion options
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      responses:
+        '200': {description: WebAuthn request options}
+        '404': {description: No credential enrolled for this device}
+  /me/vault/quick-unlock:
+    get:
+      tags: [Vault]
+      summary: Read current-device Quick Unlock status
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      responses:
+        '200': {description: Current-device enrollment status}
+        '404': {description: Vault or user is unavailable}
+  /me/vault/quick-unlock/assertion/complete:
+    post:
+      tags: [Vault]
+      summary: Verify a Quick Unlock assertion and return an opaque Vault-key wrapper
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      responses:
+        '200': {description: Opaque wrapped Vault key and PRF input; no plaintext or raw key}
+        '422': {description: Invalid assertion}
+  /me/vault/quick-unlock/{quick_unlock_id}:
+    delete:
+      tags: [Vault]
+      summary: Revoke one current user's Quick Unlock credential
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      parameters:
+        - in: path
+          name: quick_unlock_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Credential revoked}
+        '403': {description: Recent authentication required}
   /me/devices:
     get:
       tags: [Profile]
-      summary: List coarse authenticated device sessions
+      summary: List coarse Budget devices with minimal Quick Unlock status
       security: [{cookieAuth: []}, {sessionTokenAuth: []}]
       responses:
-        '200': {description: Device session list}
-  /me/devices/{session_id}:
+        '200': {description: Device list without credential internals}
+  /me/devices/{device_id}:
     delete:
       tags: [Profile]
-      summary: Revoke an authenticated device session
+      summary: Remove a Budget device and revoke its sessions and Quick Unlock access
       security: [{cookieAuth: []}, {sessionTokenAuth: []}]
       parameters:
-        - {name: session_id, in: path, required: true, schema: {type: string}}
+        - {name: device_id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: Session revoked}
+        '200': {description: Device removed; repeated removal is idempotent}
         '403': {description: Recent authentication required}
   /health:
     get:
