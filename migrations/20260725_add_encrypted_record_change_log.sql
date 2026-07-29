@@ -1,21 +1,3 @@
-CREATE TABLE encrypted_record_changes (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  user_id BIGINT UNSIGNED NOT NULL,
-  vault_id VARCHAR(64) NOT NULL,
-  record_id VARCHAR(96) NOT NULL,
-  envelope_version TINYINT UNSIGNED NOT NULL,
-  record_revision BIGINT UNSIGNED NOT NULL,
-  iv VARBINARY(16) NULL,
-  ciphertext MEDIUMBLOB NULL,
-  sync_sequence BIGINT UNSIGNED NOT NULL,
-  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_encrypted_record_changes_user_sequence (user_id, sync_sequence),
-  KEY ix_encrypted_record_changes_user_sequence (user_id, sync_sequence),
-  CONSTRAINT fk_encrypted_record_changes_record FOREIGN KEY (user_id, record_id) REFERENCES encrypted_financial_records (user_id, record_id),
-  CONSTRAINT chk_encrypted_record_changes_version CHECK (envelope_version = 1),
-  CONSTRAINT chk_encrypted_record_changes_deleted_payload CHECK ((is_deleted = 1 AND iv IS NULL AND ciphertext IS NULL) OR (is_deleted = 0 AND iv IS NOT NULL AND ciphertext IS NOT NULL)),
-  CONSTRAINT chk_encrypted_record_changes_ciphertext_size CHECK (ciphertext IS NULL OR OCTET_LENGTH(ciphertext) <= 262144),
-  CONSTRAINT chk_encrypted_record_changes_iv_size CHECK (iv IS NULL OR OCTET_LENGTH(iv) = 12)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Kept as a migration marker for databases that may already have recorded
+-- this filename. The table is created by the follow-up migration after
+-- encrypted_financial_records exists.
