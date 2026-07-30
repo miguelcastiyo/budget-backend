@@ -27,7 +27,7 @@ final class DeviceLifecycleService
             $sessions=$this->pdo->prepare('UPDATE user_sessions SET revoked_at=COALESCE(revoked_at,UTC_TIMESTAMP()) WHERE user_id=:u AND device_id=:d AND revoked_at IS NULL');$sessions->execute([':u'=>$auth->userId(),':d'=>$deviceId]);
             $this->pdo->commit();
             $current=$auth->deviceId!==null && hash_equals((string)$auth->deviceId,$deviceId);
-            try { $this->audit->record($httpRequest,$auth,'device.removed','device',$deviceId,['current_device'=>$current]); } catch (\Throwable) { /* audit failure must not undo committed authorization revocation */ }
+            try { $this->audit->record($httpRequest,$auth->userId(),$auth->authType,'device.removed','device',$deviceId,['current_device'=>$current]); } catch (\Throwable) { /* audit failure must not undo committed authorization revocation */ }
             return ['status'=>'removed','device_id'=>$deviceId,'current_device'=>$current];
         } catch (\Throwable $e) { if ($this->pdo->inTransaction()) $this->pdo->rollBack(); throw $e; }
     }
