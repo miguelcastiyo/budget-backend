@@ -52,7 +52,11 @@ final class QuickUnlockService
         $input = $this->binary($request->input('prf_input'), 'prf_input', 32, 32);
         $challenge = random_bytes(32); $rpId = $this->rpId();
         $rp = PublicKeyCredentialRpEntity::create($this->config->get('WEBAUTHN_RP_NAME', 'Budget') ?? 'Budget', $rpId);
-        $user = PublicKeyCredentialUserEntity::create('budget-user-'.$auth->userId(), hash('sha256', 'budget-quick-unlock-user:'.$auth->userId(), true), 'Budget user');
+        $displayName = trim((string) ($auth->user['display_name'] ?? ''));
+        if ($displayName === '') {
+            $displayName = trim((string) ($auth->user['email'] ?? '')) ?: 'Budget user';
+        }
+        $user = PublicKeyCredentialUserEntity::create($displayName, hash('sha256', 'budget-quick-unlock-user:'.$auth->userId(), true), $displayName);
         $extension = AuthenticationExtensions::create([PseudoRandomFunctionInputExtensionBuilder::create()->withInputs($input)->build()]);
         $options = PublicKeyCredentialCreationOptions::create($rp, $user, $challenge, [PublicKeyCredentialParameters::createPk(-7), PublicKeyCredentialParameters::createPk(-257)], AuthenticatorSelectionCriteria::create(null, 'required'), PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE, [], 60000, $extension);
         return $this->saveOptions($auth, self::PURPOSE_REG, null, $challenge, $options, ['prf_input'=>$this->b64($input)]);
