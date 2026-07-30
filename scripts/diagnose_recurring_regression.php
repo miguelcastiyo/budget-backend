@@ -42,7 +42,8 @@ $pdo->beginTransaction();
 $ruleWhere = '';
 $occurrenceWhere = '';
 $transactionWhere = '';
-$params = [':since' => date('Y-m-d H:i:s', strtotime($since))];
+$sinceValue = date('Y-m-d H:i:s', strtotime($since));
+$params = [':since_created' => $sinceValue, ':since_updated' => $sinceValue];
 if (isset($args['user-id']) && ctype_digit($args['user-id'])) {
     $ruleWhere = ' AND re.user_id = :user_id';
     $occurrenceWhere = ' AND reo.user_id = :user_id';
@@ -53,6 +54,9 @@ if (isset($args['user-id']) && ctype_digit($args['user-id'])) {
 /** @return list<array<string,mixed>> */
 function rows(PDO $pdo, string $sql, array $params): array
 {
+    preg_match_all('/:([a-z_][a-z0-9_]*)/i', $sql, $matches);
+    $used = array_fill_keys(array_map(static fn (string $name): string => ':' . $name, array_unique($matches[1])), true);
+    $params = array_intersect_key($params, $used);
     $statement = $pdo->prepare($sql);
     $statement->execute($params);
     return $statement->fetchAll();
@@ -60,7 +64,7 @@ function rows(PDO $pdo, string $sql, array $params): array
 
 $report = [
     'read_only' => true,
-    'since' => $params[':since'],
+    'since' => $sinceValue,
     'user_id' => $params[':user_id'] ?? null,
     'notes' => [
         'billing_day_matches_transaction_day' => 'Candidate only; matching the seed date can be valid and requires review.',
@@ -71,7 +75,7 @@ $report = [
         SELECT id, user_id, series_id, expense, amount, billing_type, billing_day,
                starts_month, ends_month, is_active, created_at, updated_at
         FROM recurring_expenses re
-        WHERE (re.created_at >= :since OR re.updated_at >= :since) {$ruleWhere}
+        WHERE (re.created_at >= :since_created OR re.updated_at >= :since_updated) {$ruleWhere}
         ORDER BY user_id, updated_at, id
     ", $params),
     'billing_day_matches_linked_transaction_day' => rows($pdo, "
@@ -83,7 +87,7 @@ $report = [
           ON reo.user_id = re.user_id AND reo.recurring_expense_id = re.id
         JOIN transactions t
           ON t.user_id = reo.user_id AND t.id = reo.transaction_id
-        WHERE (re.created_at >= :since OR re.updated_at >= :since)
+        WHERE (re.created_at >= :since_created OR re.updated_at >= :since_updated)
           AND re.billing_type = 'day_of_month'
           AND re.billing_day = DAYOFMONTH(t.transaction_date)
           {$ruleWhere}
@@ -97,7 +101,7 @@ $report = [
             OR (billing_type = 'last_day' AND billing_day IS NOT NULL))
           {$ruleWhere}
         ORDER BY user_id, id
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'duplicate_recurring_rules' => rows($pdo, "
         SELECT user_id, series_id, starts_month, COUNT(*) AS rule_count,
                GROUP_CONCAT(id ORDER BY id) AS rule_ids
@@ -106,7 +110,7 @@ $report = [
         GROUP BY user_id, series_id, starts_month
         HAVING COUNT(*) > 1
         ORDER BY user_id, series_id, starts_month
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'duplicate_occurrences' => rows($pdo, "
         SELECT user_id, recurring_expense_id, occurrence_month, COUNT(*) AS occurrence_count,
                GROUP_CONCAT(id ORDER BY id) AS occurrence_ids
@@ -115,7 +119,7 @@ $report = [
         GROUP BY user_id, recurring_expense_id, occurrence_month
         HAVING COUNT(*) > 1
         ORDER BY user_id, recurring_expense_id, occurrence_month
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'same_transaction_linked_to_multiple_occurrences' => rows($pdo, "
         SELECT user_id, transaction_id, COUNT(*) AS occurrence_count,
                GROUP_CONCAT(id ORDER BY id) AS occurrence_ids
@@ -124,7 +128,7 @@ $report = [
         GROUP BY user_id, transaction_id
         HAVING COUNT(*) > 1
         ORDER BY user_id, transaction_id
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'duplicate_generated_transaction_candidates' => rows($pdo, "
         SELECT t.user_id, t.transaction_date, t.expense, t.amount, t.source,
                COUNT(*) AS transaction_count, GROUP_CONCAT(t.id ORDER BY t.id) AS transaction_ids
@@ -133,14 +137,14 @@ $report = [
         GROUP BY t.user_id, t.transaction_date, t.expense, t.amount, t.source
         HAVING COUNT(*) > 1
         ORDER BY t.user_id, t.transaction_date, t.expense
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'orphan_occurrences' => rows($pdo, "
         SELECT reo.id, reo.user_id, reo.recurring_expense_id, reo.occurrence_month,
                reo.due_date, reo.transaction_id
         FROM recurring_expense_occurrences reo
         WHERE reo.transaction_id IS NULL {$occurrenceWhere}
         ORDER BY reo.user_id, reo.occurrence_month, reo.id
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
     'recurrence_linkage_review_candidates' => rows($pdo, "
         SELECT reo.id AS occurrence_id, reo.user_id, reo.recurring_expense_id,
                reo.transaction_id, reo.occurrence_month, reo.due_date,
@@ -150,7 +154,7 @@ $report = [
         WHERE (reo.transaction_id IS NULL OR t.id IS NULL OR t.source <> 'recurring')
           {$occurrenceWhere}
         ORDER BY reo.user_id, reo.occurrence_month, reo.id
-    ", array_diff_key($params, [':since' => true])),
+    ", $params),
 ];
 
 $pdo->rollBack();
