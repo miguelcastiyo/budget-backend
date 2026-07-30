@@ -58,7 +58,7 @@ final class QuickUnlockService
         }
         $user = PublicKeyCredentialUserEntity::create($displayName, hash('sha256', 'budget-quick-unlock-user:'.$auth->userId(), true), $displayName);
         $extension = AuthenticationExtensions::create([PseudoRandomFunctionInputExtensionBuilder::create()->withInputs($input)->build()]);
-        $options = PublicKeyCredentialCreationOptions::create($rp, $user, $challenge, [PublicKeyCredentialParameters::createPk(-7), PublicKeyCredentialParameters::createPk(-257)], AuthenticatorSelectionCriteria::create(null, 'required'), PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE, [], 60000, $extension);
+        $options = PublicKeyCredentialCreationOptions::create($rp, $user, $challenge, [PublicKeyCredentialParameters::createPk(-7), PublicKeyCredentialParameters::createPk(-257)], AuthenticatorSelectionCriteria::create(null, 'required', 'required'), PublicKeyCredentialCreationOptions::ATTESTATION_CONVEYANCE_PREFERENCE_NONE, [], 60000, $extension);
         return $this->saveOptions($auth, self::PURPOSE_REG, null, $challenge, $options, ['prf_input'=>$this->b64($input)]);
     }
 
