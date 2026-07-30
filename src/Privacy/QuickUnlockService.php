@@ -101,7 +101,7 @@ final class QuickUnlockService
         return ['quick_unlock_id'=>(string)$row['quick_unlock_id'],'profile_version'=>self::PROFILE,'status'=>'active','prf_input'=>$this->b64((string)$row['prf_input']),'wrapped_vault_key'=>$this->b64($wrapped)];
     }
 
-    public function revoke(AuthContext $auth, Request $httpRequest, string $id): void { $this->interactive($auth);$this->recentAuth->requireRecentInteractiveSession($auth);if(!$this->repository->revoke($auth->userId(),$id))throw new HttpException(404,'QUICK_UNLOCK_NOT_FOUND','Quick Unlock credential not found');$this->audit->record($httpRequest,$auth,'quick_unlock.revoked','quick_unlock',$id,['profile_version'=>self::PROFILE]); }
+    public function revoke(AuthContext $auth, Request $httpRequest, string $id): void { $this->interactive($auth);$this->recentAuth->requireRecentInteractiveSession($auth);if(!$this->repository->revoke($auth->userId(),$id))throw new HttpException(404,'QUICK_UNLOCK_NOT_FOUND','Quick Unlock credential not found');try{$this->audit->record($httpRequest,$auth->userId(),$auth->authType,'quick_unlock.revoked','quick_unlock',$id,['profile_version'=>self::PROFILE]);}catch(Throwable){/* The authorization revocation is already committed. */} }
 
     private function interactive(AuthContext $auth): void { if($auth->authType!=='session'||$auth->sessionId===null)throw new HttpException(403,'SESSION_REQUIRED','Interactive session required'); }
     private function vaultRequired(int $userId): void { if($this->vaults->findByUser($userId)===null)throw new HttpException(409,'QUICK_UNLOCK_VAULT_REQUIRED','Initialize the Vault before enrolling Quick Unlock'); }
