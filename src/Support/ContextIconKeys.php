@@ -12,6 +12,8 @@ final class ContextIconKeys
         'luggage', 'home', 'car', 'building', 'landmark', 'mountain', 'beach',
         'globe', 'route', 'briefcase', 'users', 'star', 'flag', 'ticket',
         'bookmark', 'tag', 'box',
+        'coffee', 'utensils', 'book_open', 'shopping_bag', 'shirt',
+        'sparkles', 'droplet', 'scissors', 'film', 'cookie',
     ];
 
     /** @return list<string> */

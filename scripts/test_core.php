@@ -120,7 +120,7 @@ assertSame(hash('sha256', 'budget'), Str::hashSha256('budget'), 'hashSha256 matc
 assertMatches('/^\d{6}$/', Str::randomNumericCode(), 'randomNumericCode defaults to six digits');
 assertMatches('/^\d{8}$/', Str::randomNumericCode(8), 'randomNumericCode supports custom lengths');
 
-assertSame(23, count(ContextIconKeys::all()), 'context icon vocabulary matches the public contract count');
+assertSame(33, count(ContextIconKeys::all()), 'context icon vocabulary matches the public contract count');
 foreach (ContextIconKeys::all() as $contextIconKey) {
     assertTrue(ContextIconKeys::isValid($contextIconKey), 'canonical context icon is accepted: ' . $contextIconKey);
 }

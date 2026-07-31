@@ -3401,6 +3401,16 @@ components:
         - bookmark
         - tag
         - box
+        - coffee
+        - utensils
+        - book_open
+        - shopping_bag
+        - shirt
+        - sparkles
+        - droplet
+        - scissors
+        - film
+        - cookie
 
     CreateTagRequest:
       type: object
