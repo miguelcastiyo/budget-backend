@@ -39,7 +39,7 @@ final class RecurringExpenseService
             ]);
         }
 
-        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        $dt = DateTimeImmutable::createFromFormat('!Y-m', $month, new DateTimeZone('UTC'));
         if (!$dt || $dt->format('Y-m') !== $month) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'month', 'message' => 'must be a valid month'],
@@ -396,7 +396,7 @@ final class RecurringExpenseService
     public function previousMonth(string $month): string
     {
         $month = $this->normalizeMonth($month);
-        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        $dt = DateTimeImmutable::createFromFormat('!Y-m', $month, new DateTimeZone('UTC'));
         if (!$dt) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'month', 'message' => 'must be a valid month'],
@@ -446,7 +446,7 @@ final class RecurringExpenseService
     /** @return array{0:string,1:int} */
     private function monthStartAndDays(string $month): array
     {
-        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        $dt = DateTimeImmutable::createFromFormat('!Y-m', $month, new DateTimeZone('UTC'));
         if (!$dt) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => 'month', 'message' => 'must be a valid month'],
