@@ -379,7 +379,9 @@ final class MonthCloseoutService
             ]);
         }
 
-        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        // Reset omitted date/time fields so a valid historical month is not
+        // rolled into the current month when the current day is out of range.
+        $dt = DateTimeImmutable::createFromFormat('!Y-m', $month, new DateTimeZone('UTC'));
         if (!$dt || $dt->format('Y-m') !== $month) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => $field, 'message' => 'must be a valid month'],

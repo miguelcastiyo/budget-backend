@@ -398,7 +398,9 @@ $overviewPdo->exec('CREATE TABLE recurring_expense_occurrences (
     transaction_id INTEGER NULL
 )');
 
-$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+// Keep the fixture clock stable so month-boundary assertions do not change as
+// CI moves through the calendar.
+$nowUtc = new DateTimeImmutable('2026-06-15T12:00:00Z', new DateTimeZone('UTC'));
 $currentMonth = $nowUtc->format('Y-m');
 $pastMonth = $nowUtc->modify('-1 month')->format('Y-m');
 $futureMonth = $nowUtc->modify('+1 month')->format('Y-m');
@@ -561,7 +563,7 @@ $overviewPdo->prepare('INSERT INTO recurring_expense_occurrences (user_id, recur
 
 $overviewConfig = Config::load(dirname(__DIR__));
 $overviewAuth = new AuthService($overviewPdo, $overviewConfig);
-$monthOverviewService = new MonthOverviewService($overviewPdo, $budgetResolver);
+$monthOverviewService = new MonthOverviewService($overviewPdo, $budgetResolver, null, $nowUtc);
 $monthOverviewController = new MonthOverviewController($overviewAuth, $monthOverviewService);
 
 $currentOverviewRequest = new Request(
@@ -1630,9 +1632,9 @@ $fundBalanceService = new FundBalanceService($fundRepository);
 $fundTransactionIntegrationService = new FundTransactionIntegrationService($closeoutPdo, $fundRepository);
 $fundCloseoutIntegrationService = new FundCloseoutIntegrationService($closeoutPdo, $fundRepository);
 $fundService = new FundService($closeoutPdo, $fundRepository, $fundBalanceService, $fundTransactionIntegrationService);
-$closeoutService = new MonthCloseoutService($closeoutPdo, $closeoutConfig, $closeoutResolver, $closeoutRepository, $fundCloseoutIntegrationService);
+$closeoutService = new MonthCloseoutService($closeoutPdo, $closeoutConfig, $closeoutResolver, $closeoutRepository, $fundCloseoutIntegrationService, new DateTimeImmutable('2026-06-15T12:00:00Z', new DateTimeZone('UTC')));
 
-$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$nowUtc = new DateTimeImmutable('2026-06-15T12:00:00Z', new DateTimeZone('UTC'));
 $currentCloseoutMonth = $nowUtc->format('Y-m');
 $pastCloseoutMonth = $nowUtc->modify('-1 month')->format('Y-m');
 $futureCloseoutMonth = $nowUtc->modify('+1 month')->format('Y-m');

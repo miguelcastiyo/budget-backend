@@ -248,7 +248,11 @@ final class BudgetSettingsResolver
             ]);
         }
 
-        $dt = DateTimeImmutable::createFromFormat('Y-m', $month, new DateTimeZone('UTC'));
+        // Reset omitted date/time fields before parsing. Without the `!`, PHP
+        // carries the current day into the result; on dates such as July 30,
+        // parsing `2026-06` can roll into July and incorrectly reject a valid
+        // historical month.
+        $dt = DateTimeImmutable::createFromFormat('!Y-m', $month, new DateTimeZone('UTC'));
         if (!$dt || $dt->format('Y-m') !== $month) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [
                 ['field' => $field, 'message' => 'must be a valid month'],
