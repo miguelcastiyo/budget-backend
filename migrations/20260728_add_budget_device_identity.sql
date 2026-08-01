@@ -1,3 +1,4 @@
+-- MySQL-compatible equivalent of ADD COLUMN IF NOT EXISTS for older server versions.
 SET @add_device_id = (
   SELECT IF(
     COUNT(*) = 0,
