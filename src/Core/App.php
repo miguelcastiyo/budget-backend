@@ -223,6 +223,10 @@ final class App
         $add('DELETE', '/me/master-api-keys/{api_key_id}', fn(Request $request, array $params) => $masterApiKeyController->revoke($request, $params));
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
+        // Compatibility boundary: these financial routes remain registered
+        // for migration and rollback support. Every read/write must pass a
+        // privacy policy gate; Phase 2 must not remove routes or tables before
+        // evidence closure.
         $add('GET', '/me/budget-settings', $financialRead(fn(Request $request) => $budgetSettingsController->get($request)));
         $add('GET', '/me/budget-settings/versions', $financialRead(fn(Request $request) => $budgetSettingsController->versions($request)));
         $add('PUT', '/me/budget-settings', $financialMutation(fn(Request $request) => $budgetSettingsController->upsert($request)));
