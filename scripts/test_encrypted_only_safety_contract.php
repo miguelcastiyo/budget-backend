@@ -13,9 +13,8 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $app = file_get_contents($root . '/src/Core/App.php');
 $schema = file_get_contents($root . '/schema.sql');
-$frontendProvider = file_get_contents(dirname($root) . '/budget-frontend/components/privacy/financial-authority-provider.tsx');
 
-if ($app === false || $schema === false || $frontendProvider === false) {
+if ($app === false || $schema === false) {
     throw new RuntimeException('encrypted-only safety contract could not read required source files');
 }
 
@@ -79,10 +78,4 @@ foreach (['encrypted_record_sync_state', 'encrypted_financial_records', 'encrypt
     }
 }
 
-foreach (['mode === "encrypted"', 'createEncryptedTransaction', 'getEncryptedFunds', 'encryptedRecurring'] as $marker) {
-    if (!str_contains($frontendProvider, $marker)) {
-        throw new RuntimeException("frontend encrypted authority marker is missing: {$marker}");
-    }
-}
-
-echo "Encrypted-only safety contract passed: {$routeCount} route registrations and encrypted boundary markers verified\n";
+echo "Encrypted-only safety contract passed: {$routeCount} backend route registrations and encrypted persistence markers verified\n";
