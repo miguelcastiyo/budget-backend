@@ -108,6 +108,13 @@ SQL;
             $touch->execute([':session_id' => $sessionId]);
         }
 
+        return new AuthContext(
+            $row,
+            'session',
+            $sessionId,
+            $source,
+            (string) ($row['device_id'] ?? '')
+        );
     }
 
     private function isCsrfProtectedMethod(string $method): bool
