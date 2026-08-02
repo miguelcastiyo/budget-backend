@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\AuthService;
-use App\Budget\BudgetSettingsResolver;
 use App\Auth\GoogleTokenVerifier;
 use App\Core\Config;
 use App\Http\HttpException;
@@ -14,8 +13,6 @@ use App\Http\Response;
 use App\Mail\Mailer;
 use App\Security\AuditLogger;
 use App\Support\Str;
-use DateTimeImmutable;
-use DateTimeZone;
 use PDO;
 
 final class ProfileController
@@ -26,8 +23,7 @@ final class ProfileController
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
         private readonly Config $config,
-        private readonly AuditLogger $audit,
-        private readonly BudgetSettingsResolver $budgetSettingsResolver
+        private readonly AuditLogger $audit
     ) {
     }
 
@@ -448,14 +444,9 @@ final class ProfileController
             return false;
         }
 
-        $stmt = $this->pdo->prepare('SELECT monthly_income FROM budget_settings WHERE user_id = :user_id LIMIT 1');
-        $stmt->execute([':user_id' => $userId]);
-        $row = $stmt->fetch();
-        if (!$row) {
-            return false;
-        }
-
-        return (float) $row['monthly_income'] > 0;
+        // Financial completion is encrypted-domain data and cannot be derived
+        // from the account/profile endpoint.
+        return true;
     }
 
     private function normalizeAvatarUrl(?string $avatarUrl): ?string
@@ -599,119 +590,27 @@ final class ProfileController
     /** @return array<string,mixed> */
     private function buildSetupStatus(int $userId): array
     {
-        $currentMonth = $this->currentMonthKey();
-        $budgetProfileComplete = $this->budgetProfileCompleteForMonth($userId, $currentMonth);
-        $transactionCount = $this->transactionCount($userId);
-        $hasTransactions = $transactionCount > 0;
-        $hasRecurringExpenses = $this->hasRecurringExpenses($userId);
-        $hasImportedData = $this->hasImportedData($userId);
         $preferences = $this->fetchPreferences($userId);
         $onboardingDismissed = (bool) ($preferences['onboarding']['dismissed'] ?? false);
-        $recommendedNextAction = $this->recommendedNextAction(
-            $budgetProfileComplete,
-            $hasTransactions,
-            $hasRecurringExpenses,
-            $hasImportedData,
-            $transactionCount
-        );
 
         return [
-            'budget_profile_complete' => $budgetProfileComplete,
-            'has_transactions' => $hasTransactions,
-            'has_recurring_expenses' => $hasRecurringExpenses,
-            'has_imported_data' => $hasImportedData,
-            'first_transaction_added' => $hasTransactions,
-            'first_recurring_expense_added' => $hasRecurringExpenses,
-            'first_import_completed' => $hasImportedData,
+            // These fields remain for account UI compatibility, but the
+            // financial facts are owned by the encrypted client domain.
+            'budget_profile_complete' => true,
+            'has_transactions' => true,
+            'has_recurring_expenses' => true,
+            'has_imported_data' => true,
+            'first_transaction_added' => true,
+            'first_recurring_expense_added' => true,
+            'first_import_completed' => true,
             'onboarding_dismissed' => $onboardingDismissed,
-            'recommended_next_action' => $recommendedNextAction,
+            'recommended_next_action' => 'none',
             'setup_tasks' => [
-                $this->setupTask('add_first_transaction', 'Add your first transaction', $hasTransactions),
-                $this->setupTask('add_recurring_expenses', 'Add fixed monthly bills', $hasRecurringExpenses),
-                $this->setupTask('import_transactions', 'Import past transactions', $hasImportedData),
+                $this->setupTask('add_first_transaction', 'Add your first transaction', true),
+                $this->setupTask('add_recurring_expenses', 'Add fixed monthly bills', true),
+                $this->setupTask('import_transactions', 'Import past transactions', true),
             ],
         ];
-    }
-
-    private function budgetProfileCompleteForMonth(int $userId, string $month): bool
-    {
-        $resolved = $this->budgetSettingsResolver->getEffectiveSettingsForMonth($userId, $month);
-
-        return $resolved['resolved_effective_month'] !== null && is_array($resolved['settings']);
-    }
-
-    private function currentMonthKey(): string
-    {
-        return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m');
-    }
-
-    private function transactionCount(int $userId): int
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT COUNT(*) AS total
-             FROM transactions
-             WHERE user_id = :user_id
-               AND deleted_at IS NULL'
-        );
-        $stmt->execute([':user_id' => $userId]);
-
-        return (int) ($stmt->fetch()['total'] ?? 0);
-    }
-
-    private function hasRecurringExpenses(int $userId): bool
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT 1
-             FROM recurring_expenses
-             WHERE user_id = :user_id
-               AND is_active = 1
-               AND deleted_at IS NULL
-             LIMIT 1'
-        );
-        $stmt->execute([':user_id' => $userId]);
-
-        return (bool) $stmt->fetch();
-    }
-
-    private function hasImportedData(int $userId): bool
-    {
-        $stmt = $this->pdo->prepare(
-            "SELECT 1
-             FROM csv_import_runs
-             WHERE user_id = :user_id
-               AND mode = 'commit'
-               AND imported_rows > 0
-             LIMIT 1"
-        );
-        $stmt->execute([':user_id' => $userId]);
-
-        return (bool) $stmt->fetch();
-    }
-
-    private function recommendedNextAction(
-        bool $budgetProfileComplete,
-        bool $hasTransactions,
-        bool $hasRecurringExpenses,
-        bool $hasImportedData,
-        int $transactionCount
-    ): string {
-        if (!$budgetProfileComplete) {
-            return 'complete_budget_profile';
-        }
-
-        if (!$hasTransactions) {
-            return 'add_first_transaction';
-        }
-
-        if (!$hasRecurringExpenses) {
-            return 'add_recurring_expenses';
-        }
-
-        if (!$hasImportedData && $transactionCount < 10) {
-            return 'import_transactions';
-        }
-
-        return 'none';
     }
 
     /** @return array{key:string,label:string,status:string,completed:bool} */

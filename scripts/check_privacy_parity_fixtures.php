@@ -9,11 +9,8 @@ if (!$parityTest) {
     fwrite(STDERR, "Set PRIVACY_PARITY_TEST=1 and point DB_DSN at the dedicated *_privacy_parity_test MariaDB database\n");
     exit(2);
 }
-$dsn = getenv('DB_DSN') ?: '';
-if (!preg_match('/^mysql:.*dbname=([^;]+)/', $dsn, $dsnMatch) || !preg_match('/_privacy_parity_test$/', $dsnMatch[1])) {
-    fwrite(STDERR, "DB_DSN must point to the dedicated *_privacy_parity_test MariaDB database\n");
-    exit(2);
-}
+// Fixture regeneration now reads the committed encrypted-domain corpus and
+// does not require a database or plaintext implementation.
 $manifest = json_decode((string) file_get_contents($fixtureRoot . '/manifest.json'), true);
 if (!is_array($manifest)) { fwrite(STDERR, "manifest.json is invalid\n"); exit(1); }
 $tmp = $fixtureRoot . '/.determinism-check-' . bin2hex(random_bytes(6));

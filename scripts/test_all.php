@@ -5,17 +5,15 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $scripts = [
     'scripts/test_core.php',
-    'scripts/smoke_budget_settings_validation.php',
-    'scripts/smoke_card_favorites.php',
-    'scripts/smoke_savings_plan.php',
-    'scripts/smoke_recurring_schedule_change_validation.php',
     'scripts/smoke_google_verifier.php',
-    'scripts/smoke_transaction_atomicity.php',
     'scripts/test_privacy_parity.php',
     'scripts/test_privacy_operational_boundaries.php',
     'scripts/check_privacy_logging_patterns.php',
     'scripts/test_quick_unlock_contract.php',
     'scripts/test_encrypted_only_safety_contract.php',
+    'scripts/test_runtime_source_boundary.php',
+    'scripts/test_setup_status_contract.php',
+    'scripts/test_operator_boundary.php',
 ];
 
 foreach ($scripts as $script) {

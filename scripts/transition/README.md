@@ -24,6 +24,19 @@ only supported home for remaining server-readable migration or repair work.
 
 These commands must be run only against an explicitly selected environment. Parity and lifecycle tests already require dedicated test-database markers. The production diagnostic additionally requires PRIVACY_EVIDENCE_CONFIRM=1 and emits aggregate values only.
 
+## Retained transition dependency inventory
+
+The migration staging and cutover scripts are the only supported consumers of
+the retained transition graph (`PrivacyController`, migration repositories,
+staging/snapshot services, cutover, and cleanup repositories). `src/Core/App`
+does not construct or route that graph; `/me/privacy` exposes account state
+only. These dependencies remain until all legacy accounts are migrated and the
+operator runbook records zero remaining plaintext accounts. The tools read or
+write the migration/staging/cleanup tables and may read legacy financial tables
+only while processing an explicitly selected migration account. They are not
+part of normal encrypted financial requests and have no automatic production
+fallback.
+
 ## Boundary rules
 
 - Normal controllers and encrypted financial services must not import scripts.

@@ -54,6 +54,7 @@ $retiredPrefixes = [
     '/me/dashboard',
     '/me/data-runs',
     '/me/imports/',
+    '/me/privacy/migration',
 ];
 
 foreach (preg_split('/\R/', $app) ?: [] as $line) {

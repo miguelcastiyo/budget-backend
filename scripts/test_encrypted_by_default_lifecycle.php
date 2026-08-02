@@ -7,8 +7,6 @@ use App\Core\Config;
 use App\Http\HttpException;
 use App\Privacy\FinancialPrivacyState;
 use App\Privacy\FinancialPrivacyStateService;
-use App\Privacy\FinancialReadPolicy;
-use App\Privacy\FinancialWritePolicy;
 use App\Privacy\RecentAuthGuard;
 use App\Privacy\VaultCryptoProfile;
 use App\Privacy\VaultRepository;
@@ -31,9 +29,6 @@ function b64url(string $bytes): string { return rtrim(strtr(base64_encode($bytes
 try {
     $states = new FinancialPrivacyStateService($pdo);
     if ($states->get($userId) !== FinancialPrivacyState::VAULT_SETUP_REQUIRED) throw new RuntimeException('new users do not default to vault_setup_required');
-    expectConflict(fn() => (new FinancialReadPolicy($states))->requireLegacyReadAllowed($userId));
-    expectConflict(fn() => (new FinancialWritePolicy($states))->requirePlaintextWriteAllowed($userId));
-
     $config = Config::load(dirname(__DIR__));
     $service = new VaultService($pdo, new VaultRepository($pdo), $states, new RecentAuthGuard($config), new AuditLogger($pdo));
     $auth = new AuthContext(['id' => $userId, 'role' => 'member', 'session_created_at' => gmdate('Y-m-d H:i:s')], 'session', "lifecycle-{$suffix}");

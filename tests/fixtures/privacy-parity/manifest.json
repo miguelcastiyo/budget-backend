@@ -9,7 +9,7 @@
             "scenario_id": "budget.allocation-validation",
             "group_id": "FIX-BUD-001",
             "domain": "budgets",
-            "source_implementation": "BudgetSettingsResolver.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-BUDGET-001",
@@ -29,7 +29,7 @@
             "scenario_id": "budget.income-conversion",
             "group_id": "FIX-BUD-002",
             "domain": "budgets",
-            "source_implementation": "BudgetSettingsResolver.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-BUDGET-003",
@@ -49,7 +49,7 @@
             "scenario_id": "budget.effective-month-inheritance",
             "group_id": "FIX-BUD-003",
             "domain": "budgets",
-            "source_implementation": "BudgetSettingsResolver.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-BUDGET-005",
@@ -70,7 +70,7 @@
             "scenario_id": "closeout.eligibility-result-snapshot",
             "group_id": "FIX-CLOSE-001",
             "domain": "closeouts",
-            "source_implementation": "MonthCloseoutService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-CLOSEOUT-001",
@@ -94,7 +94,7 @@
             "scenario_id": "closeout.allocation-reopen-stale",
             "group_id": "FIX-CLOSE-002",
             "domain": "closeouts",
-            "source_implementation": "MonthCloseoutService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-CLOSEOUT-007",
@@ -118,7 +118,7 @@
             "scenario_id": "cross.transaction-fund-closeout",
             "group_id": "FIX-CROSS-001",
             "domain": "cross-domain",
-            "source_implementation": "FundCloseoutIntegrationService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [],
             "status": "verified",
@@ -135,7 +135,7 @@
             "scenario_id": "csv.preview-dry-run-mappings",
             "group_id": "FIX-CSV-001",
             "domain": "csv",
-            "source_implementation": "CsvImportService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-CSV-001",
@@ -165,7 +165,7 @@
             "scenario_id": "csv.commit-rollback-export",
             "group_id": "FIX-CSV-002",
             "domain": "csv",
-            "source_implementation": "CsvExportService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-CSV-011",
@@ -185,7 +185,7 @@
             "scenario_id": "fund.ledger-balance-goal",
             "group_id": "FIX-FUND-001",
             "domain": "funds",
-            "source_implementation": "FundBalanceService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-FUND-001",
@@ -208,7 +208,7 @@
             "scenario_id": "fund.archive-source-restrictions",
             "group_id": "FIX-FUND-002",
             "domain": "funds",
-            "source_implementation": "FundService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-FUND-006",
@@ -229,7 +229,7 @@
             "scenario_id": "fund.transaction-closeout-linkage",
             "group_id": "FIX-FUND-003",
             "domain": "funds",
-            "source_implementation": "FundCloseoutIntegrationService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-FUND-009",
@@ -251,7 +251,7 @@
             "scenario_id": "overview.month-summary",
             "group_id": "FIX-OVR-001",
             "domain": "overview",
-            "source_implementation": "MonthOverviewService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-OVR-001",
@@ -272,7 +272,7 @@
             "scenario_id": "insights.range-aggregates",
             "group_id": "FIX-OVR-002",
             "domain": "insights",
-            "source_implementation": "MetricsController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-OVR-004",
@@ -292,7 +292,7 @@
             "scenario_id": "recurring.schedule-generation",
             "group_id": "FIX-REC-001",
             "domain": "recurring",
-            "source_implementation": "RecurringExpenseService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-REC-002",
@@ -314,7 +314,7 @@
             "scenario_id": "recurring.version-change-delete",
             "group_id": "FIX-REC-002",
             "domain": "recurring",
-            "source_implementation": "RecurringExpenseService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-REC-001",
@@ -335,7 +335,7 @@
             "scenario_id": "recurring.idempotent-materialization",
             "group_id": "FIX-REC-003",
             "domain": "recurring",
-            "source_implementation": "RecurringExpenseService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-014",
@@ -356,7 +356,7 @@
             "scenario_id": "savings-plan.allocation-state",
             "group_id": "FIX-SAV-001",
             "domain": "savings-plan",
-            "source_implementation": "SavingsPlanService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-SAVINGS-001",
@@ -378,7 +378,7 @@
             "scenario_id": "savings-plan.pacing-directed-activity",
             "group_id": "FIX-SAV-002",
             "domain": "savings-plan",
-            "source_implementation": "SavingsPlanService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-SAVINGS-005",
@@ -399,7 +399,7 @@
             "scenario_id": "taxonomy.lifecycle-and-icons",
             "group_id": "FIX-TAX-001",
             "domain": "taxonomy",
-            "source_implementation": "TaxonomyController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TAX-001",
@@ -421,7 +421,7 @@
             "scenario_id": "taxonomy.historical-relationships-after-delete",
             "group_id": "FIX-TAX-001",
             "domain": "taxonomy",
-            "source_implementation": "TaxonomyController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TAX-007"
@@ -440,7 +440,7 @@
             "scenario_id": "transaction.crud-validation",
             "group_id": "FIX-TXN-001",
             "domain": "transactions",
-            "source_implementation": "TransactionController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-001",
@@ -465,7 +465,7 @@
             "scenario_id": "transaction.filter-summary-pagination",
             "group_id": "FIX-TXN-002",
             "domain": "transactions",
-            "source_implementation": "TransactionController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-008",
@@ -486,7 +486,7 @@
             "scenario_id": "transaction.suggestion-ranking",
             "group_id": "FIX-TXN-003",
             "domain": "transactions",
-            "source_implementation": "TransactionController.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-011"
@@ -505,7 +505,7 @@
             "scenario_id": "transaction.duplicate-import-linkage",
             "group_id": "FIX-TXN-004",
             "domain": "transactions",
-            "source_implementation": "CsvImportCommitter.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-012"
@@ -524,7 +524,7 @@
             "scenario_id": "transaction.fund-linked-mutation",
             "group_id": "FIX-TXN-005",
             "domain": "transactions",
-            "source_implementation": "FundTransactionIntegrationService.php",
+            "source_implementation": "encrypted-domain fixture corpus",
             "future_consumer": "future client domain parity runner",
             "covered_invariant_ids": [
                 "INV-TXN-013"
