@@ -63,7 +63,7 @@ function phase4aOwnershipMap(): array
     return [
         'user_sessions' => 'user_id', 'user_financial_vaults' => 'user_id', 'vault_quick_unlock_credentials' => 'user_id', 'webauthn_challenges' => 'user_id',
         'encrypted_record_sync_state' => 'user_id', 'encrypted_record_batches' => 'user_id', 'encrypted_financial_records' => 'user_id', 'encrypted_record_changes' => 'user_id',
-        'email_change_requests' => 'user_id', 'password_reset_requests' => 'user_id', 'master_api_keys' => 'user_id', 'audit_logs' => 'actor_user_id',
+        'email_change_requests' => 'user_id', 'password_reset_requests' => 'user_id', 'audit_logs' => 'actor_user_id',
         'financial_privacy_migrations' => 'user_id', 'financial_privacy_cleanup_jobs' => 'user_id', 'encrypted_migration_manifests' => 'user_id', 'encrypted_migration_records' => 'user_id',
         'tags' => 'user_id', 'cards' => 'user_id', 'contexts' => 'user_id', 'funds' => 'user_id', 'monthly_savings_allocations' => 'user_id', 'recurring_expenses' => 'user_id',
         'budget_settings' => 'user_id', 'budget_settings_versions' => 'user_id', 'monthly_closeouts' => 'user_id', 'monthly_closeout_allocations' => 'user_id',
@@ -131,7 +131,7 @@ function phase4aDeleteOrder(): array
         ['fund_entries', 'user_id'], ['recurring_expense_occurrences', 'user_id'], ['monthly_closeout_allocations', 'user_id'], ['monthly_closeouts', 'user_id'], ['monthly_savings_allocations', 'user_id'], ['transactions', 'user_id'],
         ['csv_import_runs', 'user_id'], ['csv_export_runs', 'user_id'], ['recurring_expenses', 'user_id'], ['budget_settings_versions', 'user_id'], ['budget_settings', 'user_id'],
         ['funds', 'user_id'], ['contexts', 'user_id'], ['cards', 'user_id'], ['tags', 'user_id'], ['email_change_requests', 'user_id'], ['password_reset_requests', 'user_id'],
-        ['master_api_keys', 'user_id'], ['webauthn_challenges', 'user_id'], ['vault_quick_unlock_credentials', 'user_id'], ['user_sessions', 'user_id'], ['user_financial_vaults', 'user_id'],
+        ['webauthn_challenges', 'user_id'], ['vault_quick_unlock_credentials', 'user_id'], ['user_sessions', 'user_id'], ['user_financial_vaults', 'user_id'],
     ];
 }
 

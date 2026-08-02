@@ -19,7 +19,7 @@ final class AuditLogController
 
     public function list(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->auth->requireRole($ctx, ['owner', 'admin']);
 
         $limit = min(100, max(1, (int) ($request->query['limit'] ?? 50)));

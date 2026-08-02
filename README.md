@@ -29,8 +29,7 @@ encrypted-record concerns:
 - Profile, preferences, onboarding status, email changes, and Google conversion.
 - Vault setup, passphrase and recovery metadata, migration status, Quick Unlock,
   device lifecycle, and privacy-safe operational status.
-- Master API-key management and audit-log access. API-key authentication does
-  not bypass encrypted financial boundaries.
+- Session-authenticated audit-log access.
 - Encrypted financial record create, update, delete, batch, sync, revision, and
   conflict handling.
 
@@ -60,11 +59,8 @@ of the supported product API.
 ## Auth modes
 - Cookie session: `sid` cookie (`session_id.secret`)
 - Session header: `Authorization: Session <session_id.secret>`
-- Master API key: `X-API-Key: bgtm_live_...`
 - Cookie-session writes (`POST`, `PUT`, `PATCH`, `DELETE`) require `X-CSRF-Token` from `session.csrf_token`.
 - Missing/invalid CSRF token on cookie-session writes returns `403 FORBIDDEN`.
-
-Master API keys are blocked from `/me/master-api-keys*` management routes.
 
 ## Invite acceptance UX requirement
 - Invite links must open an invite-acceptance experience, not a plain sign-in screen.
@@ -144,10 +140,6 @@ MAIL_FROM_NAME=Budget App
 MAIL_LOG_PATH=storage/mail.log
 RESEND_API_KEY=
 ```
-Configure master API key expiry:
-```bash
-MASTER_API_KEY_MAX_TTL_DAYS=365
-```
 Configure auth/invite rate limiting:
 ```bash
 RATE_LIMIT_AUTH_MAX=10
@@ -166,10 +158,6 @@ RATE_LIMIT_EMAIL_CHANGE_VERIFY_MAX=10
 RATE_LIMIT_EMAIL_CHANGE_VERIFY_WINDOW_SECONDS=600
 RATE_LIMIT_AUTH_CONVERT_MAX=5
 RATE_LIMIT_AUTH_CONVERT_WINDOW_SECONDS=600
-RATE_LIMIT_API_KEY_CREATE_MAX=5
-RATE_LIMIT_API_KEY_CREATE_WINDOW_SECONDS=3600
-RATE_LIMIT_API_KEY_REVOKE_MAX=20
-RATE_LIMIT_API_KEY_REVOKE_WINDOW_SECONDS=3600
 RATE_LIMIT_PROFILE_CHANGE_MAX=30
 RATE_LIMIT_PROFILE_CHANGE_WINDOW_SECONDS=3600
 RATE_LIMIT_STORAGE_PATH=storage/rate-limit
@@ -257,10 +245,9 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Tokens/codes are not returned in API responses.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
-- Auth, invitation, API key, profile-change, email-change, and account-conversion endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- Auth, invitation, profile-change, email-change, and account-conversion endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
 - Password reset emails are generic for unknown emails to avoid account enumeration. Completed resets revoke existing sessions and are audit logged.
-- Master API key auth rejects expired keys. New key expirations must be future-dated and within `MASTER_API_KEY_MAX_TTL_DAYS`; `expires_at=null` intentionally creates a non-expiring key.
-- Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
+- Audit logs are recorded for invite acceptance/creation, profile updates, email changes, and account conversion to Google sign-in. Historical API-key audit rows remain readable. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
 - CSV imports are bounded by file size, row count, and returned row-error limits. Exports stream CSV rows and escape spreadsheet formula prefixes before writing cells.
 - Security headers are attached to API responses (`X-Content-Type-Options`, `X-Frame-Options`, CSP, etc.). HSTS is added on HTTPS requests.
 - Backend server errors use structured JSON logs and can send optional webhook alerts when `ERROR_ALERT_WEBHOOK_URL` is configured.

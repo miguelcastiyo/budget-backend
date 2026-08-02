@@ -16,6 +16,7 @@ $scripts = [
     'scripts/test_operator_boundary.php',
     'scripts/test_phase4_schema_contract.php',
     'scripts/test_user_pruning_contract.php',
+    'scripts/test_master_api_key_retirement.php',
 ];
 
 foreach ($scripts as $script) {

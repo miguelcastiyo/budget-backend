@@ -19,25 +19,25 @@ final class VaultController
 
     public function get(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         return Response::json($this->vaults->metadata($ctx->userId()));
     }
 
     public function initialize(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         return Response::json($this->vaults->initialize($ctx, $request->json(), $request), 201);
     }
 
     public function replacePassphrase(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         return Response::json($this->vaults->replacePassphrase($ctx, $request->json(), $request));
     }
 
     public function replaceRecovery(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         return Response::json($this->vaults->replaceRecovery($ctx, $request->json(), $request));
     }
 }

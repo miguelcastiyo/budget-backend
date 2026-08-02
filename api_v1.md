@@ -85,13 +85,13 @@ Categories are fixed in v1 (not user-editable). Debt payments use `needs` plus a
 }
 ```
 
-The endpoint is read-only and does not expose financial data, secrets, ciphertext, backup details, or failure messages. Master API keys may read status because no privacy transition is performed. Migration start/cutover routes are not implemented in Phase 1 and must not be inferred from this endpoint.
+The endpoint is read-only and does not expose financial data, secrets, ciphertext, backup details, or failure messages. Migration start/cutover routes are not implemented in Phase 1 and must not be inferred from this endpoint.
 
 ### Client-owned Vault foundation
 
 `GET /api/v1/me/vault` and `POST /api/v1/me/vault` are session-only routes. Initialization requires recent interactive authentication and a CSRF token for cookie sessions. The browser creates a random AES-GCM-256 Vault key, wraps it with a PBKDF2-HMAC-SHA-256-derived AES-KW key and a separate random recovery AES-KW key, then sends only the opaque wrapped materials. Passphrases, recovery secrets, raw keys, and financial ciphertext never cross this API in Phase 2.
 
-New accounts begin in `vault_setup_required`. After Recovery Code confirmation, the client sends the opaque wrappers and the backend atomically initializes encrypted authority and transitions the account to `encrypted`. Existing `legacy_plaintext` accounts continue to use the migration path. Exact repeated initialization is idempotent, while a different second payload returns `VAULT_ALREADY_INITIALIZED`. Master API keys are rejected, including for metadata reads, because the wrapped envelope is sensitive control-plane material.
+New accounts begin in `vault_setup_required`. After Recovery Code confirmation, the client sends the opaque wrappers and the backend atomically initializes encrypted authority and transitions the account to `encrypted`. Existing `legacy_plaintext` accounts continue to use the migration path. Exact repeated initialization is idempotent, while a different second payload returns `VAULT_ALREADY_INITIALIZED`.
 
 ### Encrypted record substrate
 
@@ -99,7 +99,7 @@ Phase 3 adds session-authenticated `POST /api/v1/me/encrypted-records`, `GET/PUT
 
 The visible envelope metadata is limited to the opaque `vault_id` and `record_id`, envelope version `1`, record revision, Base64URL AES-GCM IV/ciphertext, deletion state, and a per-user monotonic sync sequence. The backend never decrypts, searches, validates, logs, or interprets financial meaning. Ciphertext is stored as binary with a 262,144-byte maximum and may reveal approximate plaintext size.
 
-Updates require `expected_revision` and an envelope revision exactly one higher. Stale writes return `ENCRYPTED_RECORD_REVISION_CONFLICT`; exact mutation retries are idempotent. Deletes create retained sync-visible tombstones, and record IDs are never reusable. Sync uses `after` plus bounded cursor pagination; omitted/zero `after` performs a full retained-history sync. Master API keys cannot access these routes.
+Updates require `expected_revision` and an envelope revision exactly one higher. Stale writes return `ENCRYPTED_RECORD_REVISION_CONFLICT`; exact mutation retries are idempotent. Deletes create retained sync-visible tombstones, and record IDs are never reusable. Sync uses `after` plus bounded cursor pagination; omitted/zero `after` performs a full retained-history sync.
 
 ### Goals
 - Invite-only access, no public sign-up.
@@ -110,19 +110,13 @@ Updates require `expected_revision` and an envelope revision exactly one higher.
 - Web: secure, httpOnly cookie `sid`.
 - Native (future iOS): `Authorization: Session <session_token>`.
 - Both map to the same `user_sessions` table (single session domain model).
-- API testing: `X-API-Key: bgtm_...` (non-session master API key).
+- API testing: sign in normally and use the resulting session cookie or `Authorization: Session <session_token>` header.
 
 ### CSRF
 - Cookie sessions require `X-CSRF-Token` on non-GET requests.
 - CSRF token is returned as `session.csrf_token` on session creation/sign-in responses.
 - Missing/invalid CSRF token for cookie-session writes returns `403 FORBIDDEN`.
-- CSRF is not required for `Authorization: Session <session_token>` or `X-API-Key` requests.
-
-### Master API Key Rules
-- Master API keys are for testing and are non-session credentials.
-- Only owner/admin can generate/list/revoke master API keys.
-- Raw key value is shown only once at creation and only the hash is stored.
-- Master API keys can access protected `/me/*` routes except key-management routes.
+- CSRF is not required for `Authorization: Session <session_token>` requests; cookie-session writes require `X-CSRF-Token`.
 
 ### Session Object
 ```json
@@ -652,61 +646,6 @@ Response `200`:
 }
 ```
 
-### 4.11 List Master API Keys
-`GET /me/master-api-keys`
-
-Auth required: session auth only.
-
-Response:
-```json
-{
-  "items": [
-    {
-      "id": "mak_123",
-      "name": "local-postman",
-      "key_prefix": "bgtm_live_7fA9",
-      "created_at": "2026-03-05T19:12:00Z",
-      "last_used_at": "2026-03-05T19:30:44Z",
-      "expires_at": null,
-      "status": "active"
-    }
-  ]
-}
-```
-
-### 4.10 Create Master API Key
-`POST /me/master-api-keys`
-
-Auth required: session auth only.
-
-Request:
-```json
-{
-  "name": "local-postman",
-  "expires_at": null
-}
-```
-
-`expires_at` may be `null` for a non-expiring key. When provided, it must be a valid future date-time within `MASTER_API_KEY_MAX_TTL_DAYS` (default `365`). Expired keys are rejected during API key authentication.
-
-Response `201`:
-```json
-{
-  "id": "mak_123",
-  "name": "local-postman",
-  "api_key": "bgtm_live_2M4...full_secret...",
-  "key_prefix": "bgtm_live_2M4x",
-  "created_at": "2026-03-05T19:12:00Z",
-  "expires_at": null,
-  "status": "active"
-}
-```
-
-### 4.11 Revoke Master API Key
-`DELETE /me/master-api-keys/{api_key_id}`
-
-Auth required: session auth only.
-
 ### 4.12 List Audit Logs
 `GET /me/audit-logs?limit=50`
 
@@ -715,8 +654,6 @@ Auth required: session auth only. User must be `owner` or `admin`.
 Audit logs are written for security-sensitive account events:
 - `invitation.created`
 - `invitation.accepted`
-- `master_api_key.created`
-- `master_api_key.revoked`
 - `profile.updated`
 - `profile.preferences_updated`
 - `profile.email_change_requested`
@@ -724,6 +661,10 @@ Audit logs are written for security-sensitive account events:
 - `profile.auth_provider_changed`
 - `profile.password_reset_requested`
 - `profile.password_reset_completed`
+
+Historical audit rows may also contain `actor_auth_type: api_key` and the
+legacy actions `master_api_key.created` or `master_api_key.revoked`. The
+retired credential cannot create new events.
 
 Response:
 ```json
@@ -734,16 +675,12 @@ Response:
       "actor_user_id": "1",
       "actor_email": "owner@example.com",
       "actor_auth_type": "session",
-      "action": "master_api_key.created",
-      "target_type": "master_api_key",
-      "target_id": "mak_123",
+      "action": "profile.updated",
+      "target_type": "user",
+      "target_id": "1",
       "ip_address": "127.0.0.1",
       "user_agent": "Mozilla/5.0",
-      "metadata": {
-        "name": "local-postman",
-        "key_prefix": "bgtm_live_2M4x",
-        "expires_at": null
-      },
+      "metadata": {"fields": ["display_name"]},
       "created_at": "2026-03-05 19:12:00"
     }
   ]
@@ -2265,8 +2202,6 @@ Public auth flows are limited by client address:
 
 Sensitive authenticated flows are limited by credential/session identity plus a coarse client-address bucket:
 - `POST /auth/invitations`
-- `POST /me/master-api-keys`
-- `DELETE /me/master-api-keys/{api_key_id}`
 - `POST /me/transactions/import.csv`
 - `DELETE /me/imports/{import_run_id}/transactions`
 - `GET /me/transactions/export.csv`
@@ -2286,9 +2221,7 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 - All `/me/*` resources are scoped to the authenticated user only.
 - Users can never access another user’s tags, cards, transactions, metrics, imports, or exports.
 - Only owners can create/list invites.
-- Only owner/admin can generate/list/revoke master API keys.
 - Only owner/admin can list audit logs.
-- Master API key auth can call protected routes for the key owner, except `/me/master-api-keys*` management routes.
 
 ## 20) Non-Goals (v1)
 - Public self-signup
@@ -2298,7 +2231,7 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 
 ## 21) Phase 5 Migration Staging
 
-Migration control is session-only; master API keys are rejected. Start also
+Migration control is session-only. Start also
 requires recent interactive authentication and an initialized Vault.
 
 - `POST /me/privacy/migration` starts one run and captures the source financial revision.

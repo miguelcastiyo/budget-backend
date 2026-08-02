@@ -29,13 +29,13 @@ final class ProfileController
 
     public function getMe(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         return Response::json($this->profileFromAuth($ctx->user));
     }
 
     public function updateMe(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         $payload = $request->json();
 
         $displayName = trim((string) ($payload['display_name'] ?? ''));
@@ -74,14 +74,14 @@ final class ProfileController
 
     public function getSetupStatus(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
 
         return Response::json($this->buildSetupStatus($ctx->userId()));
     }
 
     public function updateOnboardingState(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         $payload = $request->json();
 
         if (!is_array($payload) || !array_key_exists('onboarding_dismissed', $payload) || !is_bool($payload['onboarding_dismissed'])) {
@@ -102,7 +102,7 @@ final class ProfileController
 
     public function updatePreferences(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         $payload = $request->json();
         if (!is_array($payload)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed');
@@ -147,7 +147,7 @@ final class ProfileController
 
     public function requestEmailChange(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         if ((string) $ctx->user['auth_provider'] !== 'password') {
             throw new HttpException(403, 'FORBIDDEN', 'Email can only be changed for password users');
         }
@@ -226,7 +226,7 @@ final class ProfileController
 
     public function verifyEmailChange(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
         if ((string) $ctx->user['auth_provider'] !== 'password') {
             throw new HttpException(403, 'FORBIDDEN', 'Email can only be changed for password users');
         }
@@ -297,7 +297,7 @@ final class ProfileController
 
     public function convertAccountToGoogle(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         if ((string) $ctx->user['auth_provider'] !== 'password') {
             throw new HttpException(403, 'FORBIDDEN', 'Only password accounts can be converted to Google sign-in');
         }

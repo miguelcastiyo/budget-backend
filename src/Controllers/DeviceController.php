@@ -20,7 +20,7 @@ final class DeviceController
 
     public function list(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $stmt = $this->pdo->prepare('SELECT device_id, session_id, client_type, user_agent, created_at, last_seen_at, expires_at, revoked_at FROM user_sessions WHERE user_id = :user_id ORDER BY COALESCE(last_seen_at, created_at) DESC, id DESC');
         $stmt->execute([':user_id' => $ctx->userId()]);
         $groups=[]; foreach($stmt->fetchAll() as $row){$id=(string)$row['device_id']; if(!isset($groups[$id])){$groups[$id]=$row;$groups[$id]['has_active']=false;} if($row['revoked_at']===null)$groups[$id]['has_active']=true; if(($row['last_seen_at']??$row['created_at'])>($groups[$id]['last_seen_at']??$groups[$id]['created_at'])){$active=$groups[$id]['has_active'];$groups[$id]=$row;$groups[$id]['has_active']=$active;}}
@@ -31,7 +31,7 @@ final class DeviceController
 
     public function revoke(Request $request, array $params): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->recentAuth->requireRecentInteractiveSession($ctx);
         $id = (string) ($params['device_id'] ?? $params['session_id'] ?? '');
         if ($id === '') throw new HttpException(422, 'VALIDATION_ERROR', 'Session id is required');

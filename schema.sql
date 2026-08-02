@@ -275,35 +275,11 @@ CREATE TABLE password_reset_requests (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE master_api_keys (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  key_id VARCHAR(64) NOT NULL,
-  user_id BIGINT UNSIGNED NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  key_prefix VARCHAR(32) NOT NULL,
-  key_hash CHAR(64) NOT NULL COMMENT 'sha256(full api key)',
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  last_used_at DATETIME NULL,
-  expires_at DATETIME NULL,
-  revoked_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_master_api_keys_key_id (key_id),
-  UNIQUE KEY uq_master_api_keys_hash (key_hash),
-  KEY idx_master_api_keys_user_active (user_id, is_active),
-  CONSTRAINT fk_master_api_keys_user
-    FOREIGN KEY (user_id) REFERENCES users (id),
-  CONSTRAINT chk_master_api_keys_revoked CHECK (
-    (revoked_at IS NULL)
-    OR
-    (is_active = 0)
-  )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE audit_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   event_id VARCHAR(64) NOT NULL,
   actor_user_id BIGINT UNSIGNED NULL,
+  -- api_key is retained for historical audit rows only; runtime auth is session/system.
   actor_auth_type ENUM('session', 'api_key', 'system') NOT NULL DEFAULT 'system',
   action VARCHAR(80) NOT NULL,
   target_type VARCHAR(80) NOT NULL,

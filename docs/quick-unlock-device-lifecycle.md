@@ -18,7 +18,7 @@ The lifecycle semantics are deliberately distinct:
   is idempotent.
 
 Device removal requires a session-only request, recent authentication, and the
-existing cookie-session CSRF protection. API keys cannot remove devices. The
+existing cookie-session CSRF protection. Only supported sessions can remove devices. The
 device response exposes only coarse display metadata and `enabled` /
 `not_enabled` Quick Unlock status; it never exposes credential IDs, public key
 material, PRF input, wrapper bytes, or Vault material.

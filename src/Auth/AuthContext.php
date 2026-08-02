@@ -11,7 +11,6 @@ final class AuthContext
         public readonly array $user,
         public readonly string $authType,
         public readonly ?string $sessionId = null,
-        public readonly ?string $apiKeyId = null,
         public readonly ?string $sessionSource = null,
         public readonly ?string $deviceId = null
     ) {

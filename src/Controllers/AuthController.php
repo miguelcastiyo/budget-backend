@@ -30,7 +30,7 @@ final class AuthController
 
     public function createInvitation(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->auth->requireRole($ctx, ['owner']);
 
         $payload = $request->json();
@@ -161,7 +161,7 @@ SQL;
 
     public function listInvitations(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->auth->requireRole($ctx, ['owner']);
 
         $stmt = $this->pdo->prepare(
@@ -197,7 +197,7 @@ SQL;
     /** @param array{invite_id:string} $params */
     public function revokeInvitation(Request $request, array $params): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->auth->requireRole($ctx, ['owner']);
 
         $inviteId = trim((string) ($params['invite_id'] ?? ''));
@@ -251,7 +251,7 @@ SQL;
     /** @param array{invite_id:string} $params */
     public function deleteInvitedAccount(Request $request, array $params): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: false, sessionOnly: true);
+        $ctx = $this->auth->requireAuth($request);
         $this->auth->requireRole($ctx, ['owner']);
 
         $inviteId = trim((string) ($params['invite_id'] ?? ''));
@@ -291,9 +291,6 @@ SQL;
 
             $revokeSessions = $this->pdo->prepare('UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()) WHERE user_id = :user_id AND revoked_at IS NULL');
             $revokeSessions->execute([':user_id' => $acceptedUserId]);
-
-            $revokeKeys = $this->pdo->prepare("UPDATE master_api_keys SET is_active = 0, revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()) WHERE user_id = :user_id AND is_active = 1 AND revoked_at IS NULL");
-            $revokeKeys->execute([':user_id' => $acceptedUserId]);
 
             $deactivate = $this->pdo->prepare('UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = :user_id AND role <> \'owner\' AND is_active = 1');
             $deactivate->execute([':user_id' => $acceptedUserId]);
@@ -654,7 +651,7 @@ SQL;
 
     public function signOutCurrentSession(Request $request): Response
     {
-        $ctx = $this->auth->requireAuth($request, allowApiKey: true, sessionOnly: false);
+        $ctx = $this->auth->requireAuth($request);
 
         if ($ctx->authType === 'session' && $ctx->sessionId !== null) {
             $stmt = $this->pdo->prepare('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE session_id = :session_id');

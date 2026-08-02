@@ -9,7 +9,6 @@ servers:
 security:
   - cookieAuth: []
   - sessionTokenAuth: []
-  - masterApiKeyAuth: []
 tags:
   - name: Health
   - name: Auth
@@ -17,7 +16,6 @@ tags:
   - name: Privacy
   - name: Vault
   - name: EncryptedRecords
-  - name: ApiKeys
   - name: AuditLogs
   - name: Tags
   - name: Cards
@@ -903,75 +901,6 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
-  /me/master-api-keys:
-    get:
-      tags: [ApiKeys]
-      summary: List master API keys (metadata only)
-      description: Session auth only. Raw key values are never returned.
-      security:
-        - cookieAuth: []
-        - sessionTokenAuth: []
-      responses:
-        '200':
-          description: Master API key metadata
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MasterApiKeyListResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-    post:
-      tags: [ApiKeys]
-      summary: Create a master API key
-      description: Session auth only. Returns full key once at creation. expires_at may be null for a non-expiring key; provided expirations must be future-dated and within the configured max TTL.
-      security:
-        - cookieAuth: []
-        - sessionTokenAuth: []
-      parameters:
-        - $ref: '#/components/parameters/XCsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateMasterApiKeyRequest'
-      responses:
-        '201':
-          description: Master API key created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreateMasterApiKeyResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  /me/master-api-keys/{api_key_id}:
-    delete:
-      tags: [ApiKeys]
-      summary: Revoke a master API key
-      description: Session auth only.
-      security:
-        - cookieAuth: []
-        - sessionTokenAuth: []
-      parameters:
-        - $ref: '#/components/parameters/ApiKeyId'
-        - $ref: '#/components/parameters/XCsrfToken'
-      responses:
-        '204':
-          description: Key revoked
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-
   /me/audit-logs:
     get:
       tags: [AuditLogs]
@@ -1012,11 +941,6 @@ components:
       in: header
       name: Authorization
       description: Use format `Session <session_token>`.
-    masterApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: Non-session master key for testing, format `bgtm_...`.
 
   parameters:
     XCsrfToken:
@@ -1064,12 +988,6 @@ components:
         type: string
     TransactionId:
       name: transaction_id
-      in: path
-      required: true
-      schema:
-        type: string
-    ApiKeyId:
-      name: api_key_id
       in: path
       required: true
       schema:
@@ -1817,6 +1735,7 @@ components:
         actor_auth_type:
           type: string
           enum: [session, api_key, system]
+          description: Authentication source recorded for the historical audit event. `api_key` may appear on legacy records created before master API keys were retired.
         action:
           type: string
         target_type:
@@ -1925,66 +1844,6 @@ components:
           type: string
           minLength: 1
       required: [google_id_token]
-
-    CreateMasterApiKeyRequest:
-      type: object
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 120
-        expires_at:
-          description: Null creates a non-expiring key. A date-time must be in the future and within MASTER_API_KEY_MAX_TTL_DAYS.
-          anyOf:
-            - type: string
-              format: date-time
-            - type: 'null'
-      required: [name]
-
-    MasterApiKeyMetadata:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        key_prefix:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        last_used_at:
-          anyOf:
-            - type: string
-              format: date-time
-            - type: 'null'
-        expires_at:
-          anyOf:
-            - type: string
-              format: date-time
-            - type: 'null'
-        status:
-          type: string
-          enum: [active, expired, revoked]
-      required: [id, name, key_prefix, created_at, last_used_at, expires_at, status]
-
-    MasterApiKeyListResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/MasterApiKeyMetadata'
-      required: [items]
-
-    CreateMasterApiKeyResponse:
-      allOf:
-        - $ref: '#/components/schemas/MasterApiKeyMetadata'
-        - type: object
-          properties:
-            api_key:
-              type: string
-          required: [api_key]
 
     CreateNamedEntityRequest:
       type: object

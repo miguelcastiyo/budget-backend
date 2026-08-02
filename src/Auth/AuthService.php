@@ -19,10 +19,9 @@ final class AuthService
     {
     }
 
-    public function requireAuth(Request $request, bool $allowApiKey = true, bool $sessionOnly = false): AuthContext
+    public function requireAuth(Request $request): AuthContext
     {
         $authHeader = (string) ($request->header('Authorization') ?? '');
-        $apiKey = (string) ($request->header('X-API-Key') ?? '');
 
         if (str_starts_with($authHeader, 'Session ')) {
             $token = trim(substr($authHeader, 8));
@@ -32,19 +31,6 @@ final class AuthService
         $cookieToken = (string) ($request->cookies['sid'] ?? '');
         if ($cookieToken !== '') {
             return $this->authenticateSessionToken($cookieToken, $request, 'cookie');
-        }
-
-        if ($apiKey !== '' && !$allowApiKey) {
-            throw new HttpException(403, 'FORBIDDEN', 'This endpoint requires a session');
-        }
-
-        if ($allowApiKey) {
-            if ($apiKey !== '') {
-                if ($sessionOnly) {
-                    throw new HttpException(403, 'FORBIDDEN', 'This endpoint requires a session');
-                }
-                return $this->authenticateApiKey($apiKey);
-            }
         }
 
         throw new HttpException(401, 'UNAUTHENTICATED', 'Authentication required');
@@ -122,47 +108,6 @@ SQL;
             $touch->execute([':session_id' => $sessionId]);
         }
 
-        return new AuthContext($row, 'session', $sessionId, null, $source, (string) ($row['device_id'] ?? ''));
-    }
-
-    private function authenticateApiKey(string $apiKey): AuthContext
-    {
-        $hash = Str::hashSha256($apiKey);
-
-        $sql = <<<'SQL'
-SELECT
-  mak.key_id,
-  u.id,
-  u.email,
-  u.display_name,
-  u.avatar_url,
-  u.user_preferences,
-  u.auth_provider,
-  u.email_verified,
-  u.role,
-  u.created_at
-FROM master_api_keys mak
-JOIN users u ON u.id = mak.user_id
-WHERE mak.key_hash = :key_hash
-  AND mak.is_active = 1
-  AND mak.revoked_at IS NULL
-  AND (mak.expires_at IS NULL OR mak.expires_at > CURRENT_TIMESTAMP)
-  AND u.is_active = 1
-LIMIT 1
-SQL;
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([':key_hash' => $hash]);
-
-        $row = $stmt->fetch();
-        if (!$row) {
-            throw new HttpException(401, 'UNAUTHENTICATED', 'Master API key is invalid or expired');
-        }
-
-        $touch = $this->pdo->prepare('UPDATE master_api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key_id = :key_id');
-        $touch->execute([':key_id' => $row['key_id']]);
-
-        return new AuthContext($row, 'api_key', null, (string) $row['key_id']);
     }
 
     private function isCsrfProtectedMethod(string $method): bool

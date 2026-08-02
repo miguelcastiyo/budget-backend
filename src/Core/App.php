@@ -9,7 +9,6 @@ use App\Auth\GoogleTokenVerifier;
 use App\Controllers\AuditLogController;
 use App\Controllers\AuthController;
 use App\Controllers\HealthController;
-use App\Controllers\MasterApiKeyController;
 use App\Controllers\ProfileController;
 use App\Controllers\PrivacyStatusController;
 use App\Controllers\VaultController;
@@ -62,7 +61,6 @@ final class App
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $auditLogController = new AuditLogController($pdo, $auth);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
-        $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
         $financialRevisions = new FinancialRevisionService($pdo);
@@ -125,9 +123,6 @@ final class App
         $add('POST', '/me/email-change/verify', fn(Request $request) => $profileController->verifyEmailChange($request));
         $add('POST', '/me/auth/convert-google', fn(Request $request) => $profileController->convertAccountToGoogle($request));
 
-        $add('GET', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->listKeys($request));
-        $add('POST', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->create($request));
-        $add('DELETE', '/me/master-api-keys/{api_key_id}', fn(Request $request, array $params) => $masterApiKeyController->revoke($request, $params));
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
         return new self($router, $config, $rateLimiter, $errorReporter);
@@ -218,26 +213,6 @@ final class App
             return;
         }
 
-        if ($method === 'POST' && $path === '/me/master-api-keys') {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'api-key-create',
-                $this->config->getInt('RATE_LIMIT_API_KEY_CREATE_MAX', 5),
-                $this->config->getInt('RATE_LIMIT_API_KEY_CREATE_WINDOW_SECONDS', 3600)
-            );
-            return;
-        }
-
-        if ($method === 'DELETE' && preg_match('#^/me/master-api-keys/[^/]+$#', $path) === 1) {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'api-key-revoke',
-                $this->config->getInt('RATE_LIMIT_API_KEY_REVOKE_MAX', 20),
-                $this->config->getInt('RATE_LIMIT_API_KEY_REVOKE_WINDOW_SECONDS', 3600)
-            );
-            return;
-        }
-
         if ($method === 'DELETE' && preg_match('#^/me/devices/[^/]+$#', $path) === 1) {
             $this->hitAuthenticatedRateLimit($request, 'device-removal', $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_MAX', 10), $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_WINDOW_SECONDS', 600));
             return;
@@ -315,11 +290,6 @@ final class App
             if ($sessionId !== null) {
                 return 'session:' . hash('sha256', $sessionId);
             }
-        }
-
-        $apiKey = trim((string) ($request->header('X-API-Key') ?? ''));
-        if ($apiKey !== '') {
-            return 'api-key:' . hash('sha256', $apiKey);
         }
 
         return 'client:' . $this->clientIdentifier($request);

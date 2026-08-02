@@ -14,7 +14,7 @@ $required = [
     'vault_quick_unlock_credentials', 'webauthn_challenges',
     'encrypted_record_sync_state', 'encrypted_record_batches', 'encrypted_financial_records',
     'encrypted_record_changes', 'email_change_requests',
-    'password_reset_requests', 'master_api_keys', 'audit_logs',
+    'password_reset_requests', 'audit_logs',
 ];
 $forbidden = [
     'financial_privacy_migrations', 'financial_privacy_cleanup_jobs',
