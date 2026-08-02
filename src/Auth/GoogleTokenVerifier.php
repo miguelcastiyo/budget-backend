@@ -333,7 +333,6 @@ final class GoogleTokenVerifier
                 'http_code' => $httpCode,
                 'curl_error' => $curlError,
             ]);
-            curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate fetch failed: ' . $curlError);
         }
 
@@ -343,7 +342,6 @@ final class GoogleTokenVerifier
                 'http_code' => $httpCode,
                 'body_prefix' => substr($body, 0, 200),
             ]);
-            curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate fetch returned invalid JSON');
         }
 
@@ -351,7 +349,6 @@ final class GoogleTokenVerifier
             $this->logger->error('google_certs_http_error', 'Google certificate fetch returned an error response', [
                 'http_code' => $httpCode,
             ]);
-            curl_close($ch);
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate service unavailable');
         }
 
@@ -364,7 +361,6 @@ final class GoogleTokenVerifier
             $certs[$kid] = $certificate;
         }
 
-        curl_close($ch);
         if ($certs === []) {
             throw new HttpException(500, 'INTERNAL_ERROR', 'Google certificate response did not include usable keys');
         }
