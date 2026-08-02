@@ -13,9 +13,6 @@ final class FinancialPrivacyStateService
     /** @var array<string, list<string>> */
     private const TRANSITIONS = [
         'vault_setup_required' => ['encrypted'],
-        'legacy_plaintext' => ['migration_in_progress'],
-        'migration_in_progress' => ['encrypted', 'migration_failed', 'legacy_plaintext'],
-        'migration_failed' => ['migration_in_progress', 'legacy_plaintext'],
         'encrypted' => [],
     ];
 
@@ -33,13 +30,6 @@ final class FinancialPrivacyStateService
         }
 
         return FinancialPrivacyState::fromDatabase($value);
-    }
-
-    public function requireLegacyPlaintextAuthority(int $userId): void
-    {
-        if ($this->get($userId) !== FinancialPrivacyState::LEGACY_PLAINTEXT) {
-            throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'Vault initialization is only available for legacy plaintext accounts');
-        }
     }
 
     public function requireEncryptedAuthority(int $userId): void

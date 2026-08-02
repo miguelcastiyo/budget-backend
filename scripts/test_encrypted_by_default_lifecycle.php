@@ -41,7 +41,6 @@ try {
     if ($states->get($userId) !== FinancialPrivacyState::ENCRYPTED) throw new RuntimeException('Vault setup did not transition to encrypted');
     $sync = $pdo->prepare('SELECT next_sync_sequence FROM encrypted_record_sync_state WHERE user_id = :id'); $sync->execute([':id' => $userId]);
     if ((int) $sync->fetchColumn() !== 0) throw new RuntimeException('encrypted sync state was not initialized');
-    expectConflict(fn() => $states->transition($userId, FinancialPrivacyState::LEGACY_PLAINTEXT));
     expectConflict(fn() => $states->transition($userId, FinancialPrivacyState::VAULT_SETUP_REQUIRED));
     echo "Encrypted-by-default lifecycle tests passed\n";
 } finally {

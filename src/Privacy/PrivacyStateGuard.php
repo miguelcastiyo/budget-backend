@@ -25,8 +25,4 @@ final class PrivacyStateGuard
         throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'This operation is not available in the current financial privacy state');
     }
 
-    public function requireLegacyPlaintextAuthority(int $userId): void
-    {
-        $this->requireState($userId, [FinancialPrivacyState::LEGACY_PLAINTEXT]);
-    }
 }

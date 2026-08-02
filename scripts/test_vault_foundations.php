@@ -30,7 +30,7 @@ require __DIR__ . '/../src/bootstrap.php';
 $pdo = new PDO($dsn, (string) getenv('DB_USER'), (string) getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 $suffix = bin2hex(random_bytes(6));
 $email = 'phase2-vault-' . $suffix . '@example.test';
-$insert = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 2 Vault Test', 'password', :password_hash, 1, 'member', 1, 'legacy_plaintext')");
+$insert = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 2 Vault Test', 'password', :password_hash, 1, 'member', 1, 'vault_setup_required')");
 $insert->execute([':email' => $email, ':password_hash' => password_hash('phase2-test-only', PASSWORD_DEFAULT)]);
 $userId = (int) $pdo->lastInsertId();
 

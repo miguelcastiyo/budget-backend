@@ -195,11 +195,7 @@ final class EncryptedRecordService
     {
         $userId = $auth->userId();
         $state = $this->states->get($userId);
-        if (in_array($state, [
-            FinancialPrivacyState::VAULT_SETUP_REQUIRED,
-            FinancialPrivacyState::MIGRATION_IN_PROGRESS,
-            FinancialPrivacyState::MIGRATION_FAILED,
-        ], true)) {
+        if ($state === FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
             throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'Encrypted financial authority is not enabled for this account');
         }
         if ($this->vaults->findByUser($userId) === null) throw new HttpException(404, 'VAULT_NOT_INITIALIZED', 'Vault is not initialized');

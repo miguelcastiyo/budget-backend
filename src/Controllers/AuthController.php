@@ -1200,19 +1200,9 @@ HTML;
 
     private function isOnboardingComplete(int $userId, string $displayName): bool
     {
-        if (trim($displayName) === '') {
-            return false;
-        }
-
-        $stmt = $this->pdo->prepare('SELECT monthly_income FROM budget_settings WHERE user_id = :user_id LIMIT 1');
-        $stmt->execute([':user_id' => $userId]);
-        $row = $stmt->fetch();
-
-        if (!$row) {
-            return false;
-        }
-
-        return (float) $row['monthly_income'] > 0;
+        // Financial completion is encrypted-domain data and cannot be derived
+        // from the account/profile endpoint.
+        return trim($displayName) !== '';
     }
 
     private function sessionCookieAttributes(): string

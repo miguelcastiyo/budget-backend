@@ -39,7 +39,7 @@ final class VaultService
         $this->recentAuth->requireRecentInteractiveSession($auth);
         $userId = $auth->userId();
         $state = $this->states->get($userId);
-        if ($state !== FinancialPrivacyState::LEGACY_PLAINTEXT && $state !== FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
+        if ($state !== FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
             throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'Vault initialization is unavailable in the current financial privacy state');
         }
         $data = $this->validatePayload($payload);

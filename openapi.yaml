@@ -1482,20 +1482,12 @@ components:
       properties:
         financial_privacy_state:
           type: string
-          enum: [vault_setup_required, legacy_plaintext, migration_in_progress, migration_failed, encrypted]
+          enum: [vault_setup_required, encrypted]
         financial_revision:
           type: integer
           format: int64
           minimum: 0
-        active_migration:
-          oneOf:
-            - $ref: '#/components/schemas/ActivePrivacyMigration'
-            - type: 'null'
-        cleanup_status:
-          oneOf:
-            - $ref: '#/components/schemas/PrivacyCleanupStatus'
-            - type: 'null'
-      required: [financial_privacy_state, financial_revision, active_migration, cleanup_status]
+      required: [financial_privacy_state, financial_revision]
 
     VaultMetadata:
       type: object
@@ -1657,38 +1649,6 @@ components:
         has_more:
           type: boolean
       required: [changes, next_cursor, has_more]
-
-    ActivePrivacyMigration:
-      type: object
-      properties:
-        migration_id:
-          type: string
-        status:
-          type: string
-          enum: [active]
-        source_financial_revision:
-          type: integer
-          format: int64
-        started_at:
-          type: string
-          format: date-time
-      required: [migration_id, status, source_financial_revision, started_at]
-
-    PrivacyCleanupStatus:
-      type: object
-      properties:
-        cleanup_job_id:
-          type: string
-        status:
-          type: string
-          enum: [pending, running, retry_pending, completed, failed]
-        attempt_count:
-          type: integer
-          minimum: 0
-        next_attempt_at:
-          type: string
-          format: date-time
-      required: [cleanup_job_id, status, attempt_count, next_attempt_at]
 
     SetupTask:
       type: object

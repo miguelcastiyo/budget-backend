@@ -9,9 +9,6 @@ use InvalidArgumentException;
 enum FinancialPrivacyState: string
 {
     case VAULT_SETUP_REQUIRED = 'vault_setup_required';
-    case LEGACY_PLAINTEXT = 'legacy_plaintext';
-    case MIGRATION_IN_PROGRESS = 'migration_in_progress';
-    case MIGRATION_FAILED = 'migration_failed';
     case ENCRYPTED = 'encrypted';
 
     public static function fromDatabase(mixed $value): self

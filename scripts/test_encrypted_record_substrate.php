@@ -19,7 +19,7 @@ require __DIR__ . '/../src/bootstrap.php';
 $pdo = new PDO($dsn, (string) getenv('DB_USER'), (string) getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 $suffix = bin2hex(random_bytes(6));
 $email = 'phase3-record-' . $suffix . '@example.test';
-$stmt = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 3 Record Test', 'password', :password_hash, 1, 'member', 1, 'legacy_plaintext')");
+$stmt = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 3 Record Test', 'password', :password_hash, 1, 'member', 1, 'vault_setup_required')");
 $stmt->execute([':email' => $email, ':password_hash' => password_hash('phase3-test-only', PASSWORD_DEFAULT)]);
 $userId = (int) $pdo->lastInsertId();
 
@@ -67,7 +67,7 @@ try {
     $columns = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'encrypted_financial_records'")->fetchAll(PDO::FETCH_COLUMN);
     foreach (['plaintext', 'amount', 'name', 'date', 'passphrase', 'recovery_secret', 'vault_key'] as $forbidden) if (in_array($forbidden, $columns, true)) throw new RuntimeException("forbidden encrypted-record column exists: {$forbidden}");
     $state = $pdo->prepare('SELECT financial_privacy_state, financial_revision FROM users WHERE id = :id'); $state->execute([':id' => $userId]); $stateRow = $state->fetch();
-    if ($stateRow['financial_privacy_state'] !== 'legacy_plaintext' || (int) $stateRow['financial_revision'] !== 0) throw new RuntimeException('encrypted substrate changed Phase 1 state');
+    if ($stateRow['financial_privacy_state'] !== 'vault_setup_required' || (int) $stateRow['financial_revision'] !== 0) throw new RuntimeException('encrypted substrate changed setup state');
     echo "Encrypted record substrate tests passed\n";
 } finally {
     $pdo->prepare('DELETE FROM audit_logs WHERE actor_user_id = :id')->execute([':id' => $userId]);

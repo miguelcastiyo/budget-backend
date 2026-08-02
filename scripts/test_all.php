@@ -14,6 +14,8 @@ $scripts = [
     'scripts/test_runtime_source_boundary.php',
     'scripts/test_setup_status_contract.php',
     'scripts/test_operator_boundary.php',
+    'scripts/test_phase4_schema_contract.php',
+    'scripts/test_user_pruning_contract.php',
 ];
 
 foreach ($scripts as $script) {

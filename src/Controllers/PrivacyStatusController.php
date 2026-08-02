@@ -27,9 +27,6 @@ final class PrivacyStatusController
         return Response::json([
             'financial_privacy_state' => $this->states->get($ctx->userId())->value,
             'financial_revision' => $this->revisions->get($ctx->userId()),
-            'active_migration' => null,
-            'latest_migration' => null,
-            'cleanup_status' => null,
         ]);
     }
 }

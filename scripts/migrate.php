@@ -280,6 +280,10 @@ function applySqlFile(PDO $pdo, string $path): void
     try {
         $pdo->exec($sql);
     } catch (Throwable $e) {
+        if (basename($path) === '20260801_retire_plaintext_financial_schema.sql' && str_contains($e->getMessage(), 'phase4_schema_guard_failure')) {
+            fwrite(STDERR, "Phase 4 schema retirement refused: legacy or transition-state accounts still exist. A dry-run does not delete accounts; after reviewing its aggregate report, rerun the environment-safe pruning command with --confirm-delete, then retry this migration.\n");
+            exit(1);
+        }
         fwrite(STDERR, 'Migration failed for ' . basename($path) . ': ' . $e->getMessage() . PHP_EOL);
         exit(1);
     }

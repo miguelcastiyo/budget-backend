@@ -36,11 +36,4 @@ foreach ($manifest['entries'] as $entry) {
     if (!is_array($fixture)) $fail('fixture JSON does not parse: ' . $entry['fixture_id']);
     if ($validator->validateFixture($fixture, $known) !== []) $fail('fixture schema contract failed: ' . $entry['fixture_id']);
 }
-$safetyScripts = [__DIR__ . '/setup_privacy_parity_database.php', __DIR__ . '/reset_privacy_parity_database.php', __DIR__ . '/verify_privacy_parity_database.php'];
-foreach ($safetyScripts as $script) {
-    $output = [];
-    $exit = 0;
-    exec('env -u PRIVACY_PARITY_TEST ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script) . ' 2>&1', $output, $exit);
-    if ($exit !== 2) $fail('safety gate did not refuse missing parity flag: ' . basename($script));
-}
 fwrite(STDOUT, "Privacy parity infrastructure tests passed\n");

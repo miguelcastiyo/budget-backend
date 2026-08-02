@@ -26,29 +26,15 @@ $config = Config::load($root);
 $pdo = Connection::make($config);
 $tables = [
     'users',
-    'financial_privacy_migrations',
-    'financial_privacy_cleanup_jobs',
-    'encrypted_migration_manifests',
-    'encrypted_migration_records',
+    'user_sessions',
+    'user_financial_vaults',
+    'vault_quick_unlock_credentials',
+    'webauthn_challenges',
     'encrypted_record_batches',
     'encrypted_record_sync_state',
     'encrypted_financial_records',
     'encrypted_record_changes',
-    'tags',
-    'cards',
-    'contexts',
-    'funds',
-    'monthly_savings_allocations',
-    'recurring_expenses',
-    'budget_settings',
-    'budget_settings_versions',
-    'monthly_closeouts',
-    'monthly_closeout_allocations',
-    'transactions',
-    'recurring_expense_occurrences',
-    'fund_entries',
-    'csv_import_runs',
-    'csv_export_runs',
+    'audit_logs',
 ];
 
 $present = [];
@@ -82,12 +68,10 @@ foreach ($tables as $table) {
 }
 
 $report = [
-    'diagnostic_version' => 'phase1b_privacy_state_v1',
+    'diagnostic_version' => 'phase4_encrypted_schema_v1',
     'generated_at_utc' => gmdate('c'),
     'environment_label' => getenv('PRIVACY_EVIDENCE_ENV') ?: 'unspecified',
     'privacy_state_counts' => $grouped($pdo, 'users', 'financial_privacy_state', $present),
-    'migration_status_counts' => $grouped($pdo, 'financial_privacy_migrations', 'status', $present),
-    'cleanup_status_counts' => $grouped($pdo, 'financial_privacy_cleanup_jobs', 'status', $present),
     'row_counts' => $rowCounts,
     'schema_tables_present' => count($present),
     'schema_tables_expected_in_diagnostic' => count($tables),
@@ -101,4 +85,3 @@ $report = [
 ];
 
 echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
-
