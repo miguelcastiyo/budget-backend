@@ -78,10 +78,7 @@ Categories are fixed in v1 (not user-editable). Debt payments use `needs` plus a
 
 ```json
 {
-  "financial_privacy_state": "vault_setup_required",
-  "financial_revision": 0,
-  "active_migration": null,
-  "cleanup_status": null
+  "financial_privacy_state": "vault_setup_required"
 }
 ```
 
@@ -91,7 +88,7 @@ The endpoint is read-only and does not expose financial data, secrets, ciphertex
 
 `GET /api/v1/me/vault` and `POST /api/v1/me/vault` are session-only routes. Initialization requires recent interactive authentication and a CSRF token for cookie sessions. The browser creates a random AES-GCM-256 Vault key, wraps it with a PBKDF2-HMAC-SHA-256-derived AES-KW key and a separate random recovery AES-KW key, then sends only the opaque wrapped materials. Passphrases, recovery secrets, raw keys, and financial ciphertext never cross this API in Phase 2.
 
-New accounts begin in `vault_setup_required`. After Recovery Code confirmation, the client sends the opaque wrappers and the backend atomically initializes encrypted authority and transitions the account to `encrypted`. Existing `legacy_plaintext` accounts continue to use the migration path. Exact repeated initialization is idempotent, while a different second payload returns `VAULT_ALREADY_INITIALIZED`.
+New accounts begin in `vault_setup_required`. After Recovery Code confirmation, the client sends the opaque wrappers and the backend atomically initializes encrypted authority and transitions the account to `encrypted`. Exact repeated initialization is idempotent, while a different second payload returns `VAULT_ALREADY_INITIALIZED`.
 
 ### Encrypted record substrate
 
@@ -2229,26 +2226,6 @@ Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in 
 - Shared household budgets
 - Native iOS-specific endpoints (same contract, different session transport)
 
-## 21) Phase 5 Migration Staging
-
-Migration control is session-only. Start also
-requires recent interactive authentication and an initialized Vault.
-
-- `POST /me/privacy/migration` starts one run and captures the source financial revision.
-- `GET /me/privacy/migration/{migration_id}` returns safe structural progress.
-- `GET /me/privacy/migration/{migration_id}/snapshot` returns the immutable, revision-bound plaintext source snapshot with `Cache-Control: no-store`.
-- `PUT /me/privacy/migration/{migration_id}/manifest` stores the client target manifest.
-- `PUT /me/privacy/migration/{migration_id}/records/{record_id}` idempotently stores one opaque encrypted staging envelope.
-- `POST /me/privacy/migration/{migration_id}/verify` checks revision and exact target completeness.
-- `POST /me/privacy/migration/{migration_id}/cancel` removes staging and restores writable plaintext authority.
-- `POST /me/privacy/migration/{migration_id}/cutover` requires recent session authentication and promotes a fully verified run into encrypted authority atomically.
-
-Before cutover, staging is non-authoritative and normal encrypted-record sync is
-not available during `migration_in_progress`. After a successful cutover,
-`financial_privacy_state` is `encrypted`, normal encrypted-record sync exposes
-the promoted records, legacy financial reads and writes are rejected, staging is
-removed, and plaintext cleanup is scheduled separately. Cleanup failure never
-reverts encrypted authority.
 # Quick Unlock and device endpoints
 
 `PUT /api/v1/me/vault/passphrase` and `PUT /api/v1/me/vault/recovery` are

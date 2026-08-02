@@ -11,7 +11,6 @@ CREATE TABLE users (
   avatar_url VARCHAR(512) NULL,
   user_preferences JSON NULL,
   financial_privacy_state VARCHAR(32) NOT NULL DEFAULT 'vault_setup_required',
-  financial_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
   auth_provider ENUM('password', 'google') NOT NULL,
   password_hash VARCHAR(255) NULL,
   google_sub VARCHAR(128) NULL,

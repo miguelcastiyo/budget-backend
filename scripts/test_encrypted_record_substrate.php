@@ -66,8 +66,8 @@ try {
     foreach ($audit->fetchAll(PDO::FETCH_COLUMN) as $metadata) if (str_contains((string) $metadata, $canary) || str_contains((string) $metadata, 'ciphertext')) throw new RuntimeException('unsafe encrypted-record audit metadata');
     $columns = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'encrypted_financial_records'")->fetchAll(PDO::FETCH_COLUMN);
     foreach (['plaintext', 'amount', 'name', 'date', 'passphrase', 'recovery_secret', 'vault_key'] as $forbidden) if (in_array($forbidden, $columns, true)) throw new RuntimeException("forbidden encrypted-record column exists: {$forbidden}");
-    $state = $pdo->prepare('SELECT financial_privacy_state, financial_revision FROM users WHERE id = :id'); $state->execute([':id' => $userId]); $stateRow = $state->fetch();
-    if ($stateRow['financial_privacy_state'] !== 'vault_setup_required' || (int) $stateRow['financial_revision'] !== 0) throw new RuntimeException('encrypted substrate changed setup state');
+    $state = $pdo->prepare('SELECT financial_privacy_state FROM users WHERE id = :id'); $state->execute([':id' => $userId]); $stateRow = $state->fetch();
+    if ($stateRow['financial_privacy_state'] !== 'vault_setup_required') throw new RuntimeException('encrypted substrate changed setup state');
     echo "Encrypted record substrate tests passed\n";
 } finally {
     $pdo->prepare('DELETE FROM audit_logs WHERE actor_user_id = :id')->execute([':id' => $userId]);

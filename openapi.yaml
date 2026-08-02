@@ -497,7 +497,7 @@ paths:
     get:
       tags: [Privacy]
       summary: Get financial privacy control-plane status
-      description: Read-only infrastructure status. Existing accounts remain in the legacy plaintext backend architecture until later implementation phases.
+      description: Read-only account status. Supported financial states are vault_setup_required and encrypted.
       responses:
         '200':
           description: Privacy status
@@ -1401,11 +1401,7 @@ components:
         financial_privacy_state:
           type: string
           enum: [vault_setup_required, encrypted]
-        financial_revision:
-          type: integer
-          format: int64
-          minimum: 0
-      required: [financial_privacy_state, financial_revision]
+      required: [financial_privacy_state]
 
     VaultMetadata:
       type: object

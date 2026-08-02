@@ -25,7 +25,6 @@ use App\Monitoring\StructuredLogger;
 use App\Security\AuditLogger;
 use App\Security\RateLimiter;
 use App\Privacy\FinancialPrivacyStateService;
-use App\Privacy\FinancialRevisionService;
 use App\Privacy\VaultRepository;
 use App\Privacy\VaultService;
 use App\Privacy\QuickUnlockRepository;
@@ -63,9 +62,8 @@ final class App
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
-        $financialRevisions = new FinancialRevisionService($pdo);
         $vaultRepository = new VaultRepository($pdo);
-        $privacyStatusController = new PrivacyStatusController($auth, $financialStates, $financialRevisions);
+        $privacyStatusController = new PrivacyStatusController($auth, $financialStates);
         $recentAuth = new \App\Privacy\RecentAuthGuard($config);
         $vaultController = new VaultController($auth, new VaultService($pdo, $vaultRepository, $financialStates, $recentAuth, $auditLogger));
         $quickUnlockController = new QuickUnlockController($auth, new QuickUnlockService($pdo, $config, $financialStates, $vaultRepository, $recentAuth, new QuickUnlockRepository($pdo), $auditLogger));
