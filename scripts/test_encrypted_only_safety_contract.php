@@ -5,16 +5,16 @@ declare(strict_types=1);
 /*
  * Permanent, database-free contract for the encrypted financial boundary.
  *
- * This test intentionally does not delete or disable compatibility routes. It
- * prevents future route additions from bypassing the existing policy boundary
- * and prevents accidental removal of the encrypted-record substrate.
+ * This test enforces the Phase 3 public route boundary. Legacy financial
+ * implementation remains available only to isolated operator tooling.
  */
 
 $root = dirname(__DIR__);
 $app = file_get_contents($root . '/src/Core/App.php');
 $schema = file_get_contents($root . '/schema.sql');
+$openapi = file_get_contents($root . '/openapi.yaml');
 
-if ($app === false || $schema === false) {
+if ($app === false || $schema === false || $openapi === false) {
     throw new RuntimeException('encrypted-only safety contract could not read required source files');
 }
 
@@ -40,7 +40,7 @@ if ($routeCount < count($requiredEncryptedRoutes)) {
     throw new RuntimeException("route registration surface is unexpectedly incomplete: {$routeCount}");
 }
 
-$legacyPrefixes = [
+$retiredPrefixes = [
     '/me/budget-settings',
     '/me/tags',
     '/me/cards',
@@ -60,15 +60,19 @@ foreach (preg_split('/\R/', $app) ?: [] as $line) {
     if (!str_contains($line, '$add(')) {
         continue;
     }
-    $isLegacy = false;
-    foreach ($legacyPrefixes as $prefix) {
+foreach ($retiredPrefixes as $prefix) {
         if (str_contains($line, "'{$prefix}")) {
-            $isLegacy = true;
-            break;
+            throw new RuntimeException("retired plaintext financial route is still registered: {$prefix}");
         }
     }
-    if ($isLegacy && !str_contains($line, 'financialRead(') && !str_contains($line, 'financialMutation(')) {
-        throw new RuntimeException('legacy financial route bypasses FinancialReadPolicy or FinancialWritePolicy');
+    if (str_contains($openapi, "  {$prefix}")) {
+        throw new RuntimeException("retired plaintext route remains in openapi.yaml: {$prefix}");
+    }
+}
+
+foreach (['FinancialReadPolicy', 'FinancialWritePolicy', 'financialRead(', 'financialMutation('] as $legacyBoundaryMarker) {
+    if (str_contains($app, $legacyBoundaryMarker)) {
+        throw new RuntimeException("retired plaintext route boundary remains in App.php: {$legacyBoundaryMarker}");
     }
 }
 

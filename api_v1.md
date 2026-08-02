@@ -2345,3 +2345,8 @@ session and Quick Unlock credential for that device. Sign-out revokes only
 the current session; removing a device is the stronger operation. Revocation
 prevents future authenticated sync but does not claim remote cryptographic
 erasure of data already learned by that device.
+# API v1 reference
+
+> Historical reference: plaintext financial endpoints documented below are no
+> longer registered. The current public contract is `openapi.yaml`, which
+> contains only account/security, operational, and encrypted-record routes.

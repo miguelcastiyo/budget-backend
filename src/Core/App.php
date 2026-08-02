@@ -9,53 +9,25 @@ use App\Auth\GoogleTokenVerifier;
 use App\Budget\BudgetSettingsResolver;
 use App\Controllers\AuditLogController;
 use App\Controllers\AuthController;
-use App\Controllers\BudgetSettingsController;
-use App\Controllers\FundController;
 use App\Controllers\HealthController;
-use App\Controllers\ImportExportController;
 use App\Controllers\MasterApiKeyController;
-use App\Controllers\MonthCloseoutController;
-use App\Controllers\MonthOverviewController;
-use App\Controllers\MetricsController;
 use App\Controllers\ProfileController;
 use App\Controllers\PrivacyController;
 use App\Controllers\VaultController;
 use App\Controllers\QuickUnlockController;
 use App\Controllers\EncryptedRecordController;
-use App\Controllers\RecurringExpenseController;
-use App\Controllers\SavingsPlanController;
-use App\Controllers\TaxonomyController;
-use App\Controllers\TransactionController;
 use App\Database\Connection;
-use App\Funds\FundBalanceService;
-use App\Funds\FundCloseoutIntegrationService;
-use App\Funds\FundRepository;
-use App\Funds\FundService;
-use App\Funds\FundTransactionIntegrationService;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
-use App\ImportExport\CsvExportService;
-use App\ImportExport\CsvImportCommitter;
-use App\ImportExport\CsvImportMapper;
-use App\ImportExport\CsvImportReader;
-use App\ImportExport\CsvImportService;
-use App\ImportExport\DataRunRepository;
-use App\ImportExport\TaxonomyImportRepository;
 use App\Mail\Mailer;
-use App\MonthCloseout\MonthCloseoutRepository;
-use App\MonthCloseout\MonthCloseoutService;
 use App\Monitoring\ErrorReporter;
 use App\Monitoring\StructuredLogger;
-use App\Overview\MonthOverviewService;
 use App\Security\AuditLogger;
-use App\Recurring\RecurringExpenseService;
 use App\Security\RateLimiter;
 use App\Privacy\FinancialPrivacyStateService;
 use App\Privacy\FinancialRevisionService;
-use App\Privacy\FinancialWritePolicy;
-use App\Privacy\FinancialReadPolicy;
 use App\Privacy\MigrationSnapshotService;
 use App\Privacy\MigrationStagingRepository;
 use App\Privacy\PrivacyCleanupRepository;
@@ -68,7 +40,6 @@ use App\Privacy\QuickUnlockService;
 use App\Devices\DeviceLifecycleService;
 use App\Privacy\EncryptedRecordRepository;
 use App\Privacy\EncryptedRecordService;
-use App\Savings\SavingsPlanService;
 use Throwable;
 
 final class App
@@ -88,45 +59,17 @@ final class App
         $pdo = Connection::make($config);
 
         $auth = new AuthService($pdo, $config);
-        $recurring = new RecurringExpenseService($pdo);
         $budgetSettingsResolver = new BudgetSettingsResolver($pdo);
-        $savingsPlanService = new SavingsPlanService($pdo, $budgetSettingsResolver);
-        $monthOverviewService = new MonthOverviewService($pdo, $budgetSettingsResolver, $savingsPlanService);
-        $monthCloseoutRepository = new MonthCloseoutRepository($pdo);
-        $fundRepository = new FundRepository($pdo);
-        $fundBalanceService = new FundBalanceService($fundRepository);
-        $fundTransactionIntegrationService = new FundTransactionIntegrationService($pdo, $fundRepository);
-        $fundCloseoutIntegrationService = new FundCloseoutIntegrationService($pdo, $fundRepository);
-        $fundService = new FundService($pdo, $fundRepository, $fundBalanceService, $fundTransactionIntegrationService);
-        $monthCloseoutService = new MonthCloseoutService($pdo, $config, $budgetSettingsResolver, $monthCloseoutRepository, $fundCloseoutIntegrationService);
         $mailer = new Mailer($config);
         $rateLimiter = new RateLimiter($config);
         $structuredLogger = new StructuredLogger($config);
         $errorReporter = new ErrorReporter($config, $structuredLogger);
         $auditLogger = new AuditLogger($pdo);
-        $csvImportMapperBase = new CsvImportMapper();
-        $taxonomyImportRepository = new TaxonomyImportRepository($pdo, $csvImportMapperBase);
-        $csvImportMapper = new CsvImportMapper($taxonomyImportRepository);
-        $dataRunRepository = new DataRunRepository($pdo);
-        $csvImportReader = new CsvImportReader($config, $csvImportMapper);
-        $csvImportCommitter = new CsvImportCommitter($pdo, $taxonomyImportRepository, $csvImportMapper);
-        $csvImportService = new CsvImportService($pdo, $csvImportReader, $csvImportMapper, $csvImportCommitter, $dataRunRepository);
-        $csvExportService = new CsvExportService($pdo, $csvImportMapper, $dataRunRepository);
         $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
         $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $auditLogController = new AuditLogController($pdo, $auth);
-        $budgetSettingsController = new BudgetSettingsController($pdo, $auth, $budgetSettingsResolver);
-        $importExportController = new ImportExportController($auth, $auditLogger, $csvImportService, $csvExportService, $dataRunRepository, $csvImportMapper);
-        $recurringExpenseController = new RecurringExpenseController($pdo, $auth, $recurring);
-        $savingsPlanController = new SavingsPlanController($auth, $savingsPlanService);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $budgetSettingsResolver);
         $masterApiKeyController = new MasterApiKeyController($pdo, $auth, $auditLogger, $config);
-        $taxonomyController = new TaxonomyController($pdo, $auth);
-        $transactionController = new TransactionController($pdo, $auth, $recurring, $fundTransactionIntegrationService);
-        $fundController = new FundController($auth, $fundService);
-        $monthOverviewController = new MonthOverviewController($auth, $monthOverviewService);
-        $monthCloseoutController = new MonthCloseoutController($auth, $monthCloseoutService);
-        $metricsController = new MetricsController($pdo, $auth, $recurring, $budgetSettingsResolver);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
         $financialRevisions = new FinancialRevisionService($pdo);
@@ -143,28 +86,12 @@ final class App
         $deviceLifecycle = new DeviceLifecycleService($pdo, new QuickUnlockRepository($pdo), $auditLogger);
         $deviceController = new \App\Controllers\DeviceController($pdo, $auth, $recentAuth, $deviceLifecycle);
         $encryptedRecordController = new EncryptedRecordController($auth, new EncryptedRecordService($pdo, new EncryptedRecordRepository($pdo), new VaultRepository($pdo), $financialStates, $auditLogger));
-        $writePolicy = new FinancialWritePolicy($financialStates);
-        $readPolicy = new FinancialReadPolicy($financialStates);
 
         $router = new Router();
 
         $add = static function (string $method, string $path, callable $handler) use ($router): void {
             $router->add($method, '/api/v1' . $path, $handler);
             $router->add($method, $path, $handler);
-        };
-
-        $financialMutation = static function (callable $handler) use ($auth, $writePolicy): callable {
-            return static function (Request $request, array $params = []) use ($auth, $writePolicy, $handler): Response {
-                $writePolicy->requirePlaintextWriteAllowed($auth->requireAuth($request)->userId());
-                return $handler($request, $params);
-            };
-        };
-
-        $financialRead = static function (callable $handler) use ($auth, $readPolicy): callable {
-            return static function (Request $request, array $params = []) use ($auth, $readPolicy, $handler): Response {
-                $readPolicy->requireLegacyReadAllowed($auth->requireAuth($request)->userId());
-                return $handler($request, $params);
-            };
         };
 
         $add('GET', '/health', fn(Request $request) => $healthController($request));
@@ -222,75 +149,6 @@ final class App
         $add('POST', '/me/master-api-keys', fn(Request $request) => $masterApiKeyController->create($request));
         $add('DELETE', '/me/master-api-keys/{api_key_id}', fn(Request $request, array $params) => $masterApiKeyController->revoke($request, $params));
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
-
-        // Compatibility boundary: these financial routes remain registered
-        // for migration and rollback support. Every read/write must pass a
-        // privacy policy gate; Phase 2 must not remove routes or tables before
-        // evidence closure.
-        $add('GET', '/me/budget-settings', $financialRead(fn(Request $request) => $budgetSettingsController->get($request)));
-        $add('GET', '/me/budget-settings/versions', $financialRead(fn(Request $request) => $budgetSettingsController->versions($request)));
-        $add('PUT', '/me/budget-settings', $financialMutation(fn(Request $request) => $budgetSettingsController->upsert($request)));
-
-        $add('GET', '/me/tags', $financialRead(fn(Request $request) => $taxonomyController->listTags($request)));
-        $add('GET', '/me/tags/quick-picks', $financialRead(fn(Request $request) => $taxonomyController->tagQuickPicks($request)));
-        $add('POST', '/me/tags', $financialMutation(fn(Request $request) => $taxonomyController->createTag($request)));
-        $add('PATCH', '/me/tags/{tag_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateTag($request, $params)));
-        $add('DELETE', '/me/tags/{tag_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteTag($request, $params)));
-
-        $add('GET', '/me/cards', $financialRead(fn(Request $request) => $taxonomyController->listCards($request)));
-        $add('POST', '/me/cards', $financialMutation(fn(Request $request) => $taxonomyController->createCard($request)));
-        $add('PATCH', '/me/cards/{card_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateCard($request, $params)));
-        $add('DELETE', '/me/cards/{card_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteCard($request, $params)));
-
-        $add('GET', '/me/contexts', $financialRead(fn(Request $request) => $taxonomyController->listContexts($request)));
-        $add('POST', '/me/contexts', $financialMutation(fn(Request $request) => $taxonomyController->createContext($request)));
-        $add('PATCH', '/me/contexts/{context_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->updateContext($request, $params)));
-        $add('DELETE', '/me/contexts/{context_id}', $financialMutation(fn(Request $request, array $params) => $taxonomyController->deleteContext($request, $params)));
-
-        $add('GET', '/me/recurring-expenses', $financialRead(fn(Request $request) => $recurringExpenseController->list($request)));
-        $add('POST', '/me/recurring-expenses', $financialMutation(fn(Request $request) => $recurringExpenseController->create($request)));
-        $add('GET', '/me/recurring-expenses/{recurring_expense_id}/series', $financialRead(fn(Request $request, array $params) => $recurringExpenseController->series($request, $params)));
-        $add('POST', '/me/recurring-expenses/{recurring_expense_id}/schedule-change', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->scheduleChange($request, $params)));
-        $add('PATCH', '/me/recurring-expenses/{recurring_expense_id}', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->update($request, $params)));
-        $add('DELETE', '/me/recurring-expenses/{recurring_expense_id}', $financialMutation(fn(Request $request, array $params) => $recurringExpenseController->delete($request, $params)));
-
-        $add('GET', '/me/transactions', $financialRead(fn(Request $request) => $transactionController->list($request)));
-        $add('GET', '/me/transactions/suggestions', $financialRead(fn(Request $request) => $transactionController->suggestions($request)));
-        $add('POST', '/me/transactions', $financialMutation(fn(Request $request) => $transactionController->create($request)));
-        $add('PATCH', '/me/transactions/{transaction_id}', $financialMutation(fn(Request $request, array $params) => $transactionController->update($request, $params)));
-        $add('DELETE', '/me/transactions/{transaction_id}', $financialMutation(fn(Request $request, array $params) => $transactionController->delete($request, $params)));
-
-        $add('GET', '/me/months/{month}/savings-plan', $financialRead(fn(Request $request, array $params) => $savingsPlanController->get($request, $params)));
-        $add('PUT', '/me/months/{month}/savings-plan', $financialMutation(fn(Request $request, array $params) => $savingsPlanController->replace($request, $params)));
-
-        $add('GET', '/me/funds', $financialRead(fn(Request $request) => $fundController->list($request)));
-        $add('POST', '/me/funds', $financialMutation(fn(Request $request) => $fundController->create($request)));
-        $add('GET', '/me/funds/closeout-summary', $financialRead(fn(Request $request) => $fundController->closeoutSummary($request)));
-        $add('GET', '/me/funds/{fund_id}', $financialRead(fn(Request $request, array $params) => $fundController->get($request, $params)));
-        $add('PATCH', '/me/funds/{fund_id}', $financialMutation(fn(Request $request, array $params) => $fundController->update($request, $params)));
-        $add('POST', '/me/funds/{fund_id}/archive', $financialMutation(fn(Request $request, array $params) => $fundController->archive($request, $params)));
-        $add('POST', '/me/funds/{fund_id}/restore', $financialMutation(fn(Request $request, array $params) => $fundController->restore($request, $params)));
-        $add('GET', '/me/funds/{fund_id}/entries', $financialRead(fn(Request $request, array $params) => $fundController->entries($request, $params)));
-        $add('POST', '/me/funds/{fund_id}/entries', $financialMutation(fn(Request $request, array $params) => $fundController->createEntry($request, $params)));
-        $add('PATCH', '/me/funds/{fund_id}/entries/{entry_id}', $financialMutation(fn(Request $request, array $params) => $fundController->updateEntry($request, $params)));
-        $add('DELETE', '/me/funds/{fund_id}/entries/{entry_id}', $financialMutation(fn(Request $request, array $params) => $fundController->deleteEntry($request, $params)));
-
-        $add('GET', '/me/months/{month}/overview', $financialRead(fn(Request $request, array $params) => $monthOverviewController->overview($request, $params)));
-        $add('GET', '/me/month-closeouts', $financialRead(fn(Request $request) => $monthCloseoutController->list($request)));
-        $add('GET', '/me/month-closeouts/{month}', $financialRead(fn(Request $request, array $params) => $monthCloseoutController->get($request, $params)));
-        $add('POST', '/me/month-closeouts/{month}/close', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->close($request, $params)));
-        $add('PATCH', '/me/month-closeouts/{month}', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->update($request, $params)));
-        $add('POST', '/me/month-closeouts/{month}/reopen', $financialMutation(fn(Request $request, array $params) => $monthCloseoutController->reopen($request, $params)));
-
-        $add('GET', '/me/transactions/export.csv', $financialRead(fn(Request $request) => $importExportController->exportCsv($request)));
-        $add('POST', '/me/transactions/import.csv', $financialMutation(fn(Request $request) => $importExportController->importCsv($request)));
-        $add('DELETE', '/me/imports/{import_run_id}/transactions', $financialMutation(fn(Request $request, array $params) => $importExportController->rollbackImport($request, $params)));
-        $add('GET', '/me/data-runs', $financialRead(fn(Request $request) => $importExportController->listDataRuns($request)));
-
-        $add('GET', '/me/metrics/tags', $financialRead(fn(Request $request) => $metricsController->tags($request)));
-        $add('GET', '/me/metrics/categories', $financialRead(fn(Request $request) => $metricsController->categories($request)));
-        $add('GET', '/me/dashboard', $financialRead(fn(Request $request) => $metricsController->dashboard($request)));
-        $add('GET', '/me/metrics/insights', $financialRead(fn(Request $request) => $metricsController->insights($request)));
 
         return new self($router, $config, $rateLimiter, $errorReporter);
     }
@@ -402,59 +260,6 @@ final class App
 
         if ($method === 'DELETE' && preg_match('#^/me/devices/[^/]+$#', $path) === 1) {
             $this->hitAuthenticatedRateLimit($request, 'device-removal', $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_MAX', 10), $this->config->getInt('RATE_LIMIT_DEVICE_REMOVAL_WINDOW_SECONDS', 600));
-            return;
-        }
-
-        if ($method === 'POST' && $path === '/me/transactions/import.csv') {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'csv-import',
-                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_MAX', 10),
-                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_WINDOW_SECONDS', 3600)
-            );
-            return;
-        }
-
-        if ($method === 'DELETE' && preg_match('#^/me/imports/[0-9]+/transactions$#', $path) === 1) {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'csv-import-rollback',
-                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_ROLLBACK_MAX', 20),
-                $this->config->getInt('RATE_LIMIT_CSV_IMPORT_ROLLBACK_WINDOW_SECONDS', 3600)
-            );
-            return;
-        }
-
-        if ($method === 'GET' && $path === '/me/transactions/export.csv') {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'csv-export',
-                $this->config->getInt('RATE_LIMIT_CSV_EXPORT_MAX', 30),
-                $this->config->getInt('RATE_LIMIT_CSV_EXPORT_WINDOW_SECONDS', 3600)
-            );
-            return;
-        }
-
-        if ($method === 'GET' && (in_array($path, ['/me/metrics/tags', '/me/metrics/categories', '/me/dashboard', '/me/metrics/insights'], true) || preg_match('#^/me/months/[^/]+/overview$#', $path) === 1)) {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'metrics',
-                $this->config->getInt('RATE_LIMIT_METRICS_MAX', 120),
-                $this->config->getInt('RATE_LIMIT_METRICS_WINDOW_SECONDS', 60)
-            );
-            return;
-        }
-
-        if (
-            ($method === 'POST' && preg_match('#^/me/month-closeouts/[^/]+/(close|reopen)$#', $path) === 1)
-            || ($method === 'PATCH' && preg_match('#^/me/month-closeouts/[^/]+$#', $path) === 1)
-        ) {
-            $this->hitAuthenticatedRateLimit(
-                $request,
-                'month-closeout-write',
-                $this->config->getInt('RATE_LIMIT_MONTH_CLOSEOUT_WRITE_MAX', 60),
-                $this->config->getInt('RATE_LIMIT_MONTH_CLOSEOUT_WRITE_WINDOW_SECONDS', 3600)
-            );
             return;
         }
 

@@ -21,77 +21,25 @@ complete Vault and Recovery Code setup, and transition directly to `encrypted`.
 Existing legacy accounts retain the separate migration path.
 
 ## What is implemented
-- Invite-only auth flows:
-  - `GET /api/v1/auth/invitations`
-  - `POST /api/v1/auth/invitations`
-  - `POST /api/v1/auth/invitations/accept-password`
-  - `POST /api/v1/auth/invitations/accept-google`
-  - `POST /api/v1/auth/sessions/password`
-  - `POST /api/v1/auth/sessions/google`
-  - `DELETE /api/v1/auth/sessions/current`
-  - `POST /api/v1/auth/password-reset/request`
-  - `POST /api/v1/auth/password-reset/confirm`
-- Profile flows:
-  - `GET /api/v1/me`
-  - `PATCH /api/v1/me`
-  - `GET /api/v1/me/preferences`
-  - `PATCH /api/v1/me/preferences`
-  - `GET /api/v1/me/settings-summary`
-  - `POST /api/v1/me/email-change/request`
-  - `POST /api/v1/me/email-change/verify`
-  - `POST /api/v1/me/auth/convert-google`
-- Master API key flows:
-  - `GET /api/v1/me/master-api-keys`
-  - `POST /api/v1/me/master-api-keys`
-  - `DELETE /api/v1/me/master-api-keys/{api_key_id}`
-- Budget settings flows:
-  - `GET /api/v1/me/budget-settings`
-  - `PUT /api/v1/me/budget-settings`
-- Tag flows:
-  - `GET /api/v1/me/tags`
-  - `POST /api/v1/me/tags`
-  - `PATCH /api/v1/me/tags/{tag_id}`
-  - `DELETE /api/v1/me/tags/{tag_id}`
-- Card flows:
-  - `GET /api/v1/me/cards`
-  - `POST /api/v1/me/cards`
-  - `PATCH /api/v1/me/cards/{card_id}`
-  - `DELETE /api/v1/me/cards/{card_id}`
-- Recurring expense flows:
-  - `GET /api/v1/me/recurring-expenses`
-  - `POST /api/v1/me/recurring-expenses`
-  - `PATCH /api/v1/me/recurring-expenses/{recurring_expense_id}`
-  - `DELETE /api/v1/me/recurring-expenses/{recurring_expense_id}`
-- Transaction flows:
-  - `GET /api/v1/me/transactions`
-  - `POST /api/v1/me/transactions`
-  - `PATCH /api/v1/me/transactions/{transaction_id}`
-  - `DELETE /api/v1/me/transactions/{transaction_id}`
-- Fund flows:
-  - `GET /api/v1/me/funds`
-  - `POST /api/v1/me/funds`
-  - `GET /api/v1/me/funds/{fund_id}`
-  - `PATCH /api/v1/me/funds/{fund_id}`
-  - `POST /api/v1/me/funds/{fund_id}/archive`
-  - `POST /api/v1/me/funds/{fund_id}/restore`
-  - `GET /api/v1/me/funds/{fund_id}/entries`
-  - `POST /api/v1/me/funds/{fund_id}/entries`
-  - `PATCH /api/v1/me/funds/{fund_id}/entries/{entry_id}`
-  - `DELETE /api/v1/me/funds/{fund_id}/entries/{entry_id}`
-  - `GET /api/v1/me/funds/closeout-summary?year=YYYY`
-- CSV flows:
-  - `GET /api/v1/me/transactions/export.csv`
-  - `POST /api/v1/me/transactions/import.csv` (`mode=preview|dry_run|commit`, multipart with `file`; `mapping`, `date_strategy`, `category_strategy`, `tag_strategy`, and `amount_strategy` JSON for validation/commit)
-  - `DELETE /api/v1/me/imports/{import_run_id}/transactions`
-  - `GET /api/v1/me/data-runs?limit=50`
-- Metrics flows:
-  - `GET /api/v1/me/months/{month}/overview` (primary homepage/month endpoint)
-  - `GET /api/v1/me/months/{month}/savings-plan`
-  - `PUT /api/v1/me/months/{month}/savings-plan`
-  - `GET /api/v1/me/metrics/tags?month=YYYY-MM`
-  - `GET /api/v1/me/metrics/categories?month=YYYY-MM`
-  - `GET /api/v1/me/dashboard?month=YYYY-MM` (deprecated)
-  - `GET /api/v1/me/metrics/insights?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+
+The public backend surface is limited to account, security, operational, and
+encrypted-record concerns:
+
+- Invite-only authentication, sessions, password reset, and account deletion.
+- Profile, preferences, onboarding status, email changes, and Google conversion.
+- Vault setup, passphrase and recovery metadata, migration status, Quick Unlock,
+  device lifecycle, and privacy-safe operational status.
+- Master API-key management and audit-log access. API-key authentication does
+  not bypass encrypted financial boundaries.
+- Encrypted financial record create, update, delete, batch, sync, revision, and
+  conflict handling.
+
+Financial product behavior—transactions, taxonomy, recurring items, budgets,
+funds, savings plans, closeouts, metrics, and CSV contents—is owned by the
+encrypted frontend authority. The former plaintext HTTP routes are no longer
+registered. Legacy tables and implementation remain temporarily for Phase 4
+retirement and explicitly isolated operator repair tooling; they are not part
+of the supported product API.
 
 ## Funds notes
 
@@ -222,12 +170,6 @@ RATE_LIMIT_API_KEY_CREATE_MAX=5
 RATE_LIMIT_API_KEY_CREATE_WINDOW_SECONDS=3600
 RATE_LIMIT_API_KEY_REVOKE_MAX=20
 RATE_LIMIT_API_KEY_REVOKE_WINDOW_SECONDS=3600
-RATE_LIMIT_CSV_IMPORT_MAX=10
-RATE_LIMIT_CSV_IMPORT_WINDOW_SECONDS=3600
-RATE_LIMIT_CSV_EXPORT_MAX=30
-RATE_LIMIT_CSV_EXPORT_WINDOW_SECONDS=3600
-RATE_LIMIT_METRICS_MAX=120
-RATE_LIMIT_METRICS_WINDOW_SECONDS=60
 RATE_LIMIT_PROFILE_CHANGE_MAX=30
 RATE_LIMIT_PROFILE_CHANGE_WINDOW_SECONDS=3600
 RATE_LIMIT_STORAGE_PATH=storage/rate-limit
@@ -315,7 +257,7 @@ The certificate cache defaults to `storage/google-certs-cache.json`.
 - Tokens/codes are not returned in API responses.
 - Session create/sign-in responses include `session.csrf_token` for cookie-session CSRF protection.
 - Session cookie is always `HttpOnly` + `SameSite=Lax`; `Secure` is enabled when `SESSION_COOKIE_SECURE=true` (or auto-enabled in production when unset).
-- Auth, invitation, API key, CSV import/export, profile-change, email-change, account-conversion, and metrics endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
+- Auth, invitation, API key, profile-change, email-change, and account-conversion endpoints are rate limited and return `429 RATE_LIMITED` when exceeded.
 - Password reset emails are generic for unknown emails to avoid account enumeration. Completed resets revoke existing sessions and are audit logged.
 - Master API key auth rejects expired keys. New key expirations must be future-dated and within `MASTER_API_KEY_MAX_TTL_DAYS`; `expires_at=null` intentionally creates a non-expiring key.
 - Audit logs are recorded for invite acceptance/creation, master API key lifecycle events, profile updates, email changes, and account conversion to Google sign-in. Owner/admin sessions can read recent events with `GET /me/audit-logs`.
