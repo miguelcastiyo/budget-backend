@@ -45,7 +45,10 @@ DROP TABLE IF EXISTS tags;
 SET @phase4_drop_state_check = (
   SELECT IF(
     COUNT(*) > 0,
-    'ALTER TABLE users DROP CHECK chk_users_financial_privacy_state',
+    IF(LOCATE('MariaDB', @@version) > 0,
+      'ALTER TABLE users DROP CONSTRAINT chk_users_financial_privacy_state',
+      'ALTER TABLE users DROP CHECK chk_users_financial_privacy_state'
+    ),
     'SELECT 1'
   )
   FROM information_schema.TABLE_CONSTRAINTS
