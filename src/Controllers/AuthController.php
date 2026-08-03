@@ -666,6 +666,23 @@ SQL;
         return $response;
     }
 
+    public function refreshCurrentSessionCsrf(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request);
+        if ($ctx->authType !== 'session' || $ctx->sessionSource !== 'cookie' || $ctx->sessionId === null) {
+            throw new HttpException(401, 'UNAUTHENTICATED', 'A cookie session is required');
+        }
+
+        $csrfToken = Str::randomHex(20);
+        $stmt = $this->pdo->prepare('UPDATE user_sessions SET csrf_token_hash = :csrf_token_hash WHERE session_id = :session_id AND revoked_at IS NULL');
+        $stmt->execute([
+            ':csrf_token_hash' => Str::hashSha256($csrfToken),
+            ':session_id' => $ctx->sessionId,
+        ]);
+
+        return Response::json(['csrf_token' => $csrfToken]);
+    }
+
     public function requestPasswordReset(Request $request): Response
     {
         $payload = $request->json();

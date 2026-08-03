@@ -394,6 +394,23 @@ paths:
           $ref: '#/components/responses/ValidationError'
 
   /auth/sessions/current:
+    get:
+      tags: [Auth]
+      summary: Refresh the current cookie session CSRF token
+      description: Rotates and returns a CSRF token for an authenticated cookie session. This endpoint is safe to call when the frontend has lost its local CSRF token.
+      responses:
+        '200':
+          description: CSRF token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrf_token:
+                    type: string
+                required: [csrf_token]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
     delete:
       tags: [Auth]
       summary: Sign out current session

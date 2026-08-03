@@ -89,6 +89,7 @@ final class App
         $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $authController->acceptInvitationGoogle($request));
         $add('POST', '/auth/sessions/password', fn(Request $request) => $authController->signInPassword($request));
         $add('POST', '/auth/sessions/google', fn(Request $request) => $authController->signInGoogle($request));
+        $add('GET', '/auth/sessions/current', fn(Request $request) => $authController->refreshCurrentSessionCsrf($request));
         $add('DELETE', '/auth/sessions/current', fn(Request $request) => $authController->signOutCurrentSession($request));
         $add('POST', '/auth/password-reset/request', fn(Request $request) => $authController->requestPasswordReset($request));
         $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $authController->confirmPasswordReset($request));
