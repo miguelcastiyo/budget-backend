@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
-namespace App\Controllers;
+namespace App\Auth;
 
-use App\Auth\AuthService;
-use App\Auth\GoogleTokenVerifier;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
@@ -16,7 +14,7 @@ use App\Security\AuditLogger;
 use App\Support\Str;
 use PDO;
 
-final class AuthController
+final class AuthApplicationService
 {
     public function __construct(
         private readonly PDO $pdo,

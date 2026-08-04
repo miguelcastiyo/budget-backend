@@ -5,9 +5,16 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Auth\AuthService;
+use App\Auth\AuthApplicationService;
+use App\Auth\AccountAuthenticationService;
+use App\Auth\InvitationService;
+use App\Auth\SessionService;
+use App\Auth\PasswordResetService;
 use App\Auth\GoogleTokenVerifier;
 use App\Controllers\AuditLogController;
-use App\Controllers\AuthController;
+use App\Controllers\InvitationController;
+use App\Controllers\SessionController;
+use App\Controllers\PasswordResetController;
 use App\Controllers\HealthController;
 use App\Controllers\ProfileController;
 use App\Controllers\PrivacyStatusController;
@@ -57,7 +64,14 @@ final class App
         $errorReporter = new ErrorReporter($config, $structuredLogger);
         $auditLogger = new AuditLogger($pdo);
         $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
-        $authController = new AuthController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
+        $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
+        $invitationService = new InvitationService($authApplication);
+        $accountAuthenticationService = new AccountAuthenticationService($authApplication);
+        $sessionService = new SessionService($authApplication);
+        $passwordResetService = new PasswordResetService($authApplication);
+        $invitationController = new InvitationController($invitationService, $accountAuthenticationService);
+        $sessionController = new SessionController($accountAuthenticationService, $sessionService);
+        $passwordResetController = new PasswordResetController($passwordResetService);
         $auditLogController = new AuditLogController($pdo, $auth);
         $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger);
         $healthController = new HealthController($structuredLogger);
@@ -80,19 +94,19 @@ final class App
 
         $add('GET', '/health', fn(Request $request) => $healthController($request));
 
-        $add('GET', '/auth/invitations', fn(Request $request) => $authController->listInvitations($request));
-        $add('POST', '/auth/invitations', fn(Request $request) => $authController->createInvitation($request));
-        $add('DELETE', '/auth/invitations/{invite_id}', fn(Request $request, array $params) => $authController->revokeInvitation($request, $params));
-        $add('DELETE', '/auth/invitations/{invite_id}/account', fn(Request $request, array $params) => $authController->deleteInvitedAccount($request, $params));
-        $add('GET', '/auth/invitations/preview', fn(Request $request) => $authController->previewInvitation($request));
-        $add('POST', '/auth/invitations/accept-password', fn(Request $request) => $authController->acceptInvitationPassword($request));
-        $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $authController->acceptInvitationGoogle($request));
-        $add('POST', '/auth/sessions/password', fn(Request $request) => $authController->signInPassword($request));
-        $add('POST', '/auth/sessions/google', fn(Request $request) => $authController->signInGoogle($request));
-        $add('GET', '/auth/sessions/current', fn(Request $request) => $authController->refreshCurrentSessionCsrf($request));
-        $add('DELETE', '/auth/sessions/current', fn(Request $request) => $authController->signOutCurrentSession($request));
-        $add('POST', '/auth/password-reset/request', fn(Request $request) => $authController->requestPasswordReset($request));
-        $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $authController->confirmPasswordReset($request));
+        $add('GET', '/auth/invitations', fn(Request $request) => $invitationController->list($request));
+        $add('POST', '/auth/invitations', fn(Request $request) => $invitationController->create($request));
+        $add('DELETE', '/auth/invitations/{invite_id}', fn(Request $request, array $params) => $invitationController->revoke($request, $params));
+        $add('DELETE', '/auth/invitations/{invite_id}/account', fn(Request $request, array $params) => $invitationController->deleteAccount($request, $params));
+        $add('GET', '/auth/invitations/preview', fn(Request $request) => $invitationController->preview($request));
+        $add('POST', '/auth/invitations/accept-password', fn(Request $request) => $invitationController->acceptPassword($request));
+        $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $invitationController->acceptGoogle($request));
+        $add('POST', '/auth/sessions/password', fn(Request $request) => $sessionController->passwordSignIn($request));
+        $add('POST', '/auth/sessions/google', fn(Request $request) => $sessionController->googleSignIn($request));
+        $add('GET', '/auth/sessions/current', fn(Request $request) => $sessionController->refreshCsrf($request));
+        $add('DELETE', '/auth/sessions/current', fn(Request $request) => $sessionController->signOut($request));
+        $add('POST', '/auth/password-reset/request', fn(Request $request) => $passwordResetController->request($request));
+        $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $passwordResetController->confirm($request));
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
         $add('GET', '/me/privacy', $privacyStatusController);
