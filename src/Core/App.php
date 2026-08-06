@@ -103,6 +103,7 @@ final class App
         $add('POST', '/auth/invitations/accept-google', fn(Request $request) => $invitationController->acceptGoogle($request));
         $add('POST', '/auth/sessions/password', fn(Request $request) => $sessionController->passwordSignIn($request));
         $add('POST', '/auth/sessions/google', fn(Request $request) => $sessionController->googleSignIn($request));
+        $add('POST', '/auth/sessions/reauth', fn(Request $request) => $sessionController->reauthenticate($request));
         $add('GET', '/auth/sessions/current', fn(Request $request) => $sessionController->refreshCsrf($request));
         $add('DELETE', '/auth/sessions/current', fn(Request $request) => $sessionController->signOut($request));
         $add('POST', '/auth/password-reset/request', fn(Request $request) => $passwordResetController->request($request));
@@ -188,7 +189,7 @@ final class App
         $path = $this->normalizePath($request->path);
         $clientIdentifier = $this->clientIdentifier($request);
 
-        if ($method === 'POST' && in_array($path, ['/auth/sessions/password', '/auth/sessions/google'], true)) {
+        if ($method === 'POST' && in_array($path, ['/auth/sessions/password', '/auth/sessions/google', '/auth/sessions/reauth'], true)) {
             $max = $this->config->getInt('RATE_LIMIT_AUTH_MAX', 10);
             $window = $this->config->getInt('RATE_LIMIT_AUTH_WINDOW_SECONDS', 60);
             $this->rateLimiter->hit('auth:' . $path . ':' . $clientIdentifier, $max, $window);

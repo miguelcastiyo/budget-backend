@@ -647,6 +647,87 @@ SQL;
         }
     }
 
+    public function reauthenticateCurrentSession(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request);
+        if ($ctx->authType !== 'session' || $ctx->sessionId === null) {
+            throw new HttpException(401, 'UNAUTHENTICATED', 'An authenticated session is required');
+        }
+
+        $payload = $request->json();
+        $method = (string) ($payload['method'] ?? '');
+        $provider = (string) ($ctx->user['auth_provider'] ?? '');
+        if (!in_array($method, ['password', 'google'], true) || $method !== $provider) {
+            throw new HttpException(422, 'VALIDATION_ERROR', 'Reauthentication method does not match the account');
+        }
+
+        if ($method === 'password') {
+            $password = (string) ($payload['password'] ?? '');
+            $passwordQuery = $this->pdo->prepare(
+                'SELECT password_hash FROM users WHERE id = :id AND auth_provider = \'password\' AND is_active = 1 LIMIT 1'
+            );
+            $passwordQuery->execute([':id' => $ctx->userId()]);
+            $user = $passwordQuery->fetch();
+            if ($password === '' || !$user || !password_verify($password, (string) ($user['password_hash'] ?? ''))) {
+                throw new HttpException(401, 'UNAUTHENTICATED', 'Account verification failed');
+            }
+        } else {
+            $googleIdToken = trim((string) ($payload['google_id_token'] ?? ''));
+            $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
+            if (
+                strtolower((string) ($ctx->user['email'] ?? '')) !== strtolower($googleIdentity['email'])
+                || (string) ($ctx->user['google_sub'] ?? '') !== $googleIdentity['google_sub']
+            ) {
+                throw new HttpException(401, 'UNAUTHENTICATED', 'Google account verification failed');
+            }
+        }
+
+        $sessionQuery = $this->pdo->prepare(
+            'SELECT client_type, device_id FROM user_sessions WHERE session_id = :session_id AND revoked_at IS NULL LIMIT 1'
+        );
+        $sessionQuery->execute([':session_id' => $ctx->sessionId]);
+        $currentSession = $sessionQuery->fetch();
+        if (!is_array($currentSession)) {
+            throw new HttpException(401, 'UNAUTHENTICATED', 'Session is invalid or expired');
+        }
+
+        $clientType = (string) ($currentSession['client_type'] ?? 'web');
+        if (!in_array($clientType, ['web', 'native'], true)) {
+            throw new HttpException(500, 'INTERNAL_ERROR', 'Session client type is invalid');
+        }
+        $deviceId = trim((string) ($currentSession['device_id'] ?? ''));
+
+        $this->pdo->beginTransaction();
+        try {
+            $revoke = $this->pdo->prepare(
+                'UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE session_id = :session_id AND revoked_at IS NULL'
+            );
+            $revoke->execute([':session_id' => $ctx->sessionId]);
+            if ($revoke->rowCount() !== 1) {
+                throw new HttpException(401, 'UNAUTHENTICATED', 'Session is invalid or expired');
+            }
+
+            $session = $this->createSession($ctx->userId(), $clientType, $request, $deviceId !== '' ? $deviceId : null);
+            $this->audit->record(
+                $request,
+                $ctx->userId(),
+                $ctx->authType,
+                'session.reauthenticated',
+                'session',
+                $session['session_id'],
+                ['method' => $method, 'replaced_session_id' => $ctx->sessionId]
+            );
+            $this->pdo->commit();
+
+            return $this->buildAuthResponse($ctx->userId(), $session, $clientType);
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     public function signOutCurrentSession(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request);
@@ -885,7 +966,7 @@ SQL;
     }
 
     /** @return array{session_id:string,expires_at:string,token:string,csrf_token:string} */
-    private function createSession(int $userId, string $clientType, Request $request): array
+    private function createSession(int $userId, string $clientType, Request $request, ?string $existingDeviceId = null): array
     {
         $sessionId = Str::randomId('ses');
         $secret = Str::randomHex(20);
@@ -912,7 +993,7 @@ SQL;
             ':user_agent' => substr((string) ($request->header('User-Agent') ?? ''), 0, 255),
             ':expires_at' => $expiresAt,
         ];
-        if ($hasDeviceId) $parameters[':device_id'] = $this->deviceId($request);
+        if ($hasDeviceId) $parameters[':device_id'] = $existingDeviceId !== null && $existingDeviceId !== '' ? $existingDeviceId : $this->deviceId($request);
         $stmt->execute($parameters);
 
         $lookup = $this->pdo->prepare('SELECT expires_at FROM user_sessions WHERE session_id = :session_id LIMIT 1');

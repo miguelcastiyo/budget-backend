@@ -393,6 +393,47 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /auth/sessions/reauth:
+    post:
+      tags: [Auth]
+      summary: Reauthenticate and rotate the current session
+      description: Verifies the current account credentials, revokes the current session, and issues a replacement session for the same device and client type.
+      security: [{cookieAuth: []}, {sessionTokenAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [method, password]
+                  properties:
+                    method: {type: string, enum: [password]}
+                    password: {type: string}
+                - type: object
+                  required: [method, google_id_token]
+                  properties:
+                    method: {type: string, enum: [google]}
+                    google_id_token: {type: string}
+      responses:
+        '200':
+          description: Reauthenticated and session rotated
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Set for web sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
   /auth/sessions/current:
     get:
       tags: [Auth]

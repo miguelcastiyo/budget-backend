@@ -14,5 +14,6 @@ final class SessionService
     }
 
     public function refreshCsrf(Request $request): Response { return $this->application->refreshCurrentSessionCsrf($request); }
+    public function reauthenticate(Request $request): Response { return $this->application->reauthenticateCurrentSession($request); }
     public function signOut(Request $request): Response { return $this->application->signOutCurrentSession($request); }
 }

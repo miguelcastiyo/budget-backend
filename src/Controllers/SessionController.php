@@ -20,6 +20,7 @@ final class SessionController
 
     public function passwordSignIn(Request $request): Response { return $this->accounts->passwordSignIn($request); }
     public function googleSignIn(Request $request): Response { return $this->accounts->googleSignIn($request); }
+    public function reauthenticate(Request $request): Response { return $this->sessions->reauthenticate($request); }
     public function refreshCsrf(Request $request): Response { return $this->sessions->refreshCsrf($request); }
     public function signOut(Request $request): Response { return $this->sessions->signOut($request); }
 }
