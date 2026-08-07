@@ -86,7 +86,16 @@ composer install \
 composer check-platform-reqs --no-dev
 test -f vendor/autoload.php
 
-php scripts/migrate.php
+MIGRATION_OUTPUT="$(mktemp)"
+if ! php scripts/migrate.php 2>&1 | tee "$MIGRATION_OUTPUT"; then
+  if grep -q 'Phase 4 schema retirement refused' "$MIGRATION_OUTPUT"; then
+    echo "Phase 4 migration is waiting for the approved account-pruning step; reloading PHP-FPM so the deployed compatible application code is active." >&2
+    sudo systemctl reload "$PHP_FPM_SERVICE"
+  fi
+  rm -f "$MIGRATION_OUTPUT"
+  exit 1
+fi
+rm -f "$MIGRATION_OUTPUT"
 
 sudo systemctl reload "$PHP_FPM_SERVICE"
 
