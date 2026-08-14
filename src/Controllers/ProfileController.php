@@ -6,6 +6,9 @@ namespace App\Controllers;
 
 use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
+use App\Auth\AuthIdentityRepository;
+use App\Auth\PasswordCredentialRepository;
+use App\Auth\LegacyAuthCompatibilityService;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
@@ -23,7 +26,10 @@ final class ProfileController
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
         private readonly Config $config,
-        private readonly AuditLogger $audit
+        private readonly AuditLogger $audit,
+        private readonly AuthIdentityRepository $identities,
+        private readonly PasswordCredentialRepository $passwords,
+        private readonly LegacyAuthCompatibilityService $legacyAuth
     ) {
     }
 
@@ -148,7 +154,7 @@ final class ProfileController
     public function requestEmailChange(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request);
-        if ((string) $ctx->user['auth_provider'] !== 'password') {
+        if (!$this->hasPasswordCredential($ctx->userId())) {
             throw new HttpException(403, 'FORBIDDEN', 'Email can only be changed for password users');
         }
 
@@ -227,7 +233,7 @@ final class ProfileController
     public function verifyEmailChange(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request);
-        if ((string) $ctx->user['auth_provider'] !== 'password') {
+        if (!$this->hasPasswordCredential($ctx->userId())) {
             throw new HttpException(403, 'FORBIDDEN', 'Email can only be changed for password users');
         }
 
@@ -298,7 +304,7 @@ final class ProfileController
     public function convertAccountToGoogle(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request);
-        if ((string) $ctx->user['auth_provider'] !== 'password') {
+        if (!$this->hasPasswordCredential($ctx->userId())) {
             throw new HttpException(403, 'FORBIDDEN', 'Only password accounts can be converted to Google sign-in');
         }
 
@@ -318,10 +324,8 @@ final class ProfileController
             throw new HttpException(409, 'CONFLICT', 'Google email must match the current account email');
         }
 
-        $existingGoogle = $this->pdo->prepare('SELECT id FROM users WHERE google_sub = :google_sub LIMIT 1');
-        $existingGoogle->execute([':google_sub' => (string) $googleIdentity['google_sub']]);
-        $existingGoogleUser = $existingGoogle->fetch();
-        if ($existingGoogleUser && (int) $existingGoogleUser['id'] !== $ctx->userId()) {
+        $existingGoogle = $this->identities->findByProviderSubject('google', (string) $googleIdentity['google_sub']);
+        if ($existingGoogle && (int) $existingGoogle['user_id'] !== $ctx->userId()) {
             throw new HttpException(409, 'CONFLICT', 'This Google account is already linked to another user');
         }
 
@@ -331,6 +335,8 @@ final class ProfileController
 
         $this->pdo->beginTransaction();
         try {
+            if (!$existingGoogle) $this->identities->createGoogle($ctx->userId(), (string) $googleIdentity['google_sub'], $googleEmail, true);
+            $this->passwords->deleteForUser($ctx->userId());
             $updateUser = $this->pdo->prepare(
                 'UPDATE users SET auth_provider = :auth_provider, password_hash = NULL, google_sub = :google_sub, avatar_url = :avatar_url, email_verified = 1 WHERE id = :id'
             );
@@ -375,6 +381,15 @@ final class ProfileController
 
         $profile = $this->fetchProfile($ctx->userId());
         return Response::json($profile);
+    }
+
+    private function hasPasswordCredential(int $userId): bool
+    {
+        if ($this->passwords->findForUser($userId)) return true;
+        $legacy = $this->pdo->prepare('SELECT id, auth_provider, password_hash, google_sub FROM users WHERE id = :id LIMIT 1');
+        $legacy->execute([':id' => $userId]);
+        $user = $legacy->fetch();
+        return is_array($user) && $this->legacyAuth->repairMissingPasswordCredential($user);
     }
 
     /** @param array<string,mixed> $user */

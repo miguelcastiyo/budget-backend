@@ -65,7 +65,6 @@ SELECT
   u.email,
   u.display_name,
   u.avatar_url,
-  u.google_sub,
   u.user_preferences,
   u.auth_provider,
   u.email_verified,

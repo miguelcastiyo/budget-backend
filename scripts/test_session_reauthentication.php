@@ -18,10 +18,14 @@ require __DIR__ . '/../src/bootstrap.php';
 use App\Auth\AuthApplicationService;
 use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
+use App\Auth\AuthIdentityRepository;
+use App\Auth\PasswordCredentialRepository;
+use App\Auth\LegacyAuthCompatibilityService;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Mail\Mailer;
+use App\Monitoring\StructuredLogger;
 use App\Security\AuditLogger;
 use App\Support\Str;
 
@@ -53,8 +57,10 @@ function requestFor(string $token, string $csrfToken, array $payload): Request
 
 try {
     $insertUser = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Reauth Test', 'password', :password_hash, 1, 'member', 1, 'encrypted')");
-    $insertUser->execute([':email' => $email, ':password_hash' => password_hash($password, PASSWORD_DEFAULT)]);
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $insertUser->execute([':email' => $email, ':password_hash' => $hash]);
     $userId = (int) $pdo->lastInsertId();
+    $pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => $hash]);
     $insertSession = $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :device_id, :secret_hash, :csrf_hash, :client_type, 'reauth-contract-test', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))");
     $insertSession->execute([
         ':session_id' => $sessionId,
@@ -71,7 +77,10 @@ try {
         new GoogleTokenVerifier($config),
         new Mailer($config),
         $config,
-        new AuditLogger($pdo)
+        new AuditLogger($pdo),
+        new AuthIdentityRepository($pdo),
+        new PasswordCredentialRepository($pdo),
+        new LegacyAuthCompatibilityService($pdo, new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config))
     );
 
     try {
@@ -139,6 +148,7 @@ try {
     if ($userId !== null) {
         $pdo->prepare('DELETE FROM audit_logs WHERE actor_user_id = :user_id')->execute([':user_id' => $userId]);
         $pdo->prepare('DELETE FROM user_sessions WHERE user_id = :user_id')->execute([':user_id' => $userId]);
+        $pdo->prepare('DELETE FROM password_credentials WHERE user_id = :user_id')->execute([':user_id' => $userId]);
         $pdo->prepare('DELETE FROM users WHERE id = :user_id')->execute([':user_id' => $userId]);
     }
 }

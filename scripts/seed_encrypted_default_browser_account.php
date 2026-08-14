@@ -14,11 +14,12 @@ $pdo->beginTransaction();
 try {
     $old = $pdo->prepare('SELECT id FROM users WHERE email = :email'); $old->execute([':email' => $email]);
     foreach ($old->fetchAll(PDO::FETCH_COLUMN) as $oldUserId) {
-        foreach (['encrypted_record_batches','encrypted_record_changes','encrypted_financial_records','encrypted_record_sync_state','user_financial_vaults','user_sessions'] as $table) $pdo->prepare("DELETE FROM {$table} WHERE user_id = :uid")->execute([':uid' => (int) $oldUserId]);
+        foreach (['encrypted_record_batches','encrypted_record_changes','encrypted_financial_records','encrypted_record_sync_state','user_financial_vaults','user_sessions','password_credentials','auth_identities'] as $table) $pdo->prepare("DELETE FROM {$table} WHERE user_id = :uid")->execute([':uid' => (int) $oldUserId]);
         $pdo->prepare('DELETE FROM users WHERE id = :uid')->execute([':uid' => (int) $oldUserId]);
     }
-    $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active) VALUES (:email, 'Encrypted Default Browser', 'password', :password, 1, 'member', 1)")->execute([':email' => $email, ':password' => password_hash($password, PASSWORD_DEFAULT)]);
-    $userId = (int) $pdo->lastInsertId(); $sessionId = "encrypted-default-seed_{$suffix}"; $sessionSecret = "encrypted-default-seed-secret-{$suffix}"; $csrfToken = "encrypted-default-csrf-{$suffix}";
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+    $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active) VALUES (:email, 'Encrypted Default Browser', 'password', :password, 1, 'member', 1)")->execute([':email' => $email, ':password' => $passwordHash]);
+    $userId = (int) $pdo->lastInsertId(); $pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => $passwordHash]); $sessionId = "encrypted-default-seed_{$suffix}"; $sessionSecret = "encrypted-default-seed-secret-{$suffix}"; $csrfToken = "encrypted-default-csrf-{$suffix}";
     $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, created_at, expires_at) VALUES (:sid, :uid, :secret, :csrf, 'web', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':sid' => $sessionId, ':uid' => $userId, ':secret' => hash('sha256', $sessionSecret), ':csrf' => hash('sha256', $csrfToken)]);
     $pdo->commit(); echo json_encode(['email' => $email, 'password' => $password, 'user_id' => $userId, 'session_token' => $sessionId . '.' . $sessionSecret, 'csrf_token' => $csrfToken], JSON_UNESCAPED_SLASHES) . "\n";
 } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); fwrite(STDERR, $e->getMessage() . "\n"); exit(1); }

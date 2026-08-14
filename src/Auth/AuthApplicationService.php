@@ -22,7 +22,10 @@ final class AuthApplicationService
         private readonly GoogleTokenVerifier $googleTokens,
         private readonly Mailer $mailer,
         private readonly Config $config,
-        private readonly AuditLogger $audit
+        private readonly AuditLogger $audit,
+        private readonly AuthIdentityRepository $identities,
+        private readonly PasswordCredentialRepository $passwords,
+        private readonly LegacyAuthCompatibilityService $legacyAuth
     ) {
     }
 
@@ -372,15 +375,17 @@ SQL;
             $insertUser = $this->pdo->prepare(
                 'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role, \'vault_setup_required\')'
             );
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             $insertUser->execute([
                 ':email' => $email,
                 ':display_name' => $displayName,
                 ':auth_provider' => 'password',
-                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                ':password_hash' => $passwordHash,
                 ':role' => (string) $invitation['role'],
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
+            $this->passwords->create($userId, $passwordHash);
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
             $this->audit->record(
                 $request,
@@ -465,6 +470,7 @@ SQL;
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
+            $this->identities->createGoogle($userId, (string) $googleIdentity['google_sub'], strtolower((string) $googleIdentity['email']), true);
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
             $this->audit->record(
                 $request,
@@ -511,19 +517,24 @@ SQL;
             ]);
         }
 
-        $stmt = $this->pdo->prepare(
-            'SELECT id, password_hash FROM users WHERE email = :email AND auth_provider = :auth_provider AND is_active = 1 LIMIT 1'
-        );
-        $stmt->execute([
-            ':email' => $email,
-            ':auth_provider' => 'password',
-        ]);
+        $stmt = $this->pdo->prepare('SELECT id, auth_provider, password_hash, google_sub FROM users WHERE email = :email AND is_active = 1 LIMIT 1');
+        $stmt->execute([':email' => $email]);
         $user = $stmt->fetch();
-
-        if (!$user || !password_verify($password, (string) $user['password_hash'])) {
+        if (!$user) {
             throw new HttpException(401, 'UNAUTHENTICATED', 'Invalid email or password');
         }
 
+        $credential = $this->passwords->findForUser((int) $user['id']);
+        if ($credential) {
+            $this->legacyAuth->passwordMirrorMatches($user, $credential);
+            if (!password_verify($password, (string) $credential['password_hash'])) throw new HttpException(401, 'UNAUTHENTICATED', 'Invalid email or password');
+        } else {
+            if (!is_string($user['password_hash'] ?? null) || !password_verify($password, (string) $user['password_hash']) || !$this->legacyAuth->repairMissingPasswordCredential($user)) {
+                throw new HttpException(401, 'UNAUTHENTICATED', 'Invalid email or password');
+            }
+        }
+
+        $this->passwords->markUsed((int) $user['id']);
         $session = $this->createSession((int) $user['id'], $clientType, $request);
         return $this->buildAuthResponse((int) $user['id'], $session, $clientType);
     }
@@ -550,20 +561,20 @@ SQL;
         $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
         $googleAvatarUrl = $this->normalizeAvatarUrl($googleIdentity['picture'] ?? null);
 
-        $stmt = $this->pdo->prepare(
-            'SELECT id FROM users WHERE email = :email AND auth_provider = :auth_provider AND google_sub = :google_sub AND is_active = 1 LIMIT 1'
-        );
-        $stmt->execute([
-            ':email' => strtolower($googleIdentity['email']),
-            ':auth_provider' => 'google',
-            ':google_sub' => $googleIdentity['google_sub'],
-        ]);
-
-        $user = $stmt->fetch();
-        if ($user) {
-            $this->syncGoogleAvatarUrl((int) $user['id'], $googleAvatarUrl);
-            $session = $this->createSession((int) $user['id'], $clientType, $request);
-            return $this->buildAuthResponse((int) $user['id'], $session, $clientType);
+        $identity = $this->identities->findByProviderSubject('google', (string) $googleIdentity['google_sub']);
+        if (!$identity) $identity = $this->legacyAuth->repairMissingGoogleIdentity((string) $googleIdentity['google_sub']);
+        if ($identity) {
+            $userId = (int) ($identity['user_id'] ?? $identity['id']);
+            $userLookup = $this->pdo->prepare('SELECT id, auth_provider, password_hash, google_sub, is_active FROM users WHERE id = :id LIMIT 1');
+            $userLookup->execute([':id' => $userId]);
+            $user = $userLookup->fetch();
+            if (!$user || (int) $user['is_active'] !== 1) throw new HttpException(401, 'UNAUTHENTICATED', 'User must be invited before signing in');
+            if (!isset($identity['provider_subject'])) $identity = $this->identities->findForUserAndProvider($userId, 'google');
+            if (!$identity || !$this->legacyAuth->googleMirrorMatches($user, $identity)) throw new HttpException(401, 'UNAUTHENTICATED', 'User must be invited before signing in');
+            $this->identities->markGoogleUsed($userId, strtolower((string) $googleIdentity['email']), true);
+            $this->syncGoogleAvatarUrl($userId, $googleAvatarUrl);
+            $session = $this->createSession($userId, $clientType, $request);
+            return $this->buildAuthResponse($userId, $session, $clientType);
         }
 
         if ($inviteToken === '') {
@@ -619,6 +630,7 @@ SQL;
             ]);
 
             $userId = (int) $this->pdo->lastInsertId();
+            $this->identities->createGoogle($userId, (string) $googleIdentity['google_sub'], strtolower((string) $googleIdentity['email']), true);
             $this->markInvitationAccepted((int) $invitation['id'], $userId);
             $this->audit->record(
                 $request,
@@ -656,19 +668,15 @@ SQL;
 
         $payload = $request->json();
         $method = (string) ($payload['method'] ?? '');
-        $provider = (string) ($ctx->user['auth_provider'] ?? '');
-        if (!in_array($method, ['password', 'google'], true) || $method !== $provider) {
+        $credential = $this->passwords->findForUser($ctx->userId());
+        $identity = $this->identities->findForUserAndProvider($ctx->userId(), 'google');
+        if (!in_array($method, ['password', 'google'], true) || ($method === 'password' && !$credential) || ($method === 'google' && !$identity)) {
             throw new HttpException(422, 'VALIDATION_ERROR', 'Reauthentication method does not match the account');
         }
 
         if ($method === 'password') {
             $password = (string) ($payload['password'] ?? '');
-            $passwordQuery = $this->pdo->prepare(
-                'SELECT password_hash FROM users WHERE id = :id AND auth_provider = \'password\' AND is_active = 1 LIMIT 1'
-            );
-            $passwordQuery->execute([':id' => $ctx->userId()]);
-            $user = $passwordQuery->fetch();
-            if ($password === '' || !$user || !password_verify($password, (string) ($user['password_hash'] ?? ''))) {
+            if ($password === '' || !password_verify($password, (string) $credential['password_hash'])) {
                 throw new HttpException(401, 'UNAUTHENTICATED', 'Account verification failed');
             }
         } else {
@@ -676,7 +684,7 @@ SQL;
             $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
             if (
                 strtolower((string) ($ctx->user['email'] ?? '')) !== strtolower($googleIdentity['email'])
-                || (string) ($ctx->user['google_sub'] ?? '') !== $googleIdentity['google_sub']
+                || (string) $identity['provider_subject'] !== $googleIdentity['google_sub']
             ) {
                 throw new HttpException(401, 'UNAUTHENTICATED', 'Google account verification failed');
             }
@@ -778,14 +786,15 @@ SQL;
             'message' => 'If a password account exists for that email, a reset link has been sent.',
         ], 202);
 
-        $lookup = $this->pdo->prepare(
-            'SELECT id, email, display_name FROM users WHERE email = :email AND auth_provider = :auth_provider AND is_active = 1 LIMIT 1'
-        );
-        $lookup->execute([
-            ':email' => $email,
-            ':auth_provider' => 'password',
-        ]);
+        $lookup = $this->pdo->prepare('SELECT id, email, display_name, auth_provider, password_hash, google_sub FROM users WHERE email = :email AND is_active = 1 LIMIT 1');
+        $lookup->execute([':email' => $email]);
         $user = $lookup->fetch();
+
+        if ($user && !$this->passwords->findForUser((int) $user['id'])) {
+            // Request flow is non-enumerating; repair only an unambiguous valid legacy password account.
+            $this->legacyAuth->repairMissingPasswordCredential($user);
+        }
+        if ($user && !$this->passwords->findForUser((int) $user['id'])) $user = false;
 
         if (!$user) {
             return $genericResponse;
@@ -872,8 +881,8 @@ SQL;
              WHERE prr.reset_token_hash = :reset_token_hash
                AND prr.status = 'pending'
                AND prr.expires_at > UTC_TIMESTAMP()
-               AND u.auth_provider = 'password'
                AND u.is_active = 1
+               AND EXISTS (SELECT 1 FROM password_credentials pc WHERE pc.user_id = u.id)
              LIMIT 1"
         );
         $stmt->execute([':reset_token_hash' => $resetTokenHash]);
@@ -885,9 +894,11 @@ SQL;
 
         $this->pdo->beginTransaction();
         try {
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $this->passwords->updateHash((int) $row['user_id'], $passwordHash);
             $updatePassword = $this->pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
             $updatePassword->execute([
-                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                ':password_hash' => $passwordHash,
                 ':id' => $row['user_id'],
             ]);
 
@@ -979,8 +990,8 @@ SQL;
 
         $hasDeviceId = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'sqlite' || array_filter($this->pdo->query('PRAGMA table_info(user_sessions)')->fetchAll(), static fn (array $column): bool => (string) ($column['name'] ?? '') === 'device_id') !== [];
         $stmt = $this->pdo->prepare($hasDeviceId
-            ? 'INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, expires_at) VALUES (:session_id, :user_id, :device_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), :expires_at)'
-            : 'INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, expires_at) VALUES (:session_id, :user_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), :expires_at)'
+            ? 'INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, last_authenticated_at, expires_at) VALUES (:session_id, :user_id, :device_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), UTC_TIMESTAMP(), :expires_at)'
+            : 'INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, ip_address, user_agent, last_seen_at, last_authenticated_at, expires_at) VALUES (:session_id, :user_id, :session_secret_hash, :csrf_token_hash, :client_type, :ip_address, :user_agent, UTC_TIMESTAMP(), UTC_TIMESTAMP(), :expires_at)'
         );
 
         $parameters = [
