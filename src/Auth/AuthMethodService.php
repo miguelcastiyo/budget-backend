@@ -37,8 +37,8 @@ final class AuthMethodService
     public function hasExternalProvider(int $userId, string $provider): bool { return $this->identities->findForUserAndProvider($userId, $provider) !== false; }
     public function countForUser(int $userId): int
     {
-        $stmt = $this->pdo->prepare('SELECT (SELECT COUNT(*) FROM auth_identities WHERE user_id = :user_id) + (SELECT COUNT(*) FROM password_credentials WHERE user_id = :user_id)');
-        $stmt->execute([':user_id' => $userId]);
+        $stmt = $this->pdo->prepare('SELECT (SELECT COUNT(*) FROM auth_identities WHERE user_id = :identity_user_id) + (SELECT COUNT(*) FROM password_credentials WHERE user_id = :password_user_id)');
+        $stmt->execute([':identity_user_id' => $userId, ':password_user_id' => $userId]);
         return (int) $stmt->fetchColumn();
     }
 
