@@ -233,6 +233,14 @@ Google endpoints now require a real Google ID token (`google_id_token`).
 The backend verifies the JWT locally against cached Google signing certificates and checks `GOOGLE_CLIENT_IDS` for audience validation.
 The certificate cache defaults to `storage/google-certs-cache.json`.
 
+## Auth identity transition
+The current login authority remains the legacy `users` auth fields while the
+additive `auth_identities` and `password_credentials` tables hold validated,
+backfilled future identity data. See
+[`docs/auth-identity-transition.md`](docs/auth-identity-transition.md) and run
+`php scripts/verify_auth_identity_backfill.php` after migration. Do not route
+login through the new tables until the documented Piece 2 cutover.
+
 ## Email delivery
 - `MAIL_TRANSPORT=log`: writes emails to `storage/mail.log` (local dev default)
 - `MAIL_TRANSPORT=resend`: sends real emails via Resend API (`RESEND_API_KEY` required)

@@ -11,6 +11,7 @@ if ($schema === false || $migration === false) {
 
 $required = [
     'users', 'invitations', 'user_sessions', 'user_financial_vaults',
+    'auth_identities', 'password_credentials',
     'vault_quick_unlock_credentials', 'webauthn_challenges',
     'encrypted_record_sync_state', 'encrypted_record_batches', 'encrypted_financial_records',
     'encrypted_record_changes', 'email_change_requests',
@@ -60,4 +61,4 @@ if (!str_contains(file_get_contents($root . '/scripts/migrate.php') ?: '', 'dry-
     throw new RuntimeException('migration runner does not explain the Phase 4A prerequisite');
 }
 
-echo "Phase 4 schema contract passed: current schema has " . count($actual) . " encrypted-era tables and all retired tables are forward-dropped\n";
+echo "Phase 4 schema contract passed: current schema has " . count($actual) . " tables and all retired financial tables are forward-dropped\n";

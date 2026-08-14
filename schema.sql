@@ -32,6 +32,36 @@ CREATE TABLE users (
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Transitional identity foundation. The legacy auth columns on users remain
+-- the runtime authority until the follow-up auth cutover.
+CREATE TABLE auth_identities (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  provider_subject VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  provider_email VARCHAR(255) NULL,
+  provider_email_verified TINYINT(1) NULL,
+  last_used_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_auth_identities_provider_subject (provider, provider_subject),
+  UNIQUE KEY uq_auth_identities_user_provider (user_id, provider),
+  KEY idx_auth_identities_user (user_id),
+  CONSTRAINT fk_auth_identities_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE password_credentials (
+  user_id BIGINT UNSIGNED NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  last_used_at DATETIME NULL,
+  password_changed_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_password_credentials_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE invitations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   invite_id VARCHAR(64) NOT NULL,
@@ -76,6 +106,7 @@ CREATE TABLE user_sessions (
   ip_address VARCHAR(45) NULL,
   user_agent VARCHAR(255) NULL,
   last_seen_at DATETIME NULL,
+  last_authenticated_at DATETIME NULL,
   expires_at DATETIME NOT NULL,
   revoked_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

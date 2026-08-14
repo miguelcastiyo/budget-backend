@@ -5,6 +5,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $scripts = [
     'scripts/test_core.php',
+    'scripts/test_auth_identity_foundation.php',
     'scripts/test_session_reauthentication.php',
     'scripts/smoke_google_verifier.php',
     'scripts/test_privacy_parity.php',
