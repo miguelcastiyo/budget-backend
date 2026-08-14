@@ -665,52 +665,37 @@ SQL;
         } else {
             $googleIdToken = trim((string) ($payload['google_id_token'] ?? ''));
             $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
-            if (
-                strtolower((string) ($ctx->user['email'] ?? '')) !== strtolower($googleIdentity['email'])
-                || (string) $identity['provider_subject'] !== $googleIdentity['subject']
-            ) {
+            if ((string) $identity['provider_subject'] !== $googleIdentity['subject']) {
                 throw new HttpException(401, 'UNAUTHENTICATED', 'Google account verification failed');
             }
         }
 
-        $sessionQuery = $this->pdo->prepare(
-            'SELECT client_type, device_id FROM user_sessions WHERE session_id = :session_id AND revoked_at IS NULL LIMIT 1'
-        );
+        $sessionQuery = $this->pdo->prepare('SELECT session_id FROM user_sessions WHERE session_id = :session_id AND revoked_at IS NULL LIMIT 1');
         $sessionQuery->execute([':session_id' => $ctx->sessionId]);
         $currentSession = $sessionQuery->fetch();
         if (!is_array($currentSession)) {
             throw new HttpException(401, 'UNAUTHENTICATED', 'Session is invalid or expired');
         }
 
-        $clientType = (string) ($currentSession['client_type'] ?? 'web');
-        if (!in_array($clientType, ['web', 'native'], true)) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Session client type is invalid');
-        }
-        $deviceId = trim((string) ($currentSession['device_id'] ?? ''));
-
         $this->pdo->beginTransaction();
         try {
-            $revoke = $this->pdo->prepare(
-                'UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE session_id = :session_id AND revoked_at IS NULL'
-            );
-            $revoke->execute([':session_id' => $ctx->sessionId]);
-            if ($revoke->rowCount() !== 1) {
+            $refresh = $this->pdo->prepare('UPDATE user_sessions SET last_authenticated_at = UTC_TIMESTAMP() WHERE session_id = :session_id AND revoked_at IS NULL');
+            $refresh->execute([':session_id' => $ctx->sessionId]);
+            if ($refresh->rowCount() !== 1) {
                 throw new HttpException(401, 'UNAUTHENTICATED', 'Session is invalid or expired');
             }
-
-            $session = $this->createSession($ctx->userId(), $clientType, $request, $deviceId !== '' ? $deviceId : null);
             $this->audit->record(
                 $request,
                 $ctx->userId(),
                 $ctx->authType,
                 'session.reauthenticated',
                 'session',
-                $session['session_id'],
-                ['method' => $method, 'replaced_session_id' => $ctx->sessionId]
+                $ctx->sessionId,
+                ['method' => $method]
             );
             $this->pdo->commit();
 
-            return $this->buildAuthResponse($ctx->userId(), $session, $clientType);
+            return Response::json(['status' => 'reauthenticated']);
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();

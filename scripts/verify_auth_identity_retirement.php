@@ -23,7 +23,7 @@ $report = [
         'active_users' => $count('SELECT COUNT(*) FROM users WHERE is_active = 1'),
         'users_with_zero_methods' => $count("SELECT COUNT(*) FROM users u WHERE u.is_active = 1 AND (SELECT COUNT(*) FROM auth_identities ai WHERE ai.user_id = u.id) + (SELECT COUNT(*) FROM password_credentials pc WHERE pc.user_id = u.id) = 0"),
         'users_with_one_method' => $count("SELECT COUNT(*) FROM users u WHERE u.is_active = 1 AND (SELECT COUNT(*) FROM auth_identities ai WHERE ai.user_id = u.id) + (SELECT COUNT(*) FROM password_credentials pc WHERE pc.user_id = u.id) = 1"),
-        'users_with_multiple_methods' => $count("SELECT COUNT(*) FROM users u WHERE u.is_active = 1 AND (SELECT COUNT(*) FROM auth_identities ai WHERE ai.user_id = u.id) + (SELECT COUNT(*) FROM password_credentials pc WHERE pc.user_id = u.id) > 1"),
+        'users_with_two_methods' => $count("SELECT COUNT(*) FROM users u WHERE u.is_active = 1 AND (SELECT COUNT(*) FROM auth_identities ai WHERE ai.user_id = u.id) + (SELECT COUNT(*) FROM password_credentials pc WHERE pc.user_id = u.id) = 2"),
     ],
     'failures' => [
         'auth_identity_orphans' => $count('SELECT COUNT(*) FROM auth_identities ai LEFT JOIN users u ON u.id = ai.user_id WHERE u.id IS NULL'),
@@ -45,7 +45,7 @@ if ($requestedUserId !== null) {
         'session_row_count' => $count('SELECT COUNT(*) FROM user_sessions WHERE user_id = :user_id', [':user_id' => $requestedUserId]),
     ];
 }
-$requestedPasses = !isset($report['requested_google_user']) || ($report['requested_google_user']['found_and_active'] && $report['requested_google_user']['google_identity_count'] === 1 && $report['requested_google_user']['password_credential_count'] === 0);
-$report['ok'] = $report['counts']['users_with_zero_methods'] === 0 && $report['counts']['users_with_multiple_methods'] === 0 && array_sum($report['failures']) === 0 && $requestedPasses;
+$requestedPasses = !isset($report['requested_google_user']) || ($report['requested_google_user']['found_and_active'] && ($report['requested_google_user']['google_identity_count'] + $report['requested_google_user']['password_credential_count']) >= 1);
+$report['ok'] = $report['counts']['users_with_zero_methods'] === 0 && array_sum($report['failures']) === 0 && $requestedPasses;
 echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
 exit($report['ok'] ? 0 : 1);

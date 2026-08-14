@@ -625,23 +625,15 @@ Response `200`:
 }
 ```
 
-### 4.10 Convert Password Account To Google Sign-In
-`POST /me/auth/convert-google`
+### 4.10 Manage Sign-In Methods
+`GET /me/auth-methods` is the authoritative inventory. A Budget account may have Google, password, or both methods.
 
-Auth required: session auth only.
+Authenticated, recently reauthenticated sessions may use:
 
-Request:
-```json
-{
-  "google_id_token": "..."
-}
-```
+- `POST` / `DELETE /me/auth-methods/google`
+- `POST` / `PATCH` / `DELETE /me/auth-methods/password`
 
-Rules:
-- Allowed only when a password credential exists.
-- The Google account email must match the current account email.
-- The account is converted in place on the same user record.
-- Password sign-in stops working after a successful conversion.
+Connecting Google verifies its provider subject and never auto-links or changes the Budget profile email. A method cannot be removed when it is the account's last usable method. Successful method changes keep the current session and revoke other sessions.
 
 Response `200`:
 ```json
@@ -2231,7 +2223,7 @@ Sensitive authenticated flows are limited by credential/session identity plus a 
 - `PATCH /me/preferences`
 - `POST /me/email-change/request`
 - `POST /me/email-change/verify`
-- `POST /me/auth/convert-google`
+- `POST`, `PATCH`, and `DELETE /me/auth-methods/{google|password}`
 
 Rate limit defaults are configured with `RATE_LIMIT_*` environment variables in `.env.example`.
 

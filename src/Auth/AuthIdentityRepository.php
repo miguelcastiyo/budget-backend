@@ -46,4 +46,11 @@ final class AuthIdentityRepository
         $stmt = $this->pdo->prepare("UPDATE auth_identities SET last_used_at = UTC_TIMESTAMP(), provider_email = :email, provider_email_verified = :email_verified WHERE user_id = :user_id AND provider = 'google'");
         $stmt->execute([':user_id' => $userId, ':email' => $email, ':email_verified' => $emailVerified ? 1 : 0]);
     }
+
+    public function deleteForUserAndProvider(int $userId, string $provider): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM auth_identities WHERE user_id = :user_id AND provider = :provider');
+        $stmt->execute([':user_id' => $userId, ':provider' => $provider]);
+        if ($stmt->rowCount() !== 1) throw new \RuntimeException('Auth identity is missing');
+    }
 }

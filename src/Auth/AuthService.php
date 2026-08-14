@@ -60,6 +60,7 @@ SELECT
   {$this->sessionDeviceIdExpression()},
   us.csrf_token_hash,
   us.last_seen_at,
+  us.last_authenticated_at AS session_last_authenticated_at,
   {$sessionCreatedAt},
   u.id,
   u.email,

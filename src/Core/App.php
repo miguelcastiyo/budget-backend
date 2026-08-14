@@ -69,7 +69,7 @@ final class App
         $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
         $authIdentities = new AuthIdentityRepository($pdo);
         $passwordCredentials = new PasswordCredentialRepository($pdo);
-        $authMethods = new AuthMethodService($authIdentities, $passwordCredentials, $structuredLogger);
+        $authMethods = new AuthMethodService($pdo, $authIdentities, $passwordCredentials, $structuredLogger);
         $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials);
         $invitationService = new InvitationService($authApplication);
         $accountAuthenticationService = new AccountAuthenticationService($authApplication);
@@ -79,12 +79,12 @@ final class App
         $sessionController = new SessionController($accountAuthenticationService, $sessionService);
         $passwordResetController = new PasswordResetController($passwordResetService);
         $auditLogController = new AuditLogController($pdo, $auth);
-        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $authMethods);
+        $recentAuth = new \App\Privacy\RecentAuthGuard($config);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $authMethods, $recentAuth);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
         $vaultRepository = new VaultRepository($pdo);
         $privacyStatusController = new PrivacyStatusController($auth, $financialStates);
-        $recentAuth = new \App\Privacy\RecentAuthGuard($config);
         $vaultController = new VaultController($auth, new VaultService($pdo, $vaultRepository, $financialStates, $recentAuth, $auditLogger));
         $quickUnlockController = new QuickUnlockController($auth, new QuickUnlockService($pdo, $config, $financialStates, $vaultRepository, $recentAuth, new QuickUnlockRepository($pdo), $auditLogger));
         $deviceLifecycle = new DeviceLifecycleService($pdo, new QuickUnlockRepository($pdo), $auditLogger);
@@ -117,6 +117,11 @@ final class App
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
         $add('GET', '/me/auth-methods', fn(Request $request) => $profileController->getAuthMethods($request));
+        $add('POST', '/me/auth-methods/google', fn(Request $request) => $profileController->connectGoogle($request));
+        $add('DELETE', '/me/auth-methods/google', fn(Request $request) => $profileController->removeGoogle($request));
+        $add('POST', '/me/auth-methods/password', fn(Request $request) => $profileController->addPassword($request));
+        $add('PATCH', '/me/auth-methods/password', fn(Request $request) => $profileController->changePassword($request));
+        $add('DELETE', '/me/auth-methods/password', fn(Request $request) => $profileController->removePassword($request));
         $add('GET', '/me/privacy', $privacyStatusController);
         $add('GET', '/me/vault', fn(Request $request) => $vaultController->get($request));
         $add('POST', '/me/vault', fn(Request $request) => $vaultController->initialize($request));
@@ -142,7 +147,6 @@ final class App
         $add('PATCH', '/me/preferences', fn(Request $request) => $profileController->updatePreferences($request));
         $add('POST', '/me/email-change/request', fn(Request $request) => $profileController->requestEmailChange($request));
         $add('POST', '/me/email-change/verify', fn(Request $request) => $profileController->verifyEmailChange($request));
-        $add('POST', '/me/auth/convert-google', fn(Request $request) => $profileController->convertAccountToGoogle($request));
 
         $add('GET', '/me/audit-logs', fn(Request $request) => $auditLogController->list($request));
 
@@ -263,10 +267,10 @@ final class App
             return;
         }
 
-        if ($method === 'POST' && $path === '/me/auth/convert-google') {
+        if (preg_match('#^/me/auth-methods/(google|password)$#', $path) === 1 && in_array($method, ['POST', 'PATCH', 'DELETE'], true)) {
             $this->hitAuthenticatedRateLimit(
                 $request,
-                'convert-google',
+                'auth-method-mutation',
                 $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_MAX', 5),
                 $this->config->getInt('RATE_LIMIT_AUTH_CONVERT_WINDOW_SECONDS', 600)
             );

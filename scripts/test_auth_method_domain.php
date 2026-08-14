@@ -21,7 +21,7 @@ $pdo->exec('CREATE TABLE password_credentials (user_id INTEGER PRIMARY KEY, pass
 $pdo->exec("INSERT INTO auth_identities (user_id, provider, provider_subject, provider_email, provider_email_verified, created_at, last_used_at) VALUES (10, 'google', 'opaque-subject', 'google@example.test', 1, '2026-08-14 20:00:00', '2026-08-14 20:15:00')");
 $pdo->exec("INSERT INTO password_credentials (user_id, password_hash, created_at) VALUES (20, 'test-hash', '2026-08-14 20:00:00')");
 
-$service = new AuthMethodService(new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger(Config::load(dirname(__DIR__))));
+$service = new AuthMethodService($pdo, new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger(Config::load(dirname(__DIR__))));
 $google = $service->listForUser(10);
 if (count($google) !== 1 || $google[0]->type !== 'google' || $google[0]->providerEmail !== 'google@example.test') throw new RuntimeException('Google method inventory is incorrect');
 $password = $service->listForUser(20);

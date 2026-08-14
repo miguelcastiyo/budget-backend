@@ -16,6 +16,7 @@ use App\Http\Response;
 use App\Mail\Mailer;
 use App\Security\AuditLogger;
 use App\Support\Str;
+use App\Privacy\RecentAuthGuard;
 use PDO;
 
 final class ProfileController
@@ -29,7 +30,8 @@ final class ProfileController
         private readonly AuditLogger $audit,
         private readonly AuthIdentityRepository $identities,
         private readonly PasswordCredentialRepository $passwords,
-        private readonly AuthMethodService $methods
+        private readonly AuthMethodService $methods,
+        private readonly RecentAuthGuard $recentAuth
     ) {
     }
 
@@ -307,12 +309,10 @@ final class ProfileController
         ]);
     }
 
-    public function convertAccountToGoogle(Request $request): Response
+    public function connectGoogle(Request $request): Response
     {
         $ctx = $this->auth->requireAuth($request);
-        if (!$this->hasPasswordCredential($ctx->userId())) {
-            throw new HttpException(403, 'FORBIDDEN', 'Only password accounts can be converted to Google sign-in');
-        }
+        $this->recentAuth->requireRecentInteractiveSession($ctx);
 
         $payload = $request->json();
         $googleIdToken = trim((string) ($payload['google_id_token'] ?? ''));
@@ -323,68 +323,64 @@ final class ProfileController
         }
 
         $googleIdentity = $this->googleTokens->verifyIdToken($googleIdToken);
-        $currentEmail = strtolower((string) $ctx->user['email']);
         $googleEmail = strtolower((string) $googleIdentity['email']);
+        $this->methods->connectGoogle($ctx->userId(), (string) $googleIdentity['subject'], $googleEmail, true);
+        return $this->completeMethodMutation($request, $ctx, 'auth_method.connected', ['provider' => 'google']);
+    }
 
-        if ($currentEmail !== $googleEmail) {
-            throw new HttpException(409, 'CONFLICT', 'Google email must match the current account email');
+    public function addPassword(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request); $this->recentAuth->requireRecentInteractiveSession($ctx);
+        if (!(bool) $ctx->user['email_verified']) throw new HttpException(403, 'FORBIDDEN', 'A verified account email is required before adding password sign-in.');
+        $password = (string) ($request->json()['password'] ?? ''); $this->validatePassword($password);
+        $this->methods->addPassword($ctx->userId(), password_hash($password, PASSWORD_DEFAULT));
+        return $this->completeMethodMutation($request, $ctx, 'auth_method.connected', ['method' => 'password']);
+    }
+
+    public function changePassword(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request); $this->recentAuth->requireRecentInteractiveSession($ctx);
+        $password = (string) ($request->json()['password'] ?? ''); $this->validatePassword($password);
+        $this->methods->changePassword($ctx->userId(), password_hash($password, PASSWORD_DEFAULT));
+        return $this->completeMethodMutation($request, $ctx, 'auth_method.password_changed', ['method' => 'password']);
+    }
+
+    public function removePassword(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request); $this->recentAuth->requireRecentInteractiveSession($ctx);
+        $this->methods->removePassword($ctx->userId());
+        return $this->completeMethodMutation($request, $ctx, 'auth_method.disconnected', ['method' => 'password']);
+    }
+
+    public function removeGoogle(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request); $this->recentAuth->requireRecentInteractiveSession($ctx);
+        $this->methods->removeExternalProvider($ctx->userId(), 'google');
+        return $this->completeMethodMutation($request, $ctx, 'auth_method.disconnected', ['provider' => 'google']);
+    }
+
+    /** @param array<string,string> $metadata */
+    private function completeMethodMutation(Request $request, \App\Auth\AuthContext $ctx, string $event, array $metadata): Response
+    {
+        if ($ctx->sessionId !== null) {
+            $revoke = $this->pdo->prepare('UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND session_id <> :session_id AND revoked_at IS NULL');
+            $revoke->execute([':user_id' => $ctx->userId(), ':session_id' => $ctx->sessionId]);
         }
+        $this->audit->record(
+            $request,
+            $ctx->userId(),
+            $ctx->authType,
+            $event,
+            'user',
+            (string) $ctx->userId(),
+            $metadata
+        );
+        return Response::json(['methods' => array_map(static fn(\App\Auth\AuthMethod $method): array => $method->toApi(), $this->methods->listForUser($ctx->userId()))]);
+    }
 
-        $existingGoogle = $this->identities->findByProviderSubject('google', (string) $googleIdentity['subject']);
-        if ($existingGoogle && (int) $existingGoogle['user_id'] !== $ctx->userId()) {
-            throw new HttpException(409, 'CONFLICT', 'This Google account is already linked to another user');
-        }
-
-        $avatarUrl = $this->normalizeAvatarUrl($googleIdentity['picture'] ?? null);
-        $currentAvatarUrl = $ctx->user['avatar_url'] !== null ? (string) $ctx->user['avatar_url'] : null;
-        $resolvedAvatarUrl = $avatarUrl ?? $currentAvatarUrl;
-
-        $this->pdo->beginTransaction();
-        try {
-            if (!$existingGoogle) $this->identities->createGoogle($ctx->userId(), (string) $googleIdentity['subject'], $googleEmail, true);
-            $this->passwords->deleteForUser($ctx->userId());
-            $updateUser = $this->pdo->prepare(
-                'UPDATE users SET avatar_url = :avatar_url, email_verified = 1 WHERE id = :id'
-            );
-            $updateUser->execute([
-                ':avatar_url' => $resolvedAvatarUrl,
-                ':id' => $ctx->userId(),
-            ]);
-
-            if ($ctx->sessionId !== null) {
-                $revokeOtherSessions = $this->pdo->prepare(
-                    'UPDATE user_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND session_id <> :session_id AND revoked_at IS NULL'
-                );
-                $revokeOtherSessions->execute([
-                    ':user_id' => $ctx->userId(),
-                    ':session_id' => $ctx->sessionId,
-                ]);
-            }
-
-            $this->audit->record(
-                $request,
-                $ctx->userId(),
-                $ctx->authType,
-                'profile.auth_provider_changed',
-                'user',
-                (string) $ctx->userId(),
-                [
-                    'previous_auth_provider' => 'password',
-                    'next_auth_provider' => 'google',
-                    'other_sessions_revoked' => $ctx->sessionId !== null,
-                ]
-            );
-
-            $this->pdo->commit();
-        } catch (\Throwable $e) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
-            }
-            throw $e;
-        }
-
-        $profile = $this->fetchProfile($ctx->userId());
-        return Response::json($profile);
+    private function validatePassword(string $password): void
+    {
+        if (strlen($password) < 8) throw new HttpException(422, 'VALIDATION_ERROR', 'Request validation failed', [['field' => 'password', 'message' => 'must be at least 8 characters']]);
     }
 
     private function hasPasswordCredential(int $userId): bool { return $this->methods->hasPassword($userId); }

@@ -32,7 +32,7 @@ foreach (['auth_provider', 'google_sub', 'password_hash', 'chk_users_auth_provid
 foreach (['auth_retirement_preflight_failed', 'auth_retirement_zero_method_users', 'auth_retirement_multi_method_users', 'DROP COLUMN auth_provider', 'DROP COLUMN password_hash', 'DROP COLUMN google_sub'] as $term) {
     if (!str_contains($retirement, $term)) throw new RuntimeException('Retirement migration safety contract is missing: ' . $term);
 }
-foreach (['users_with_zero_methods', 'users_with_multiple_methods', 'auth_identity_orphans', 'session_user_orphans', '--user-id=ID'] as $term) {
+foreach (['users_with_zero_methods', 'users_with_two_methods', 'auth_identity_orphans', 'session_user_orphans', '--user-id=ID'] as $term) {
     if (!str_contains($diagnostic, $term)) throw new RuntimeException('Retirement verifier contract is missing: ' . $term);
 }
 foreach (['findByProviderSubject', 'findForUser', 'markGoogleUsed', 'markUsed', 'last_authenticated_at'] as $term) {

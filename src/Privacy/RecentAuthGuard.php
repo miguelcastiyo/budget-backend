@@ -22,8 +22,8 @@ final class RecentAuthGuard
             throw new HttpException(403, 'RECENT_AUTH_REQUIRED', 'Recent interactive authentication is required');
         }
 
-        $createdAt = (string) ($auth->user['session_created_at'] ?? '');
-        $created = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $createdAt, new DateTimeZone('UTC'));
+        $authenticatedAt = (string) ($auth->user['session_last_authenticated_at'] ?? $auth->user['session_created_at'] ?? '');
+        $created = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $authenticatedAt, new DateTimeZone('UTC'));
         $window = max(1, $this->config->getInt('RECENT_AUTH_WINDOW_SECONDS', 900));
         if ($created === false || $created->getTimestamp() < time() - $window) {
             throw new HttpException(403, 'RECENT_AUTH_REQUIRED', 'Recent interactive authentication is required');

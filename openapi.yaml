@@ -583,6 +583,48 @@ paths:
                 $ref: '#/components/schemas/AuthMethodsResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Profile]
+      summary: Add a sign-in method
+      description: Recent authentication and CSRF protection are required. Use the Google or password method path.
+
+  /me/auth-methods/google:
+    post:
+      tags: [Profile]
+      summary: Connect Google sign-in
+      description: Requires recent authentication. The verified Google subject is linked only to the current Budget account; provider email need not match the account email.
+      parameters: [{ $ref: '#/components/parameters/XCsrfToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GoogleAuthMethodRequest' } } } }
+      responses:
+        '200': { description: Updated sign-in methods, content: { application/json: { schema: { $ref: '#/components/schemas/AuthMethodsResponse' } } } }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+    delete:
+      tags: [Profile]
+      summary: Remove Google sign-in
+      parameters: [{ $ref: '#/components/parameters/XCsrfToken' }]
+      responses:
+        '200': { description: Updated sign-in methods, content: { application/json: { schema: { $ref: '#/components/schemas/AuthMethodsResponse' } } } }
+        '409': { $ref: '#/components/responses/ConflictError' }
+
+  /me/auth-methods/password:
+    post:
+      tags: [Profile]
+      summary: Add password sign-in
+      parameters: [{ $ref: '#/components/parameters/XCsrfToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PasswordAuthMethodRequest' } } } }
+      responses: { '200': { description: Updated sign-in methods }, '409': { $ref: '#/components/responses/ConflictError' } }
+    patch:
+      tags: [Profile]
+      summary: Change password sign-in
+      parameters: [{ $ref: '#/components/parameters/XCsrfToken' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PasswordAuthMethodRequest' } } } }
+      responses: { '200': { description: Updated sign-in methods } }
+    delete:
+      tags: [Profile]
+      summary: Remove password sign-in
+      parameters: [{ $ref: '#/components/parameters/XCsrfToken' }]
+      responses: { '200': { description: Updated sign-in methods }, '409': { $ref: '#/components/responses/ConflictError' } }
 
   /me/vault:
     get:
@@ -942,38 +984,6 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  /me/auth/convert-google:
-    post:
-      tags: [Profile]
-      summary: Convert current password account to Google sign-in
-      description: Session auth only. The Google account email must match the current user email.
-      security:
-        - cookieAuth: []
-        - sessionTokenAuth: []
-      parameters:
-        - $ref: '#/components/parameters/XCsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConvertAccountToGoogleRequest'
-      responses:
-        '200':
-          description: Profile updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Profile'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -1739,7 +1749,9 @@ components:
         last_used_at:
           type: [string, 'null']
           format: date-time
-      required: [type, provider_email, connected_at, last_used_at]
+        can_remove:
+          type: boolean
+      required: [type, provider_email, connected_at, last_used_at, can_remove]
 
     AuthMethodsResponse:
       type: object
@@ -1749,6 +1761,22 @@ components:
           items:
             $ref: '#/components/schemas/AuthMethod'
       required: [methods]
+
+    GoogleAuthMethodRequest:
+      type: object
+      required: [google_id_token]
+      properties:
+        google_id_token:
+          type: string
+          minLength: 1
+
+    PasswordAuthMethodRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 8
 
     Profile:
       type: object
@@ -1928,14 +1956,6 @@ components:
         email_verified:
           type: boolean
       required: [email, email_verified]
-
-    ConvertAccountToGoogleRequest:
-      type: object
-      properties:
-        google_id_token:
-          type: string
-          minLength: 1
-      required: [google_id_token]
 
     CreateNamedEntityRequest:
       type: object

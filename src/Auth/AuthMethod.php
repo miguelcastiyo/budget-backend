@@ -11,12 +11,13 @@ final readonly class AuthMethod
         public string $type,
         public ?string $providerEmail,
         public ?string $connectedAt,
-        public ?string $lastUsedAt
+        public ?string $lastUsedAt,
+        public bool $canRemove
     ) {}
 
-    /** @return array{type:string,provider_email:?string,connected_at:?string,last_used_at:?string} */
+    /** @return array{type:string,provider_email:?string,connected_at:?string,last_used_at:?string,can_remove:bool} */
     public function toApi(): array
     {
-        return ['type' => $this->type, 'provider_email' => $this->providerEmail, 'connected_at' => $this->connectedAt, 'last_used_at' => $this->lastUsedAt];
+        return ['type' => $this->type, 'provider_email' => $this->providerEmail, 'connected_at' => $this->connectedAt, 'last_used_at' => $this->lastUsedAt, 'can_remove' => $this->canRemove];
     }
 }
