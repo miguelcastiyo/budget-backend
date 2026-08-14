@@ -17,8 +17,9 @@ if (!preg_match('/^mysql:.*dbname=([^;]+)/', $dsn, $match) || !str_ends_with($ma
 require __DIR__ . '/../src/bootstrap.php';
 $pdo = new PDO($dsn, (string) getenv('DB_USER'), (string) getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 $suffix = bin2hex(random_bytes(6));
-$pdo->prepare("INSERT INTO users (email,display_name,auth_provider,password_hash,email_verified,role,is_active,financial_privacy_state) VALUES (:email,'Phase 6B Batch Test','password',:password,1,'member',1,'vault_setup_required')")->execute([':email'=>"phase6b-batch-{$suffix}@example.test", ':password'=>password_hash('phase6b-test', PASSWORD_DEFAULT)]);
+$pdo->prepare("INSERT INTO users (email,display_name,email_verified,role,is_active,financial_privacy_state) VALUES (:email,'Phase 6B Batch Test',1,'member',1,'vault_setup_required')")->execute([':email'=>"phase6b-batch-{$suffix}@example.test"]);
 $userId = (int) $pdo->lastInsertId();
+$pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id'=>$userId, ':password_hash'=>password_hash('phase6b-test', PASSWORD_DEFAULT)]);
 function batchB64(string $bytes): string { return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '='); }
 function batchEnvelope(string $vault, string $id, int $revision, ?string $ciphertext = null): array { return ['vault_id'=>$vault,'record_id'=>$id,'envelope_version'=>1,'record_revision'=>$revision,'iv'=>batchB64(str_repeat('i',12)),'ciphertext'=>batchB64($ciphertext ?? random_bytes(40)),'sync_sequence'=>'0','deleted'=>false]; }
 function batchError(callable $fn, string $code): void { try { $fn(); } catch (HttpException $e) { if ($e->errorCode !== $code) throw new RuntimeException("expected {$code}, got {$e->errorCode}"); return; } throw new RuntimeException("expected {$code}"); }
@@ -44,5 +45,6 @@ try {
     $pdo->prepare('DELETE FROM encrypted_financial_records WHERE user_id=:id')->execute([':id'=>$userId]);
     $pdo->prepare('DELETE FROM encrypted_record_sync_state WHERE user_id=:id')->execute([':id'=>$userId]);
     $pdo->prepare('DELETE FROM user_financial_vaults WHERE user_id=:id')->execute([':id'=>$userId]);
+    $pdo->prepare('DELETE FROM password_credentials WHERE user_id=:id')->execute([':id'=>$userId]);
     $pdo->prepare('DELETE FROM users WHERE id=:id')->execute([':id'=>$userId]);
 }

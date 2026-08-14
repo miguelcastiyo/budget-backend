@@ -234,13 +234,12 @@ The backend verifies the JWT locally against cached Google signing certificates 
 The certificate cache defaults to `storage/google-certs-cache.json`.
 
 ## Auth identity transition
-`auth_identities` and `password_credentials` are the current login authority.
-The legacy auth columns on `users` remain synchronized only as a temporary
-rollback bridge. `GET /me/auth-methods` is the provider-neutral method
-inventory for new clients; the `auth_provider` response field is deprecated
-compatibility output. See [`docs/auth-identity-transition.md`](docs/auth-identity-transition.md)
-and run `php scripts/verify_auth_identity_backfill.php` after deployment.
-Multi-method mutation remains intentionally disabled until legacy retirement.
+`auth_identities` and `password_credentials` are the sole login authority.
+`users` contains only Budget account/profile data. `GET /me/auth-methods` is
+the provider-neutral method inventory. See
+[`docs/auth-identity-transition.md`](docs/auth-identity-transition.md) and run
+`php scripts/verify_auth_identity_retirement.php` after deployment.
+Multi-method mutation remains intentionally disabled until the next phase.
 
 ## Email delivery
 - `MAIL_TRANSPORT=log`: writes emails to `storage/mail.log` (local dev default)

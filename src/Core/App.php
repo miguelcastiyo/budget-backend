@@ -13,7 +13,6 @@ use App\Auth\PasswordResetService;
 use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
-use App\Auth\LegacyAuthCompatibilityService;
 use App\Auth\AuthMethodService;
 use App\Controllers\AuditLogController;
 use App\Controllers\InvitationController;
@@ -70,9 +69,8 @@ final class App
         $googleTokenVerifier = new GoogleTokenVerifier($config, $structuredLogger);
         $authIdentities = new AuthIdentityRepository($pdo);
         $passwordCredentials = new PasswordCredentialRepository($pdo);
-        $legacyAuth = new LegacyAuthCompatibilityService($pdo, $authIdentities, $passwordCredentials, $structuredLogger);
         $authMethods = new AuthMethodService($authIdentities, $passwordCredentials, $structuredLogger);
-        $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth, $authMethods);
+        $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials);
         $invitationService = new InvitationService($authApplication);
         $accountAuthenticationService = new AccountAuthenticationService($authApplication);
         $sessionService = new SessionService($authApplication);
@@ -81,7 +79,7 @@ final class App
         $sessionController = new SessionController($accountAuthenticationService, $sessionService);
         $passwordResetController = new PasswordResetController($passwordResetService);
         $auditLogController = new AuditLogController($pdo, $auth);
-        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth, $authMethods);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $authMethods);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
         $vaultRepository = new VaultRepository($pdo);

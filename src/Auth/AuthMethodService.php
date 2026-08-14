@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Auth;
 
-use App\Http\HttpException;
 use App\Monitoring\StructuredLogger;
 
 /** Reads only Piece 1/2 authoritative auth tables; never legacy users columns. */
@@ -33,15 +32,6 @@ final class AuthMethodService
     public function hasPassword(int $userId): bool { return $this->passwords->existsForUser($userId); }
     public function hasExternalProvider(int $userId, string $provider): bool { return $this->identities->findForUserAndProvider($userId, $provider) !== false; }
     public function countForUser(int $userId): int { return count($this->listForUser($userId)); }
-
-    public function compatibilityProvider(int $userId): string
-    {
-        $methods = $this->listForUser($userId);
-        if (count($methods) !== 1 || !in_array($methods[0]->type, ['password', 'google'], true)) {
-            throw new HttpException(500, 'INTERNAL_ERROR', 'Account authentication state is invalid');
-        }
-        return $methods[0]->type;
-    }
 
     private function timestamp(mixed $value): ?string
     {

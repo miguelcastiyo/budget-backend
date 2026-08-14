@@ -256,7 +256,6 @@ Response `201`:
     "email": "newuser@example.com",
     "display_name": "Miguel",
     "avatar_url": null,
-    "auth_provider": "password",
     "onboarding_complete": true,
     "user_preferences": {
       "appearance": {
@@ -295,7 +294,8 @@ Rules:
 - Google email must match invite email.
 - When Google provides a profile picture, backend stores it in `users.avatar_url` and returns it as `avatar_url` in auth/profile responses.
 
-Response `201`: same shape as password accept, with `auth_provider: "google"`.
+Response `201`: same shape as password accept. The current sign-in method is
+available through `GET /me/auth-methods`.
 
 ### 3.4 Sign In
 `POST /auth/sessions/password`
@@ -386,9 +386,8 @@ Rules:
 ### 4.1 Get Profile
 `GET /me`
 
-`auth_provider` remains a deprecated compatibility field. New clients should
-use `GET /me/auth-methods`, whose `methods` inventory is derived from
-`auth_identities` and `password_credentials` rather than legacy user columns.
+Use `GET /me/auth-methods` for the current sign-in-method inventory, derived
+from `auth_identities` and `password_credentials`.
 
 Response:
 ```json
@@ -397,7 +396,6 @@ Response:
   "email": "newuser@example.com",
   "display_name": "Miguel",
   "avatar_url": "https://lh3.googleusercontent.com/a/...",
-  "auth_provider": "password",
   "email_verified": true,
   "created_at": "2026-03-05T18:33:21Z",
   "onboarding_complete": true,
@@ -591,7 +589,7 @@ Request:
 ```
 
 Rules:
-- Allowed only when `auth_provider = password`.
+- Allowed only when a password credential exists.
 - Sends verification code to `new_email`.
 - Does not update email yet.
 - Rate limited.
@@ -640,7 +638,7 @@ Request:
 ```
 
 Rules:
-- Allowed only when `auth_provider = password`.
+- Allowed only when a password credential exists.
 - The Google account email must match the current account email.
 - The account is converted in place on the same user record.
 - Password sign-in stops working after a successful conversion.
@@ -652,7 +650,6 @@ Response `200`:
   "email": "newuser@example.com",
   "display_name": "Miguel",
   "avatar_url": "https://lh3.googleusercontent.com/a/...",
-  "auth_provider": "google",
   "email_verified": true,
   "created_at": "2026-03-05T18:33:21Z",
   "onboarding_complete": true,

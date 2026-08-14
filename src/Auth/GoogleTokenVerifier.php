@@ -29,7 +29,7 @@ final class GoogleTokenVerifier
         $this->allowedClientIds = array_values(array_filter($parts, static fn(string $v): bool => $v !== ''));
     }
 
-    /** @return array{email:string,google_sub:string,name:?string,picture:?string} */
+    /** @return array{email:string,subject:string,name:?string,picture:?string} */
     public function verifyIdToken(string $idToken): array
     {
         if ($idToken === '') {
@@ -98,7 +98,7 @@ final class GoogleTokenVerifier
 
         return [
             'email' => $email,
-            'google_sub' => $sub,
+            'subject' => $sub,
             'name' => $name !== '' ? $name : null,
             'picture' => $picture !== '' ? $picture : null,
         ];

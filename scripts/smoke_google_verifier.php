@@ -88,7 +88,7 @@ $identity = $verifier->verifyIdToken($jwt);
 
 $expected = [
     'email' => 'user@example.com',
-    'google_sub' => 'google-sub-123',
+    'subject' => 'google-sub-123',
     'name' => 'Budget User',
     'picture' => 'https://example.com/avatar.png',
 ];

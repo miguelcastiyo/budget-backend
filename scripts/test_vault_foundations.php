@@ -30,9 +30,10 @@ require __DIR__ . '/../src/bootstrap.php';
 $pdo = new PDO($dsn, (string) getenv('DB_USER'), (string) getenv('DB_PASS'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
 $suffix = bin2hex(random_bytes(6));
 $email = 'phase2-vault-' . $suffix . '@example.test';
-$insert = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 2 Vault Test', 'password', :password_hash, 1, 'member', 1, 'vault_setup_required')");
-$insert->execute([':email' => $email, ':password_hash' => password_hash('phase2-test-only', PASSWORD_DEFAULT)]);
+$insert = $pdo->prepare("INSERT INTO users (email, display_name, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Phase 2 Vault Test', 1, 'member', 1, 'vault_setup_required')");
+$insert->execute([':email' => $email]);
 $userId = (int) $pdo->lastInsertId();
+$pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => password_hash('phase2-test-only', PASSWORD_DEFAULT)]);
 
 function b64url(string $bytes): string { return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '='); }
 function expectFailure(callable $callback, int $status, string $code): void {
@@ -97,5 +98,6 @@ try {
     if (isset($otherSession)) $pdo->prepare('DELETE FROM user_sessions WHERE session_id = :session_id')->execute([':session_id' => $otherSession]);
     if (isset($currentSession)) $pdo->prepare('DELETE FROM user_sessions WHERE session_id = :session_id')->execute([':session_id' => $currentSession]);
     $pdo->prepare('DELETE FROM user_financial_vaults WHERE user_id = :id')->execute([':id' => $userId]);
+    $pdo->prepare('DELETE FROM password_credentials WHERE user_id = :id')->execute([':id' => $userId]);
     $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $userId]);
 }

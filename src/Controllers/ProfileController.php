@@ -8,7 +8,6 @@ use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
-use App\Auth\LegacyAuthCompatibilityService;
 use App\Auth\AuthMethodService;
 use App\Core\Config;
 use App\Http\HttpException;
@@ -30,7 +29,6 @@ final class ProfileController
         private readonly AuditLogger $audit,
         private readonly AuthIdentityRepository $identities,
         private readonly PasswordCredentialRepository $passwords,
-        private readonly LegacyAuthCompatibilityService $legacyAuth,
         private readonly AuthMethodService $methods
     ) {
     }
@@ -332,7 +330,7 @@ final class ProfileController
             throw new HttpException(409, 'CONFLICT', 'Google email must match the current account email');
         }
 
-        $existingGoogle = $this->identities->findByProviderSubject('google', (string) $googleIdentity['google_sub']);
+        $existingGoogle = $this->identities->findByProviderSubject('google', (string) $googleIdentity['subject']);
         if ($existingGoogle && (int) $existingGoogle['user_id'] !== $ctx->userId()) {
             throw new HttpException(409, 'CONFLICT', 'This Google account is already linked to another user');
         }
@@ -343,14 +341,12 @@ final class ProfileController
 
         $this->pdo->beginTransaction();
         try {
-            if (!$existingGoogle) $this->identities->createGoogle($ctx->userId(), (string) $googleIdentity['google_sub'], $googleEmail, true);
+            if (!$existingGoogle) $this->identities->createGoogle($ctx->userId(), (string) $googleIdentity['subject'], $googleEmail, true);
             $this->passwords->deleteForUser($ctx->userId());
             $updateUser = $this->pdo->prepare(
-                'UPDATE users SET auth_provider = :auth_provider, password_hash = NULL, google_sub = :google_sub, avatar_url = :avatar_url, email_verified = 1 WHERE id = :id'
+                'UPDATE users SET avatar_url = :avatar_url, email_verified = 1 WHERE id = :id'
             );
             $updateUser->execute([
-                ':auth_provider' => 'google',
-                ':google_sub' => (string) $googleIdentity['google_sub'],
                 ':avatar_url' => $resolvedAvatarUrl,
                 ':id' => $ctx->userId(),
             ]);
@@ -391,14 +387,7 @@ final class ProfileController
         return Response::json($profile);
     }
 
-    private function hasPasswordCredential(int $userId): bool
-    {
-        if ($this->methods->hasPassword($userId)) return true;
-        $legacy = $this->pdo->prepare('SELECT id, auth_provider, password_hash, google_sub FROM users WHERE id = :id LIMIT 1');
-        $legacy->execute([':id' => $userId]);
-        $user = $legacy->fetch();
-        return is_array($user) && $this->legacyAuth->repairMissingPasswordCredential($user);
-    }
+    private function hasPasswordCredential(int $userId): bool { return $this->methods->hasPassword($userId); }
 
     /** @param array<string,mixed> $user */
     private function profileFromAuth(array $user): array
@@ -410,7 +399,6 @@ final class ProfileController
             'id' => (string) $user['id'],
             'email' => (string) $user['email'],
             'display_name' => $displayName,
-            'auth_provider' => $this->methods->compatibilityProvider((int) $user['id']),
             'role' => (string) $user['role'],
             'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
             'email_verified' => (bool) $user['email_verified'],
@@ -437,7 +425,6 @@ final class ProfileController
             'id' => (string) $row['id'],
             'email' => (string) $row['email'],
             'display_name' => (string) $row['display_name'],
-            'auth_provider' => $this->methods->compatibilityProvider((int) $row['id']),
             'role' => (string) $row['role'],
             'avatar_url' => $row['avatar_url'] !== null ? (string) $row['avatar_url'] : null,
             'email_verified' => (bool) $row['email_verified'],

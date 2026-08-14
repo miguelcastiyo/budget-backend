@@ -86,6 +86,15 @@ composer install \
 composer check-platform-reqs --no-dev
 test -f vendor/autoload.php
 
+RETIREMENT_MIGRATION="20260815_retire_legacy_auth_representation.sql"
+MIGRATION_STATUS="$(php scripts/migrate.php --status)"
+RETIREMENT_PENDING=0
+if grep -Fq "$RETIREMENT_MIGRATION" <<<"$MIGRATION_STATUS"; then
+  RETIREMENT_PENDING=1
+  echo "Phase 4 auth retirement is pending; running authoritative preflight."
+  php scripts/verify_auth_identity_retirement.php
+fi
+
 MIGRATION_OUTPUT="$(mktemp)"
 if ! php scripts/migrate.php 2>&1 | tee "$MIGRATION_OUTPUT"; then
   if grep -q 'Phase 4 schema retirement refused' "$MIGRATION_OUTPUT"; then
@@ -96,6 +105,11 @@ if ! php scripts/migrate.php 2>&1 | tee "$MIGRATION_OUTPUT"; then
   exit 1
 fi
 rm -f "$MIGRATION_OUTPUT"
+
+if (( RETIREMENT_PENDING )); then
+  echo "Phase 4 auth retirement applied; running post-migration verification."
+  php scripts/verify_auth_identity_retirement.php
+fi
 
 sudo systemctl reload "$PHP_FPM_SERVICE"
 

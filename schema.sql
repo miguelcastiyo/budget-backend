@@ -11,9 +11,6 @@ CREATE TABLE users (
   avatar_url VARCHAR(512) NULL,
   user_preferences JSON NULL,
   financial_privacy_state VARCHAR(32) NOT NULL DEFAULT 'vault_setup_required',
-  auth_provider ENUM('password', 'google') NOT NULL,
-  password_hash VARCHAR(255) NULL,
-  google_sub VARCHAR(128) NULL,
   email_verified TINYINT(1) NOT NULL DEFAULT 0,
   role ENUM('owner', 'admin', 'member') NOT NULL DEFAULT 'member',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -21,12 +18,6 @@ CREATE TABLE users (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email),
-  UNIQUE KEY uq_users_google_sub (google_sub),
-  CONSTRAINT chk_users_auth_provider CHECK (
-    (auth_provider = 'password' AND password_hash IS NOT NULL AND google_sub IS NULL)
-    OR
-    (auth_provider = 'google' AND google_sub IS NOT NULL AND password_hash IS NULL)
-  ),
   CONSTRAINT chk_users_financial_privacy_state CHECK (
     financial_privacy_state IN ('vault_setup_required', 'encrypted')
   )

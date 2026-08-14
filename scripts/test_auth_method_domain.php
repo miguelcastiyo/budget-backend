@@ -6,7 +6,6 @@ use App\Auth\AuthIdentityRepository;
 use App\Auth\AuthMethodService;
 use App\Auth\PasswordCredentialRepository;
 use App\Core\Config;
-use App\Http\HttpException;
 use App\Monitoring\StructuredLogger;
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -24,15 +23,9 @@ $pdo->exec("INSERT INTO password_credentials (user_id, password_hash, created_at
 
 $service = new AuthMethodService(new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger(Config::load(dirname(__DIR__))));
 $google = $service->listForUser(10);
-if (count($google) !== 1 || $google[0]->type !== 'google' || $google[0]->providerEmail !== 'google@example.test' || $service->compatibilityProvider(10) !== 'google') throw new RuntimeException('Google method inventory is incorrect');
+if (count($google) !== 1 || $google[0]->type !== 'google' || $google[0]->providerEmail !== 'google@example.test') throw new RuntimeException('Google method inventory is incorrect');
 $password = $service->listForUser(20);
-if (count($password) !== 1 || $password[0]->type !== 'password' || $password[0]->providerEmail !== null || $service->compatibilityProvider(20) !== 'password') throw new RuntimeException('Password method inventory is incorrect');
+if (count($password) !== 1 || $password[0]->type !== 'password' || $password[0]->providerEmail !== null) throw new RuntimeException('Password method inventory is incorrect');
 $pdo->exec("INSERT INTO auth_identities (user_id, provider, provider_subject, provider_email, provider_email_verified, created_at) VALUES (20, 'google', 'second-subject', NULL, 1, '2026-08-14 20:00:00')");
 if (count($service->listForUser(20)) !== 2) throw new RuntimeException('Unexpected multi-method state was hidden');
-try {
-    $service->compatibilityProvider(20);
-    throw new RuntimeException('Multi-method compatibility provider was guessed');
-} catch (HttpException $error) {
-    if ($error->status !== 500) throw $error;
-}
 echo "Auth method domain tests passed\n";

@@ -30,14 +30,12 @@ if ($stmt->fetch()) {
 }
 
 $insert = $pdo->prepare(
-    'INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, :auth_provider, :password_hash, 1, :role, \'vault_setup_required\')'
+    'INSERT INTO users (email, display_name, email_verified, role, financial_privacy_state) VALUES (:email, :display_name, 1, :role, \'vault_setup_required\')'
 );
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 $insert->execute([
     ':email' => strtolower($email),
     ':display_name' => $displayName,
-    ':auth_provider' => 'password',
-    ':password_hash' => $passwordHash,
     ':role' => 'owner',
 ]);
 

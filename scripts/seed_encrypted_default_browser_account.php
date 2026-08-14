@@ -18,7 +18,7 @@ try {
         $pdo->prepare('DELETE FROM users WHERE id = :uid')->execute([':uid' => (int) $oldUserId]);
     }
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active) VALUES (:email, 'Encrypted Default Browser', 'password', :password, 1, 'member', 1)")->execute([':email' => $email, ':password' => $passwordHash]);
+    $pdo->prepare("INSERT INTO users (email, display_name, email_verified, role, is_active) VALUES (:email, 'Encrypted Default Browser', 1, 'member', 1)")->execute([':email' => $email]);
     $userId = (int) $pdo->lastInsertId(); $pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => $passwordHash]); $sessionId = "encrypted-default-seed_{$suffix}"; $sessionSecret = "encrypted-default-seed-secret-{$suffix}"; $csrfToken = "encrypted-default-csrf-{$suffix}";
     $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, created_at, expires_at) VALUES (:sid, :uid, :secret, :csrf, 'web', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':sid' => $sessionId, ':uid' => $userId, ':secret' => hash('sha256', $sessionSecret), ':csrf' => hash('sha256', $csrfToken)]);
     $pdo->commit(); echo json_encode(['email' => $email, 'password' => $password, 'user_id' => $userId, 'session_token' => $sessionId . '.' . $sessionSecret, 'csrf_token' => $csrfToken], JSON_UNESCAPED_SLASHES) . "\n";

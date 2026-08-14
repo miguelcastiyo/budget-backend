@@ -1706,11 +1706,6 @@ components:
         avatar_url:
           type: [string, 'null']
           format: uri
-        auth_provider:
-          type: string
-          enum: [password, google]
-          deprecated: true
-          description: Compatibility-only singular provider. New clients should use GET /me/auth-methods.
         role:
           type: string
           enum: [owner, admin, member]
@@ -1718,7 +1713,7 @@ components:
           type: boolean
         user_preferences:
           $ref: '#/components/schemas/UserPreferences'
-      required: [id, email, display_name, auth_provider, role, onboarding_complete, user_preferences]
+      required: [id, email, display_name, role, onboarding_complete, user_preferences]
 
     AuthSessionResponse:
       type: object
@@ -1768,11 +1763,6 @@ components:
         avatar_url:
           type: [string, 'null']
           format: uri
-        auth_provider:
-          type: string
-          enum: [password, google]
-          deprecated: true
-          description: Compatibility-only singular provider. New clients should use GET /me/auth-methods.
         role:
           type: string
           enum: [owner, admin, member]
@@ -1785,7 +1775,7 @@ components:
           type: boolean
         user_preferences:
           $ref: '#/components/schemas/UserPreferences'
-      required: [id, email, display_name, auth_provider, role, email_verified, created_at, onboarding_complete, user_preferences]
+      required: [id, email, display_name, role, email_verified, created_at, onboarding_complete, user_preferences]
 
     UpdateProfileRequest:
       type: object

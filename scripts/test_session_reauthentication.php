@@ -20,13 +20,10 @@ use App\Auth\AuthService;
 use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
-use App\Auth\LegacyAuthCompatibilityService;
-use App\Auth\AuthMethodService;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
 use App\Mail\Mailer;
-use App\Monitoring\StructuredLogger;
 use App\Security\AuditLogger;
 use App\Support\Str;
 
@@ -57,9 +54,9 @@ function requestFor(string $token, string $csrfToken, array $payload): Request
 }
 
 try {
-    $insertUser = $pdo->prepare("INSERT INTO users (email, display_name, auth_provider, password_hash, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Reauth Test', 'password', :password_hash, 1, 'member', 1, 'encrypted')");
+    $insertUser = $pdo->prepare("INSERT INTO users (email, display_name, email_verified, role, is_active, financial_privacy_state) VALUES (:email, 'Reauth Test', 1, 'member', 1, 'encrypted')");
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $insertUser->execute([':email' => $email, ':password_hash' => $hash]);
+    $insertUser->execute([':email' => $email]);
     $userId = (int) $pdo->lastInsertId();
     $pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => $hash]);
     $insertSession = $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, device_id, session_secret_hash, csrf_token_hash, client_type, user_agent, created_at, expires_at) VALUES (:session_id, :user_id, :device_id, :secret_hash, :csrf_hash, :client_type, 'reauth-contract-test', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))");
@@ -80,9 +77,7 @@ try {
         $config,
         new AuditLogger($pdo),
         new AuthIdentityRepository($pdo),
-        new PasswordCredentialRepository($pdo),
-        new LegacyAuthCompatibilityService($pdo, new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config)),
-        new AuthMethodService(new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config))
+        new PasswordCredentialRepository($pdo)
     );
 
     try {
