@@ -103,3 +103,22 @@ category C response/legacy UX serialization, or category D migration/test
 diagnostics. No category A runtime lookup should use a legacy hash or Google
 subject once the new authority row exists. Apple and multi-provider product
 behavior remain out of scope.
+
+## Piece 3 provider-neutral method domain
+
+`AuthMethod` and `AuthMethodService` are now the application model for account
+sign-in state. They read only `auth_identities` and `password_credentials`.
+`GET /me/auth-methods` returns that truthful, read-only inventory without
+provider subjects, hashes, or mutation capabilities.
+
+The legacy `auth_provider` API field remains only for compatibility and is
+derived from the authoritative inventory. A zero- or multi-method inventory is
+logged as a privacy-safe invariant violation and cannot be coerced into a
+singular compatibility provider. Piece 3 intentionally does not create any
+multi-method state.
+
+Residual direct legacy-field references are limited to: the compatibility
+bridge's repair/drift checks and mirror writes; Piece 1/2 migrations and the
+verifier; legacy schema definitions; bridge/fixture tests; and deprecated API
+compatibility output plumbing. Product eligibility, auth inventory, and
+frontend settings decisions use `AuthMethodService` / `/me/auth-methods`.

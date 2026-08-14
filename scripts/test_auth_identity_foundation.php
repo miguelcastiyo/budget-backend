@@ -16,6 +16,9 @@ $identityRepository = $read('src/Auth/AuthIdentityRepository.php');
 $passwordRepository = $read('src/Auth/PasswordCredentialRepository.php');
 $compatibility = $read('src/Auth/LegacyAuthCompatibilityService.php');
 $reconciliation = $read('migrations/20260814z_reconcile_auth_identity_authority.sql');
+$methods = $read('src/Auth/AuthMethodService.php');
+$profile = $read('src/Controllers/ProfileController.php');
+$openapi = $read('openapi.yaml');
 
 foreach (['CREATE TABLE auth_identities', 'uq_auth_identities_provider_subject', 'uq_auth_identities_user_provider', 'fk_auth_identities_user', 'CREATE TABLE password_credentials', 'fk_password_credentials_user', 'last_authenticated_at DATETIME NULL'] as $term) {
     if (!str_contains($schema, $term)) throw new RuntimeException('Schema contract is missing: ' . $term);
@@ -38,5 +41,11 @@ foreach (['provider_subject', 'password_changed_at'] as $term) {
 }
 foreach (['auth_piece2_reconciliation_failed', 'INSERT IGNORE INTO auth_identities', 'INSERT IGNORE INTO password_credentials'] as $term) {
     if (!str_contains($reconciliation, $term)) throw new RuntimeException('Piece 2 reconciliation contract is missing: ' . $term);
+}
+foreach (['listForUser', 'hasPassword', 'hasExternalProvider', 'compatibilityProvider', 'auth_method_invariant_violation'] as $term) {
+    if (!str_contains($methods, $term)) throw new RuntimeException('Provider-neutral auth method domain is missing: ' . $term);
+}
+foreach (['getAuthMethods', '/me/auth-methods', 'AuthMethodsResponse', 'deprecated: true'] as $term) {
+    if (!str_contains($profile . $openapi, $term)) throw new RuntimeException('Auth method inventory API contract is missing: ' . $term);
 }
 echo "Auth identity authority contract tests passed\n";

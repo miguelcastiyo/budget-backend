@@ -14,6 +14,7 @@ use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
 use App\Auth\LegacyAuthCompatibilityService;
+use App\Auth\AuthMethodService;
 use App\Controllers\AuditLogController;
 use App\Controllers\InvitationController;
 use App\Controllers\SessionController;
@@ -70,7 +71,8 @@ final class App
         $authIdentities = new AuthIdentityRepository($pdo);
         $passwordCredentials = new PasswordCredentialRepository($pdo);
         $legacyAuth = new LegacyAuthCompatibilityService($pdo, $authIdentities, $passwordCredentials, $structuredLogger);
-        $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth);
+        $authMethods = new AuthMethodService($authIdentities, $passwordCredentials, $structuredLogger);
+        $authApplication = new AuthApplicationService($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth, $authMethods);
         $invitationService = new InvitationService($authApplication);
         $accountAuthenticationService = new AccountAuthenticationService($authApplication);
         $sessionService = new SessionService($authApplication);
@@ -79,7 +81,7 @@ final class App
         $sessionController = new SessionController($accountAuthenticationService, $sessionService);
         $passwordResetController = new PasswordResetController($passwordResetService);
         $auditLogController = new AuditLogController($pdo, $auth);
-        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth);
+        $profileController = new ProfileController($pdo, $auth, $googleTokenVerifier, $mailer, $config, $auditLogger, $authIdentities, $passwordCredentials, $legacyAuth, $authMethods);
         $healthController = new HealthController($structuredLogger);
         $financialStates = new FinancialPrivacyStateService($pdo);
         $vaultRepository = new VaultRepository($pdo);
@@ -116,6 +118,7 @@ final class App
         $add('POST', '/auth/password-reset/confirm', fn(Request $request) => $passwordResetController->confirm($request));
 
         $add('GET', '/me', fn(Request $request) => $profileController->getMe($request));
+        $add('GET', '/me/auth-methods', fn(Request $request) => $profileController->getAuthMethods($request));
         $add('GET', '/me/privacy', $privacyStatusController);
         $add('GET', '/me/vault', fn(Request $request) => $vaultController->get($request));
         $add('POST', '/me/vault', fn(Request $request) => $vaultController->initialize($request));

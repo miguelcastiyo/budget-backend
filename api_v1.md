@@ -386,6 +386,10 @@ Rules:
 ### 4.1 Get Profile
 `GET /me`
 
+`auth_provider` remains a deprecated compatibility field. New clients should
+use `GET /me/auth-methods`, whose `methods` inventory is derived from
+`auth_identities` and `password_credentials` rather than legacy user columns.
+
 Response:
 ```json
 {
@@ -405,6 +409,26 @@ Response:
       "dismissed": false
     }
   }
+}
+```
+
+### 4.1.1 Get Auth Methods
+`GET /me/auth-methods`
+
+Returns the authenticated account's read-only provider-neutral sign-in-method
+inventory. It does not expose provider subjects, password hashes, or method
+mutation controls.
+
+```json
+{
+  "methods": [
+    {
+      "type": "google",
+      "provider_email": "user@example.com",
+      "connected_at": "2026-08-14T20:00:00Z",
+      "last_used_at": "2026-08-14T20:15:00Z"
+    }
+  ]
 }
 ```
 

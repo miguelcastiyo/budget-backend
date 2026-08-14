@@ -21,6 +21,7 @@ use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
 use App\Auth\LegacyAuthCompatibilityService;
+use App\Auth\AuthMethodService;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
@@ -80,7 +81,8 @@ try {
         new AuditLogger($pdo),
         new AuthIdentityRepository($pdo),
         new PasswordCredentialRepository($pdo),
-        new LegacyAuthCompatibilityService($pdo, new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config))
+        new LegacyAuthCompatibilityService($pdo, new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config)),
+        new AuthMethodService(new AuthIdentityRepository($pdo), new PasswordCredentialRepository($pdo), new StructuredLogger($config))
     );
 
     try {

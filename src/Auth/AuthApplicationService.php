@@ -25,7 +25,8 @@ final class AuthApplicationService
         private readonly AuditLogger $audit,
         private readonly AuthIdentityRepository $identities,
         private readonly PasswordCredentialRepository $passwords,
-        private readonly LegacyAuthCompatibilityService $legacyAuth
+        private readonly LegacyAuthCompatibilityService $legacyAuth,
+        private readonly AuthMethodService $methods
     ) {
     }
 
@@ -586,11 +587,11 @@ SQL;
             throw new HttpException(409, 'CONFLICT', 'Google email does not match invite email');
         }
 
-        $existingByEmail = $this->pdo->prepare('SELECT id, auth_provider FROM users WHERE email = :email LIMIT 1');
+        $existingByEmail = $this->pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
         $existingByEmail->execute([':email' => strtolower((string) $googleIdentity['email'])]);
         $row = $existingByEmail->fetch();
         if ($row) {
-            if ((string) $row['auth_provider'] !== 'google') {
+            if (!$this->methods->hasExternalProvider((int) $row['id'], 'google')) {
                 throw new HttpException(409, 'CONFLICT', 'An account already exists for this email');
             }
 
@@ -1029,7 +1030,7 @@ SQL;
     private function buildAuthResponse(int $userId, array $session, string $clientType, int $statusCode = 200): Response
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, role, avatar_url, user_preferences FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, role, avatar_url, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $user = $stmt->fetch();
@@ -1043,7 +1044,7 @@ SQL;
                 'id' => (string) $user['id'],
                 'email' => (string) $user['email'],
                 'display_name' => (string) $user['display_name'],
-                'auth_provider' => (string) $user['auth_provider'],
+                'auth_provider' => $this->methods->compatibilityProvider($userId),
                 'role' => (string) $user['role'],
                 'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
                 'onboarding_complete' => $this->isOnboardingComplete($userId, (string) $user['display_name']),

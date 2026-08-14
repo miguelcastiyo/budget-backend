@@ -14,9 +14,14 @@ final class PasswordCredentialRepository
     /** @return array<string,mixed>|false */
     public function findForUser(int $userId): array|false
     {
-        $stmt = $this->pdo->prepare('SELECT user_id, password_hash FROM password_credentials WHERE user_id = :user_id LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT user_id, password_hash, created_at, last_used_at FROM password_credentials WHERE user_id = :user_id LIMIT 1');
         $stmt->execute([':user_id' => $userId]);
         return $stmt->fetch();
+    }
+
+    public function existsForUser(int $userId): bool
+    {
+        return $this->findForUser($userId) !== false;
     }
 
     public function create(int $userId, string $hash): void

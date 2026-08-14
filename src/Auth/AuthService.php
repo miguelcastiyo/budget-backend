@@ -66,7 +66,6 @@ SELECT
   u.display_name,
   u.avatar_url,
   u.user_preferences,
-  u.auth_provider,
   u.email_verified,
   u.role,
   u.created_at

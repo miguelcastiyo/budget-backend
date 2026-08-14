@@ -27,6 +27,14 @@ final class AuthIdentityRepository
         return $stmt->fetch();
     }
 
+    /** @return list<array<string,mixed>> */
+    public function listForUser(int $userId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT provider, provider_email, created_at, last_used_at FROM auth_identities WHERE user_id = :user_id ORDER BY created_at ASC, id ASC');
+        $stmt->execute([':user_id' => $userId]);
+        return $stmt->fetchAll();
+    }
+
     public function createGoogle(int $userId, string $subject, string $email, bool $emailVerified): void
     {
         $stmt = $this->pdo->prepare("INSERT INTO auth_identities (user_id, provider, provider_subject, provider_email, provider_email_verified) VALUES (:user_id, 'google', :subject, :email, :email_verified)");

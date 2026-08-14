@@ -9,6 +9,7 @@ use App\Auth\GoogleTokenVerifier;
 use App\Auth\AuthIdentityRepository;
 use App\Auth\PasswordCredentialRepository;
 use App\Auth\LegacyAuthCompatibilityService;
+use App\Auth\AuthMethodService;
 use App\Core\Config;
 use App\Http\HttpException;
 use App\Http\Request;
@@ -29,7 +30,8 @@ final class ProfileController
         private readonly AuditLogger $audit,
         private readonly AuthIdentityRepository $identities,
         private readonly PasswordCredentialRepository $passwords,
-        private readonly LegacyAuthCompatibilityService $legacyAuth
+        private readonly LegacyAuthCompatibilityService $legacyAuth,
+        private readonly AuthMethodService $methods
     ) {
     }
 
@@ -37,6 +39,12 @@ final class ProfileController
     {
         $ctx = $this->auth->requireAuth($request);
         return Response::json($this->profileFromAuth($ctx->user));
+    }
+
+    public function getAuthMethods(Request $request): Response
+    {
+        $ctx = $this->auth->requireAuth($request);
+        return Response::json(['methods' => array_map(static fn(\App\Auth\AuthMethod $method): array => $method->toApi(), $this->methods->listForUser($ctx->userId()))]);
     }
 
     public function updateMe(Request $request): Response
@@ -385,7 +393,7 @@ final class ProfileController
 
     private function hasPasswordCredential(int $userId): bool
     {
-        if ($this->passwords->findForUser($userId)) return true;
+        if ($this->methods->hasPassword($userId)) return true;
         $legacy = $this->pdo->prepare('SELECT id, auth_provider, password_hash, google_sub FROM users WHERE id = :id LIMIT 1');
         $legacy->execute([':id' => $userId]);
         $user = $legacy->fetch();
@@ -402,7 +410,7 @@ final class ProfileController
             'id' => (string) $user['id'],
             'email' => (string) $user['email'],
             'display_name' => $displayName,
-            'auth_provider' => (string) $user['auth_provider'],
+            'auth_provider' => $this->methods->compatibilityProvider((int) $user['id']),
             'role' => (string) $user['role'],
             'avatar_url' => $user['avatar_url'] !== null ? (string) $user['avatar_url'] : null,
             'email_verified' => (bool) $user['email_verified'],
@@ -416,7 +424,7 @@ final class ProfileController
     private function fetchProfile(int $userId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, display_name, auth_provider, role, avatar_url, email_verified, created_at, user_preferences FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, email, display_name, role, avatar_url, email_verified, created_at, user_preferences FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch();
@@ -429,7 +437,7 @@ final class ProfileController
             'id' => (string) $row['id'],
             'email' => (string) $row['email'],
             'display_name' => (string) $row['display_name'],
-            'auth_provider' => (string) $row['auth_provider'],
+            'auth_provider' => $this->methods->compatibilityProvider((int) $row['id']),
             'role' => (string) $row['role'],
             'avatar_url' => $row['avatar_url'] !== null ? (string) $row['avatar_url'] : null,
             'email_verified' => (bool) $row['email_verified'],
