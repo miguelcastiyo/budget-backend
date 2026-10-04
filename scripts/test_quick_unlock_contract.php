@@ -37,7 +37,7 @@ if (!str_contains($deviceMigration, 'IF NOT EXISTS') || !str_contains($quickUnlo
 if (!str_contains($quickUnlockMigration, 'CREATE TABLE IF NOT EXISTS vault_quick_unlock_credentials')) $fail('Quick Unlock table migration is missing');
 $serviceReflection = new ReflectionClass(App\Privacy\QuickUnlockService::class);
 $quickUnlockService = $read('src/Privacy/QuickUnlockService.php');
-if (!str_contains($quickUnlockService, "AuthenticatorSelectionCriteria::create(null, 'required', 'required')")) $fail('Quick Unlock registration must require a resident credential');
+if (!str_contains($quickUnlockService, "AuthenticatorSelectionCriteria::create('platform', 'required', 'required')")) $fail('Quick Unlock registration must require a platform resident credential');
 $binary = $serviceReflection->getMethod('binary');
 $sample = random_bytes(32);
 $encoded = rtrim(strtr(base64_encode($sample), '+/', '-_'), '=');
