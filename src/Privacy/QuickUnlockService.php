@@ -77,7 +77,7 @@ final class QuickUnlockService
     public function assertionOptions(AuthContext $auth, Request $request): array
     {
         $this->interactive($auth); $this->states->requireEncryptedAuthority($auth->userId()); $this->vaultRequired($auth->userId()); $rows=$this->repository->activeForDevice($auth->userId(),(string)($auth->deviceId ?: $auth->sessionId)); if ($rows===[]) throw new HttpException(404,'QUICK_UNLOCK_NOT_ENROLLED','Quick Unlock is not enrolled on this device');
-        $challenge=random_bytes(32); $builder=PseudoRandomFunctionInputExtensionBuilder::create(); $allow=[]; foreach($rows as $row){$id=(string)$row['credential_id'];$allow[]=PublicKeyCredentialDescriptor::create('public-key',$id);$builder->withCredentialInputs($this->b64($id),(string)$row['prf_input']);}
+        $challenge=random_bytes(32); $builder=PseudoRandomFunctionInputExtensionBuilder::create(); $allow=[]; foreach($rows as $row){$id=(string)$row['credential_id'];$record=$this->deserialize((string)$row['credential_record'],\Webauthn\CredentialRecord::class);$allow[]=$record->getPublicKeyCredentialDescriptor();$builder->withCredentialInputs($this->b64($id),(string)$row['prf_input']);}
         $options=PublicKeyCredentialRequestOptions::create($challenge,$this->rpId(),$allow,'required',60000,AuthenticationExtensions::create([$builder->build()]));
         return $this->saveOptions($auth,self::PURPOSE_ASSERT,null,$challenge,$options,[]);
     }

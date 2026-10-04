@@ -38,6 +38,12 @@ if (!str_contains($quickUnlockMigration, 'CREATE TABLE IF NOT EXISTS vault_quick
 $serviceReflection = new ReflectionClass(App\Privacy\QuickUnlockService::class);
 $quickUnlockService = $read('src/Privacy/QuickUnlockService.php');
 if (!str_contains($quickUnlockService, "AuthenticatorSelectionCriteria::create('platform', 'required', 'required')")) $fail('Quick Unlock registration must require a platform resident credential');
+if (!str_contains($quickUnlockService, 'activeForDevice($auth->userId(),(string)($auth->deviceId ?: $auth->sessionId))')) $fail('Quick Unlock assertions are not scoped to the authenticated device');
+if (!str_contains($quickUnlockService, 'getPublicKeyCredentialDescriptor()')) $fail('Quick Unlock assertion descriptors do not preserve stored transports');
+if (!str_contains($quickUnlockService, 'findActiveByCredential($auth->userId(),(string)($auth->deviceId ?: $auth->sessionId)')) $fail('Quick Unlock assertion completion is not scoped to the authenticated device');
+if (!str_contains($quickUnlockService, "'status' => \$active > 0 ? 'enrolled' : 'not_enrolled'")) $fail('Quick Unlock status does not distinguish current-device enrollment');
+if (!str_contains($quickUnlockMigration, 'UNIQUE KEY uq_quick_unlock_credential_id')) $fail('Quick Unlock credential identity is not unique');
+if (!str_contains($quickUnlockMigration, 'KEY idx_quick_unlock_user_device_status')) $fail('Quick Unlock device-scoped lookup index is missing');
 $binary = $serviceReflection->getMethod('binary');
 $sample = random_bytes(32);
 $encoded = rtrim(strtr(base64_encode($sample), '+/', '-_'), '=');
