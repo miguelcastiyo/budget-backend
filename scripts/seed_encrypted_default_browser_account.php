@@ -20,6 +20,10 @@ try {
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
     $pdo->prepare("INSERT INTO users (email, display_name, email_verified, role, is_active) VALUES (:email, 'Encrypted Default Browser', 1, 'member', 1)")->execute([':email' => $email]);
     $userId = (int) $pdo->lastInsertId(); $pdo->prepare('INSERT INTO password_credentials (user_id, password_hash) VALUES (:user_id, :password_hash)')->execute([':user_id' => $userId, ':password_hash' => $passwordHash]); $sessionId = "encrypted-default-seed_{$suffix}"; $sessionSecret = "encrypted-default-seed-secret-{$suffix}"; $csrfToken = "encrypted-default-csrf-{$suffix}";
-    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, created_at, expires_at) VALUES (:sid, :uid, :secret, :csrf, 'web', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))")->execute([':sid' => $sessionId, ':uid' => $userId, ':secret' => hash('sha256', $sessionSecret), ':csrf' => hash('sha256', $csrfToken)]);
+    $hasDeviceId = (bool) $pdo->query("SHOW COLUMNS FROM user_sessions LIKE 'device_id'")->fetch();
+    $deviceColumn = $hasDeviceId ? ", device_id" : ""; $deviceValue = $hasDeviceId ? ", :device" : "";
+    $sessionParams = [':sid' => $sessionId, ':uid' => $userId, ':secret' => hash('sha256', $sessionSecret), ':csrf' => hash('sha256', $csrfToken)];
+    if ($hasDeviceId) $sessionParams[':device'] = "browser-seed-{$suffix}";
+    $pdo->prepare("INSERT INTO user_sessions (session_id, user_id, session_secret_hash, csrf_token_hash, client_type, created_at, expires_at{$deviceColumn}) VALUES (:sid, :uid, :secret, :csrf, 'web', UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR){$deviceValue})")->execute($sessionParams);
     $pdo->commit(); echo json_encode(['email' => $email, 'password' => $password, 'user_id' => $userId, 'session_token' => $sessionId . '.' . $sessionSecret, 'csrf_token' => $csrfToken], JSON_UNESCAPED_SLASHES) . "\n";
 } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); fwrite(STDERR, $e->getMessage() . "\n"); exit(1); }

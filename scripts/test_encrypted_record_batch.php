@@ -26,6 +26,7 @@ function batchError(callable $fn, string $code): void { try { $fn(); } catch (Ht
 try {
     $vaultId = "vault_batch_{$suffix}"; $vaults = new VaultRepository($pdo);
     $vaults->create($userId, $vaultId, ['crypto_profile_version'=>1,'passphrase_kdf'=>'PBKDF2','passphrase_kdf_hash'=>'SHA-256','passphrase_kdf_iterations'=>VaultCryptoProfile::KDF_ITERATIONS,'passphrase_wrap_algorithm'=>'AES-KW','passphrase_kdf_salt'=>str_repeat('s',32),'passphrase_wrapped_vault_key'=>str_repeat('p',40),'recovery_wrap_algorithm'=>'AES-KW','recovery_wrapped_vault_key'=>str_repeat('r',40)]);
+    $pdo->prepare("UPDATE users SET financial_privacy_state = 'encrypted' WHERE id = :id")->execute([':id' => $userId]);
     $service = new EncryptedRecordService($pdo, new EncryptedRecordRepository($pdo), $vaults, new FinancialPrivacyStateService($pdo), new AuditLogger($pdo));
     $auth = new AuthContext(['id'=>$userId,'role'=>'member'], 'session', "batch-session-{$suffix}");
     $a = 'rec_' . str_repeat('a', 18); $b = 'rec_' . str_repeat('b', 18); $batchKey = 'mut_' . str_repeat('k', 18);
