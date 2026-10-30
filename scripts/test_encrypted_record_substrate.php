@@ -34,6 +34,7 @@ try {
         'passphrase_wrap_algorithm' => 'AES-KW', 'passphrase_kdf_salt' => str_repeat('s', 32), 'passphrase_wrapped_vault_key' => str_repeat('p', 40),
         'recovery_wrap_algorithm' => 'AES-KW', 'recovery_wrapped_vault_key' => str_repeat('r', 40),
     ]);
+    (new FinancialPrivacyStateService($pdo))->transition($userId, App\Privacy\FinancialPrivacyState::ENCRYPTED);
     $service = new EncryptedRecordService($pdo, new EncryptedRecordRepository($pdo), $vaults, new FinancialPrivacyStateService($pdo), new AuditLogger($pdo));
     $auth = new AuthContext(['id' => $userId, 'role' => 'member'], 'session', 'phase3-session-' . $suffix);
     $request = new App\Http\Request('POST', '/api/v1/me/encrypted-records', '', [], [], [], [], ['User-Agent' => 'phase3-record-test']);
@@ -68,7 +69,7 @@ try {
     $columns = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'encrypted_financial_records'")->fetchAll(PDO::FETCH_COLUMN);
     foreach (['plaintext', 'amount', 'name', 'date', 'passphrase', 'recovery_secret', 'vault_key'] as $forbidden) if (in_array($forbidden, $columns, true)) throw new RuntimeException("forbidden encrypted-record column exists: {$forbidden}");
     $state = $pdo->prepare('SELECT financial_privacy_state FROM users WHERE id = :id'); $state->execute([':id' => $userId]); $stateRow = $state->fetch();
-    if ($stateRow['financial_privacy_state'] !== 'vault_setup_required') throw new RuntimeException('encrypted substrate changed setup state');
+    if ($stateRow['financial_privacy_state'] !== 'encrypted') throw new RuntimeException('encrypted substrate changed encrypted authority state');
     echo "Encrypted record substrate tests passed\n";
 } finally {
     $pdo->prepare('DELETE FROM audit_logs WHERE actor_user_id = :id')->execute([':id' => $userId]);

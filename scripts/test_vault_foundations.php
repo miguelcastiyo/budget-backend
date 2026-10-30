@@ -55,7 +55,10 @@ try {
     $created = $service->initialize($auth, $payload, $request);
     if (!str_starts_with($created['vault_id'], 'vault_') || $created['passphrase']['salt'] !== $payload['passphrase_wrap']['salt']) throw new RuntimeException('created metadata is incorrect');
     $same = $service->initialize($auth, $payload);
-    if (($same['idempotent'] ?? false) !== true || $same['vault_id'] !== $created['vault_id']) throw new RuntimeException('exact retry was not idempotent');
+    if (($same['idempotent'] ?? false) !== true || $same['vault_id'] !== $created['vault_id'] || $same['passphrase'] !== $created['passphrase'] || $same['recovery'] !== $created['recovery']) throw new RuntimeException('exact retry was not idempotent or changed Vault material');
+    $vaultCount = $pdo->prepare('SELECT COUNT(*) FROM user_financial_vaults WHERE user_id = :id'); $vaultCount->execute([':id' => $userId]);
+    $syncCount = $pdo->prepare('SELECT next_sync_sequence FROM encrypted_record_sync_state WHERE user_id = :id'); $syncCount->execute([':id' => $userId]);
+    if ((int) $vaultCount->fetchColumn() !== 1 || (int) $syncCount->fetchColumn() !== 0) throw new RuntimeException('identical retry created duplicate state');
     $conflict = $payload;
     $conflict['passphrase_wrap']['salt'] = b64url(str_repeat('x', 32));
     expectFailure(fn() => $service->initialize($auth, $conflict), 409, 'VAULT_ALREADY_INITIALIZED');
@@ -73,6 +76,8 @@ try {
     $rotatedRecovery = ['wrap_algorithm' => 'AES-KW', 'wrapped_vault_key' => b64url(str_repeat('z', 40))];
     $afterRecovery = $service->replaceRecovery($auth, ['recovery_wrap' => $rotatedRecovery], $request);
     if ($afterRecovery['recovery']['wrapped_vault_key'] !== $rotatedRecovery['wrapped_vault_key'] || $afterRecovery['passphrase']['salt'] !== $rotatedPassphrase['passphrase_wrap']['salt']) throw new RuntimeException('recovery wrapper rotation changed the wrong material');
+    expectFailure(fn() => $service->initialize($auth, $payload), 409, 'VAULT_ALREADY_INITIALIZED');
+    if ($service->metadata($userId)['recovery'] !== $afterRecovery['recovery']) throw new RuntimeException('old initialization retry replaced rotated recovery material');
     expectFailure(fn() => $service->replacePassphrase(new AuthContext(['id' => $userId], 'system'), ['passphrase_wrap' => $rotatedPassphrase['passphrase_wrap']]), 403, 'RECENT_AUTH_REQUIRED');
     $currentSession = (string) $auth->sessionId;
     $currentSecret = 'device-current-secret';
@@ -97,6 +102,7 @@ try {
     $pdo->prepare('DELETE FROM audit_logs WHERE actor_user_id = :id')->execute([':id' => $userId]);
     if (isset($otherSession)) $pdo->prepare('DELETE FROM user_sessions WHERE session_id = :session_id')->execute([':session_id' => $otherSession]);
     if (isset($currentSession)) $pdo->prepare('DELETE FROM user_sessions WHERE session_id = :session_id')->execute([':session_id' => $currentSession]);
+    $pdo->prepare('DELETE FROM encrypted_record_sync_state WHERE user_id = :id')->execute([':id' => $userId]);
     $pdo->prepare('DELETE FROM user_financial_vaults WHERE user_id = :id')->execute([':id' => $userId]);
     $pdo->prepare('DELETE FROM password_credentials WHERE user_id = :id')->execute([':id' => $userId]);
     $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $userId]);

@@ -38,38 +38,34 @@ final class VaultService
     {
         $this->recentAuth->requireRecentInteractiveSession($auth);
         $userId = $auth->userId();
-        $state = $this->states->get($userId);
-        if ($state !== FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
-            throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'Vault initialization is unavailable in the current financial privacy state');
-        }
         $data = $this->validatePayload($payload);
-        $existing = $this->vaults->findByUser($userId);
-        if ($existing !== null) {
-            if ($this->matches($existing, $data)) {
-                if ($state === FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
-                    $this->pdo->beginTransaction();
-                    try {
-                        $this->pdo->prepare('INSERT IGNORE INTO encrypted_record_sync_state (user_id, next_sync_sequence) VALUES (:user_id, 0)')->execute([':user_id' => $userId]);
-                        $this->states->transitionInTransaction($userId, FinancialPrivacyState::ENCRYPTED);
-                        $this->pdo->commit();
-                    } catch (\Throwable $e) {
-                        if ($this->pdo->inTransaction()) $this->pdo->rollBack();
-                        throw $e;
-                    }
-                }
-                return $this->response($existing) + ['idempotent' => true];
-            }
-            throw new HttpException(409, 'VAULT_ALREADY_INITIALIZED', 'Vault is already initialized');
-        }
-
-        $vaultId = Str::randomId('vault');
         $this->pdo->beginTransaction();
         try {
-            $vault = $this->vaults->create($userId, $vaultId, $data);
-            if ($state === FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
-                $this->pdo->prepare('INSERT IGNORE INTO encrypted_record_sync_state (user_id, next_sync_sequence) VALUES (:user_id, 0)')->execute([':user_id' => $userId]);
-                $this->states->transitionInTransaction($userId, FinancialPrivacyState::ENCRYPTED);
+            // Serialize setup and retries for the account, including the case
+            // where no Vault row exists yet. A Vault-row lock alone cannot do that.
+            $account = $this->pdo->prepare('SELECT financial_privacy_state FROM users WHERE id = :user_id FOR UPDATE');
+            $account->execute([':user_id' => $userId]);
+            $rawState = $account->fetchColumn();
+            if ($rawState === false) throw new HttpException(404, 'USER_NOT_FOUND', 'User not found');
+            $state = FinancialPrivacyState::fromDatabase($rawState);
+            $existing = $this->vaults->findByUser($userId);
+            if ($existing !== null) {
+                if (!$this->matches($existing, $data)) {
+                    throw new HttpException(409, 'VAULT_ALREADY_INITIALIZED', 'Vault is already initialized');
+                }
+                if ($state === FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
+                    $this->pdo->prepare('INSERT IGNORE INTO encrypted_record_sync_state (user_id, next_sync_sequence) VALUES (:user_id, 0)')->execute([':user_id' => $userId]);
+                    $this->states->transitionInTransaction($userId, FinancialPrivacyState::ENCRYPTED);
+                }
+                $this->pdo->commit();
+                return $this->response($existing) + ['idempotent' => true];
             }
+            if ($state !== FinancialPrivacyState::VAULT_SETUP_REQUIRED) {
+                throw new HttpException(409, 'PRIVACY_STATE_CONFLICT', 'Vault initialization is unavailable in the current financial privacy state');
+            }
+            $vault = $this->vaults->create($userId, Str::randomId('vault'), $data);
+            $this->pdo->prepare('INSERT IGNORE INTO encrypted_record_sync_state (user_id, next_sync_sequence) VALUES (:user_id, 0)')->execute([':user_id' => $userId]);
+            $this->states->transitionInTransaction($userId, FinancialPrivacyState::ENCRYPTED);
             $this->pdo->commit();
         } catch (PDOException $e) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
@@ -198,6 +194,10 @@ final class VaultService
     private function matches(array $existing, array $data): bool
     {
         return (int) $existing['crypto_profile_version'] === (int) $data['crypto_profile_version']
+            && $existing['passphrase_kdf'] === $data['passphrase_kdf']
+            && $existing['passphrase_kdf_hash'] === $data['passphrase_kdf_hash']
+            && $existing['passphrase_wrap_algorithm'] === $data['passphrase_wrap_algorithm']
+            && $existing['recovery_wrap_algorithm'] === $data['recovery_wrap_algorithm']
             && (int) $existing['passphrase_kdf_iterations'] === (int) $data['passphrase_kdf_iterations']
             && hash_equals((string) $existing['passphrase_kdf_salt'], (string) $data['passphrase_kdf_salt'])
             && hash_equals((string) $existing['passphrase_wrapped_vault_key'], (string) $data['passphrase_wrapped_vault_key'])
